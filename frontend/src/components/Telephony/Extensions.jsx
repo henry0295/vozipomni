@@ -105,10 +105,7 @@ const Extensions = () => {
       email: ext.email || '',
       voicemail_enabled: ext.voicemail_enabled,
     })
-    setShowModal(true
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    createMutation.mutate(formData)
+    setShowModal(true)
   }
 
   const handleDelete = (id) => {
@@ -125,7 +122,7 @@ const Extensions = () => {
       <div className="page-header">
         <h1>Extensiones</h1>
         <button className="btn-primary" onClick={() => setShowModal(true)}>
-          + Nueva Extensión onClick={() => handleEdit(ext)}
+          + Nueva Extensión
         </button>
       </div>
 
