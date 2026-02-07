@@ -1,0 +1,64 @@
+# Django Core
+Django==4.2.9
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+django-filter==23.5
+
+# Database
+psycopg2-binary==2.9.9
+
+# Cache & Async Tasks
+redis==5.0.1
+celery==5.3.4
+django-celery-beat==2.5.0
+django-celery-results==2.5.1
+
+# Server
+gunicorn==21.2.0
+uvicorn[standard]==0.25.0
+
+# WebSocket & Real-time
+channels==4.0.0
+channels-redis==4.1.0
+daphne==4.0.0
+
+# Authentication & Security
+djangorestframework-simplejwt==5.3.1
+django-allauth==0.61.0
+cryptography==42.0.0
+
+# Asterisk Integration
+panoramisk==1.4
+pyst2==0.5.1
+
+# Telephony
+phonenumbers==8.13.27
+
+# Reports & Analytics
+pandas==2.1.4
+openpyxl==3.1.2
+xlsxwriter==3.1.9
+
+# File handling
+Pillow==10.2.0
+python-magic==0.4.27
+
+# Utilities
+python-decouple==3.8
+pytz==2023.3
+python-dateutil==2.8.2
+
+# API Documentation
+drf-spectacular==0.27.0
+
+# Monitoring
+sentry-sdk==1.40.0
+
+# Development
+django-debug-toolbar==4.2.0
+ipython==8.20.0
+
+# Testing
+pytest==7.4.4
+pytest-django==4.7.0
+factory-boy==3.3.0

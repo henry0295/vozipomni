@@ -1,0 +1,26 @@
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
+# Importar viewsets (se crearán después)
+from apps.api import viewsets
+
+router = DefaultRouter()
+router.register(r'users', viewsets.UserViewSet, basename='user')
+router.register(r'campaigns', viewsets.CampaignViewSet, basename='campaign')
+router.register(r'agents', viewsets.AgentViewSet, basename='agent')
+router.register(r'contacts', viewsets.ContactViewSet, basename='contact')
+router.register(r'contact-lists', viewsets.ContactListViewSet, basename='contactlist')
+router.register(r'queues', viewsets.QueueViewSet, basename='queue')
+router.register(r'calls', viewsets.CallViewSet, basename='call')
+router.register(r'recordings', viewsets.RecordingViewSet, basename='recording')
+router.register(r'reports', viewsets.ReportViewSet, basename='report')
+
+urlpatterns = [
+    # Authentication
+    path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    
+    # ViewSets
+    path('', include(router.urls)),
+]
