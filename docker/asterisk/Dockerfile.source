@@ -1,0 +1,106 @@
+FROM debian:bullseye-slim
+
+LABEL maintainer="VoziPOmni Team"
+LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center (Compilación desde fuente)"
+
+ENV ASTERISK_VERSION=certified-21.0-cert1
+
+# Instalar dependencias necesarias
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    wget \
+    libssl-dev \
+    libncurses5-dev \
+    libnewt-dev \
+    libxml2-dev \
+    libsqlite3-dev \
+    uuid-dev \
+    libjansson-dev \
+    libedit-dev \
+    libsrtp2-dev \
+    libopus-dev \
+    libspeex-dev \
+    libspeexdsp-dev \
+    libvorbis-dev \
+    libogg-dev \
+    libcodec2-dev \
+    libgsm1-dev \
+    curl \
+    xmlstarlet \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Descargar y compilar Asterisk desde Git (más confiable)
+WORKDIR /tmp
+
+# Opción alternativa: usar Git para obtener la versión específica
+RUN git clone --depth 1 --branch ${ASTERISK_VERSION} https://github.com/asterisk/asterisk.git asterisk-src || \
+    (wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-21-current.tar.gz && \
+     tar -xzf asterisk-21-current.tar.gz && \
+     mv asterisk-* asterisk-src)
+
+WORKDIR /tmp/asterisk-src
+
+# Configurar y compilar
+RUN ./configure \
+    --with-jansson-bundled \
+    --with-pjproject-bundled \
+    --with-crypto \
+    --with-ssl \
+    --with-srtp && \
+    make menuselect.makeopts && \
+    menuselect/menuselect \
+        --enable app_confbridge \
+        --enable app_queue \
+        --enable app_voicemail \
+        --enable res_http_websocket \
+        --enable res_ari \
+        --enable res_pjsip \
+        --enable res_pjsip_session \
+        --enable chan_pjsip \
+        --enable format_mp3 \
+        --enable codec_opus \
+        --enable res_rtp_asterisk \
+        menuselect.makeopts && \
+    contrib/scripts/get_mp3_source.sh || true && \
+    make -j$(nproc) && \
+    make install && \
+    make samples
+
+# Limpiar archivos temporales
+WORKDIR /
+RUN rm -rf /tmp/asterisk-src
+
+# Crear usuario asterisk
+RUN useradd -m asterisk && \
+    mkdir -p /var/log/asterisk \
+             /var/run/asterisk \
+             /var/spool/asterisk && \
+    chown -R asterisk:asterisk /var/lib/asterisk \
+                                /var/spool/asterisk \
+                                /var/log/asterisk \
+                                /var/run/asterisk \
+                                /etc/asterisk
+
+# Copiar configuraciones personalizadas
+COPY --chown=asterisk:asterisk configs/*.conf /etc/asterisk/
+
+# Configurar permisos
+RUN chmod 755 /etc/asterisk && \
+    find /etc/asterisk -type f -exec chmod 644 {} \;
+
+# Exponer puertos
+# SIP: 5060 (UDP/TCP), 5061 (TLS)
+# HTTP/WebSocket: 8088, 8089
+# RTP: 10000-20000 (UDP)
+EXPOSE 5060/udp 5060/tcp 5061/tcp 8088 8089 10000-20000/udp
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD /usr/sbin/asterisk -rx "core show version" || exit 1
+
+# Cambiar a usuario asterisk
+USER asterisk
+
+# Comando por defecto
+CMD ["/usr/sbin/asterisk", "-f", "-vvvg", "-c"]

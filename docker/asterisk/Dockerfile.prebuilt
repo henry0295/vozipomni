@@ -1,0 +1,54 @@
+# Dockerfile basado en imagen oficial de Asterisk
+# Más rápido y confiable que compilar desde fuente
+
+FROM andrius/asterisk:21-alpine
+
+LABEL maintainer="VoziPOmni Team"
+LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center (Pre-compilado)"
+
+# Cambiar a root para instalación
+USER root
+
+# Instalar dependencias adicionales si es necesario
+RUN apk add --no-cache \
+    tzdata \
+    curl \
+    wget
+
+# Crear directorios necesarios
+RUN mkdir -p /var/log/asterisk \
+             /var/spool/asterisk/monitor \
+             /var/spool/asterisk/recording \
+             /etc/asterisk
+
+# Backup de configuraciones por defecto
+RUN cp -r /etc/asterisk /etc/asterisk.backup || true
+
+# Copiar configuraciones personalizadas
+COPY configs/*.conf /etc/asterisk/
+
+# Crear usuario asterisk si no existe
+RUN adduser -D -H asterisk 2>/dev/null || true
+
+# Asignar permisos
+RUN chown -R asterisk:asterisk /var/lib/asterisk \
+                                /var/spool/asterisk \
+                                /var/log/asterisk \
+                                /var/run/asterisk \
+                                /etc/asterisk 2>/dev/null || true
+
+# Configurar zona horaria (Colombia)
+RUN ln -sf /usr/share/zoneinfo/America/Bogota /etc/localtime
+
+# Exponer puertos
+EXPOSE 5060/udp 5060/tcp 5061/tcp 8088 8089 10000-20000/udp
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD asterisk -rx "core show version" || exit 1
+
+# Volúmenes
+VOLUME ["/var/lib/asterisk", "/var/spool/asterisk", "/var/log/asterisk"]
+
+# Comando por defecto
+CMD ["asterisk", "-f", "-vvv", "-g"]

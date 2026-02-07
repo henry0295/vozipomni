@@ -1,9 +1,9 @@
 FROM debian:bullseye-slim
 
 LABEL maintainer="VoziPOmni Team"
-LABEL description="Asterisk 20 para VoziPOmni Contact Center"
+LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center"
 
-ENV ASTERISK_VERSION=20.6.0
+ENV ASTERISK_VERSION=21.2.0
 
 # Instalar dependencias
 RUN apt-get update && apt-get install -y \
