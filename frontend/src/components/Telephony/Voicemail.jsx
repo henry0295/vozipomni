@@ -22,7 +22,8 @@ const Voicemail = () => {
     queryKey: ['voicemail'],
     queryFn: async () => {
       const response = await voicemailService.getAll()
-      return Array.isArray(response.data) ? response.data : []
+      const data = response.data?.results || response.data
+      return Array.isArray(data) ? data : []
     },
   })
 

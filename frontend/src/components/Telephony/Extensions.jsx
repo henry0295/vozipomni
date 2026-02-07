@@ -24,8 +24,9 @@ const Extensions = () => {
     queryKey: ['extensions'],
     queryFn: async () => {
       const response = await extensionsService.getAll()
-      // Asegurar que siempre devuelve un array
-      return Array.isArray(response.data) ? response.data : []
+      // Extraer results de respuesta paginada
+      const data = response.data?.results || response.data
+      return Array.isArray(data) ? data : []
     },
   })
 

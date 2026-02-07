@@ -21,7 +21,8 @@ const OutboundRoutes = () => {
     queryKey: ['outbound-routes'],
     queryFn: async () => {
       const response = await outboundRoutesService.getAll()
-      return Array.isArray(response.data) ? response.data : []
+      const data = response.data?.results || response.data
+      return Array.isArray(data) ? data : []
     },
   })
 
@@ -29,7 +30,8 @@ const OutboundRoutes = () => {
     queryKey: ['trunks'],
     queryFn: async () => {
       const response = await trunksService.getAll()
-      return Array.isArray(response.data) ? response.data : []
+      const data = response.data?.results || response.data
+      return Array.isArray(data) ? data : []
     },
   })
 
