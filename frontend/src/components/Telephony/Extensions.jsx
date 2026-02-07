@@ -156,7 +156,7 @@ const Extensions = () => {
                     </span>
                   </td>
                   <td>
-                    <button className="btn-icon" title="Editar">✏️</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(ext)}>✏️</button>
                     <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(ext.id)}>🗑️</button>
                   </td>
                 </tr>
@@ -210,14 +210,14 @@ const Extensions = () => {
                     <option value="PJSIP">PJSIP</option>
                   </select>
                 </div>
-                <div className="form{!editingId && '*'}</label>
+                <div className="form-group">
+                  <label>Contraseña {!editingId && '*'}</label>
                   <input
                     type="password"
                     value={formData.secret}
                     onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
                     placeholder={editingId ? "Dejar vacío para mantener" : "********"}
-                    required={!editingId}der="********"
-                    required
+                    required={!editingId}
                   />
                 </div>
               </div>
@@ -266,15 +266,15 @@ const Extensions = () => {
                 </label>
               </div>
 
-              <div className="form-actions">resetForm}>
+              <div className="form-actions">
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
                 <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
                   {editingId 
                     ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Extensión')
                     : (createMutation.isPending ? 'Creando...' : 'Crear Extensión')
-                  Mutation.isPending}>
-                  {createMutation.isPending ? 'Creando...' : 'Crear Extensión'}
+                  }
                 </button>
               </div>
             </form>
