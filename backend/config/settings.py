@@ -5,6 +5,10 @@ from decouple import config
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Crear directorios necesarios si no existen
+for directory in ['logs', 'static', 'media', 'recordings']:
+    (BASE_DIR / directory).mkdir(exist_ok=True)
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('SECRET_KEY', default='vozipomni-insecure-secret-key-change-me')
 
