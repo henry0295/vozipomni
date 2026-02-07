@@ -3,12 +3,11 @@ FROM debian:bullseye-slim
 LABEL maintainer="VoziPOmni Team"
 LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center"
 
-ENV ASTERISK_VERSION=21.2.0
-
 # Instalar dependencias
 RUN apt-get update && apt-get install -y \
     build-essential \
     wget \
+    git \
     libssl-dev \
     libncurses5-dev \
     libnewt-dev \
@@ -29,12 +28,11 @@ RUN apt-get update && apt-get install -y \
     xmlstarlet \
     && rm -rf /var/lib/apt/lists/*
 
-# Descargar y compilar Asterisk
+# Descargar Asterisk desde Git (siempre disponible)
 WORKDIR /tmp
-RUN wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERISK_VERSION}.tar.gz && \
-    tar -xzf asterisk-${ASTERISK_VERSION}.tar.gz && \
-    cd asterisk-${ASTERISK_VERSION} && \
-    contrib/scripts/get_mp3_source.sh && \
+RUN git clone --depth 1 --branch 21 https://github.com/asterisk/asterisk.git asterisk-src && \
+    cd asterisk-src && \
+    contrib/scripts/get_mp3_source.sh || true && \
     ./configure --with-jansson-bundled --with-pjproject-bundled && \
     make menuselect.makeopts && \
     menuselect/menuselect \
@@ -50,10 +48,9 @@ RUN wget https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTERI
         menuselect.makeopts && \
     make -j$(nproc) && \
     make install && \
-    make config && \
     make samples && \
     cd / && \
-    rm -rf /tmp/asterisk-${ASTERISK_VERSION}*
+    rm -rf /tmp/asterisk-src
 
 # Crear usuario asterisk y directorios
 RUN useradd -m asterisk && \
