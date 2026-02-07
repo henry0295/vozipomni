@@ -35,7 +35,7 @@ Después de crear el repositorio en GitHub, ejecuta estos comandos:
 
 ```bash
 cd "c:\Users\PT\OneDrive - VOZIP COLOMBIA\Documentos\GitHub\vozipomni"
-git remote add origin https://github.com/TU_USUARIO/vozipomni.git
+git remote add origin https://github.com/henry0295/vozipomni.git
 git branch -M main
 git push -u origin main
 ```
@@ -82,7 +82,7 @@ Sigue las instrucciones en pantalla.
 Una vez el código esté en GitHub, cualquiera podrá instalar con:
 
 ```bash
-curl -o install.sh -L "https://raw.githubusercontent.com/TU_USUARIO/vozipomni/main/install.sh" && chmod +x install.sh
+curl -o install.sh -L "https://raw.githubusercontent.com/henry0295/vozipomni/main/install.sh" && chmod +x install.sh
 export VOZIPOMNI_IPV4=X.X.X.X && ./install.sh
 ```
 

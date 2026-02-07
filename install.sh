@@ -274,7 +274,7 @@ clone_or_update_repo() {
     else
         log_info "Clonando repositorio..."
         mkdir -p /opt
-        git clone https://github.com/VOZIP/vozipomni.git $INSTALL_DIR
+        git clone https://github.com/henry0295/vozipomni.git $INSTALL_DIR
         cd $INSTALL_DIR
     fi
     
