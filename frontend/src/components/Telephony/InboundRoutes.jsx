@@ -1,42 +1,72 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { inboundRoutesService } from '../../services/telephonyService'
 import './InboundRoutes.css'
 
 const InboundRoutes = () => {
   const [showModal, setShowModal] = useState(false)
-  const [routes, setRoutes] = useState([
-    { id: 1, did: '3001234567', description: 'Línea Principal', destination: 'IVR Principal', priority: 1, status: 'Activo' },
-    { id: 2, did: '3007654321', description: 'Soporte Técnico', destination: 'Cola Soporte', priority: 2, status: 'Activo' },
-    { id: 3, did: '3009876543', description: 'Ventas', destination: 'Cola Ventas', priority: 3, status: 'Inactivo' },
-  ])
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     did: '',
     description: '',
-    destinationType: 'ivr',
+    destination_type: 'ivr',
     destination: '',
     priority: 1,
-    timeCondition: '',
+    time_condition: '',
+  })
+
+  // Query para obtener rutas
+  const { data: routes = [], isLoading } = useQuery({
+    queryKey: ['inbound-routes'],
+    queryFn: async () => {
+      const response = await inboundRoutesService.getAll()
+      return response.data
+    },
+  })
+
+  // Mutation para crear
+  const createMutation = useMutation({
+    mutationFn: inboundRoutesService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['inbound-routes'])
+      toast.success('Ruta creada exitosamente')
+      setShowModal(false)
+      setFormData({
+        did: '',
+        description: '',
+        destination_type: 'ivr',
+        destination: '',
+        priority: 1,
+        time_condition: '',
+      })
+    },
+    onError: () => toast.error('Error al crear ruta'),
+  })
+
+  // Mutation para eliminar
+  const deleteMutation = useMutation({
+    mutationFn: inboundRoutesService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['inbound-routes'])
+      toast.success('Ruta eliminada')
+    },
+    onError: () => toast.error('Error al eliminar ruta'),
   })
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating inbound route:', formData)
-    setShowModal(false)
-    setFormData({
-      did: '',
-      description: '',
-      destinationType: 'ivr',
-      destination: '',
-      priority: 1,
-      timeCondition: '',
-    })
+    createMutation.mutate(formData)
   }
 
   const handleDelete = (id) => {
     if (window.confirm('¿Está seguro de eliminar esta ruta?')) {
-      setRoutes(routes.filter(r => r.id !== id))
+      deleteMutation.mutate(id)
     }
   }
+
+  if (isLoading) return <div className="inbound-routes-container"><p>Cargando...</p></div>
 
   return (
     <div className="inbound-routes-container">
@@ -122,8 +152,8 @@ const InboundRoutes = () => {
                 <div className="form-group">
                   <label>Tipo de Destino</label>
                   <select
-                    value={formData.destinationType}
-                    onChange={(e) => setFormData({ ...formData, destinationType: e.target.value })}
+                    value={formData.destination_type}
+                    onChange={(e) => setFormData({ ...formData, destination_type: e.target.value })}
                   >
                     <option value="ivr">IVR</option>
                     <option value="queue">Cola</option>
@@ -158,8 +188,8 @@ const InboundRoutes = () => {
                 <div className="form-group">
                   <label>Condición de Horario</label>
                   <select
-                    value={formData.timeCondition}
-                    onChange={(e) => setFormData({ ...formData, timeCondition: e.target.value })}
+                    value={formData.time_condition}
+                    onChange={(e) => setFormData({ ...formData, time_condition: e.target.value })}
                   >
                     <option value="">Sin condición</option>
                     <option value="horario_oficina">Horario de Oficina</option>
@@ -173,8 +203,8 @@ const InboundRoutes = () => {
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Crear Ruta
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Creando...' : 'Crear Ruta'}
                 </button>
               </div>
             </form>

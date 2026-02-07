@@ -1,44 +1,63 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { voicemailService } from '../../services/telephonyService'
 import './Voicemail.css'
 
 const Voicemail = () => {
   const [showModal, setShowModal] = useState(false)
-  const [voicemails, setVoicemails] = useState([
-    { id: 1, mailbox: '1001', name: 'Juan Pérez', email: 'juan@empresa.com', password: '****', messages: 3, status: 'Activo' },
-    { id: 2, mailbox: '1002', name: 'María García', email: 'maria@empresa.com', password: '****', messages: 0, status: 'Activo' },
-    { id: 3, mailbox: '1003', name: 'Carlos López', email: 'carlos@empresa.com', password: '****', messages: 15, status: 'Activo' },
-  ])
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     mailbox: '',
     name: '',
     email: '',
     password: '',
-    emailAttach: true,
-    emailDelete: false,
-    maxMessages: 100,
+    email_attach: true,
+    email_delete: false,
+    max_messages: 100,
+  })
+
+  const { data: voicemails = [], isLoading } = useQuery({
+    queryKey: ['voicemail'],
+    queryFn: async () => {
+      const response = await voicemailService.getAll()
+      return response.data
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: voicemailService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['voicemail'])
+      toast.success('Buzón creado exitosamente')
+      setShowModal(false)
+      setFormData({ mailbox: '', name: '', email: '', password: '', email_attach: true, email_delete: false, max_messages: 100 })
+    },
+    onError: () => toast.error('Error al crear buzón'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: voicemailService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['voicemail'])
+      toast.success('Buzón eliminado')
+    },
+    onError: () => toast.error('Error al eliminar buzón'),
   })
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating voicemail:', formData)
-    setShowModal(false)
-    setFormData({
-      mailbox: '',
-      name: '',
-      email: '',
-      password: '',
-      emailAttach: true,
-      emailDelete: false,
-      maxMessages: 100,
-    })
+    createMutation.mutate(formData)
   }
 
   const handleDelete = (id) => {
     if (window.confirm('¿Está seguro de eliminar este buzón de voz?')) {
-      setVoicemails(voicemails.filter(vm => vm.id !== id))
+      deleteMutation.mutate(id)
     }
   }
+
+  if (isLoading) return <div className="voicemail-container"><p>Cargando...</p></div>
 
   return (
     <div className="voicemail-container">
@@ -74,7 +93,7 @@ const Voicemail = () => {
                   <td>{vm.email}</td>
                   <td>
                     <span className={`message-badge ${vm.messages > 0 ? 'has-messages' : ''}`}>
-                      {vm.messages} mensaje{vm.messages !== 1 ? 's' : ''}
+                      {vm.messages || 0} mensaje{vm.messages !== 1 ? 's' : ''}
                     </span>
                   </td>
                   <td>
@@ -152,8 +171,8 @@ const Voicemail = () => {
                 <label>Máximo de Mensajes</label>
                 <input
                   type="number"
-                  value={formData.maxMessages}
-                  onChange={(e) => setFormData({ ...formData, maxMessages: e.target.value })}
+                  value={formData.max_messages}
+                  onChange={(e) => setFormData({ ...formData, max_messages: e.target.value })}
                   min="1"
                   max="999"
                 />
@@ -163,8 +182,8 @@ const Voicemail = () => {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
-                    checked={formData.emailAttach}
-                    onChange={(e) => setFormData({ ...formData, emailAttach: e.target.checked })}
+                    checked={formData.email_attach}
+                    onChange={(e) => setFormData({ ...formData, email_attach: e.target.checked })}
                   />
                   <span>Adjuntar audio del mensaje al email</span>
                 </label>
@@ -174,8 +193,8 @@ const Voicemail = () => {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
-                    checked={formData.emailDelete}
-                    onChange={(e) => setFormData({ ...formData, emailDelete: e.target.checked })}
+                    checked={formData.email_delete}
+                    onChange={(e) => setFormData({ ...formData, email_delete: e.target.checked })}
                   />
                   <span>Eliminar mensaje después de enviarlo por email</span>
                 </label>
@@ -185,8 +204,8 @@ const Voicemail = () => {
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Crear Buzón
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Creando...' : 'Crear Buzón'}
                 </button>
               </div>
             </form>

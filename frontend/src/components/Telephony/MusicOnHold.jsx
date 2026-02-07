@@ -1,13 +1,12 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { musicOnHoldService } from '../../services/telephonyService'
 import './MusicOnHold.css'
 
 const MusicOnHold = () => {
   const [showModal, setShowModal] = useState(false)
-  const [mohClasses, setMohClasses] = useState([
-    { id: 1, name: 'default', description: 'Música Por Defecto', mode: 'files', files: 12, directory: '/var/lib/asterisk/moh/default', status: 'Activo' },
-    { id: 2, name: 'instrumental', description: 'Música Instrumental', mode: 'files', files: 8, directory: '/var/lib/asterisk/moh/instrumental', status: 'Activo' },
-    { id: 3, name: 'jazz', description: 'Jazz Suave', mode: 'files', files: 5, directory: '/var/lib/asterisk/moh/jazz', status: 'Inactivo' },
-  ])
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     name: '',
@@ -17,24 +16,46 @@ const MusicOnHold = () => {
     application: '',
   })
 
+  const { data: mohClasses = [], isLoading } = useQuery({
+    queryKey: ['music-on-hold'],
+    queryFn: async () => {
+      const response = await musicOnHoldService.getAll()
+      return response.data
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: musicOnHoldService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['music-on-hold'])
+      toast.success('Clase MOH creada exitosamente')
+      setShowModal(false)
+      setFormData({ name: '', description: '', mode: 'files', directory: '', application: '' })
+    },
+    onError: () => toast.error('Error al crear clase MOH'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: musicOnHoldService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['music-on-hold'])
+      toast.success('Clase MOH eliminada')
+    },
+    onError: () => toast.error('Error al eliminar clase MOH'),
+  })
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating music on hold class:', formData)
-    setShowModal(false)
-    setFormData({
-      name: '',
-      description: '',
-      mode: 'files',
-      directory: '',
-      application: '',
-    })
+    createMutation.mutate(formData)
   }
 
   const handleDelete = (id) => {
     if (window.confirm('¿Está seguro de eliminar esta clase de música en espera?')) {
-      setMohClasses(mohClasses.filter(moh => moh.id !== id))
+      deleteMutation.mutate(id)
     }
   }
+
+  if (isLoading) return <div className="moh-container"><p>Cargando...</p></div>
 
   return (
     <div className="moh-container">
@@ -75,7 +96,7 @@ const MusicOnHold = () => {
                   <td>
                     <span className="mode-badge">{moh.mode}</span>
                   </td>
-                  <td>{moh.files} archivo{moh.files !== 1 ? 's' : ''}</td>
+                  <td>{moh.files || 0} archivo{moh.files !== 1 ? 's' : ''}</td>
                   <td>
                     <span className={`status-badge ${moh.status === 'Activo' ? 'active' : 'inactive'}`}>
                       {moh.status}
@@ -170,8 +191,8 @@ const MusicOnHold = () => {
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Crear Clase MOH
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Creando...' : 'Crear Clase MOH'}
                 </button>
               </div>
             </form>

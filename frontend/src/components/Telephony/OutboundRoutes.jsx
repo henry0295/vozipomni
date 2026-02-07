@@ -1,13 +1,12 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { outboundRoutesService, trunksService } from '../../services/telephonyService'
 import './OutboundRoutes.css'
 
 const OutboundRoutes = () => {
   const [showModal, setShowModal] = useState(false)
-  const [routes, setRoutes] = useState([
-    { id: 1, name: 'Nacional', pattern: '03XXXXXXXX', trunk: 'Troncal Principal', prepend: '', status: 'Activo' },
-    { id: 2, name: 'Celular', pattern: '3XXXXXXXXX', trunk: 'Troncal Celular', prepend: '03', status: 'Activo' },
-    { id: 3, name: 'Internacional', pattern: '00XX.', trunk: 'Troncal Internacional', prepend: '', status: 'Inactivo' },
-  ])
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     name: '',
@@ -15,28 +14,57 @@ const OutboundRoutes = () => {
     trunk: '',
     prepend: '',
     prefix: '',
-    calleridPrefix: '',
+    callerid_prefix: '',
+  })
+
+  const { data: routes = [], isLoading } = useQuery({
+    queryKey: ['outbound-routes'],
+    queryFn: async () => {
+      const response = await outboundRoutesService.getAll()
+      return response.data
+    },
+  })
+
+  const { data: trunks = [] } = useQuery({
+    queryKey: ['trunks'],
+    queryFn: async () => {
+      const response = await trunksService.getAll()
+      return response.data
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: outboundRoutesService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['outbound-routes'])
+      toast.success('Ruta creada exitosamente')
+      setShowModal(false)
+      setFormData({ name: '', pattern: '', trunk: '', prepend: '', prefix: '', callerid_prefix: '' })
+    },
+    onError: () => toast.error('Error al crear ruta'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: outboundRoutesService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['outbound-routes'])
+      toast.success('Ruta eliminada')
+    },
+    onError: () => toast.error('Error al eliminar ruta'),
   })
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating outbound route:', formData)
-    setShowModal(false)
-    setFormData({
-      name: '',
-      pattern: '',
-      trunk: '',
-      prepend: '',
-      prefix: '',
-      calleridPrefix: '',
-    })
+    createMutation.mutate(formData)
   }
 
   const handleDelete = (id) => {
     if (window.confirm('¿Está seguro de eliminar esta ruta?')) {
-      setRoutes(routes.filter(r => r.id !== id))
+      deleteMutation.mutate(id)
     }
   }
+
+  if (isLoading) return <div className="outbound-routes-container"><p>Cargando...</p></div>
 
   return (
     <div className="outbound-routes-container">
@@ -80,7 +108,7 @@ const OutboundRoutes = () => {
                 <tr key={route.id}>
                   <td><strong>{route.name}</strong></td>
                   <td><code>{route.pattern}</code></td>
-                  <td>{route.trunk}</td>
+                  <td>{route.trunk_name}</td>
                   <td>{route.prepend || '-'}</td>
                   <td>
                     <span className={`status-badge ${route.status === 'Activo' ? 'active' : 'inactive'}`}>
@@ -137,9 +165,9 @@ const OutboundRoutes = () => {
                     required
                   >
                     <option value="">Seleccione una troncal</option>
-                    <option value="trunk1">Troncal Principal</option>
-                    <option value="trunk2">Troncal Celular</option>
-                    <option value="trunk3">Troncal Internacional</option>
+                    {trunks.map(trunk => (
+                      <option key={trunk.id} value={trunk.id}>{trunk.name}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -171,8 +199,8 @@ const OutboundRoutes = () => {
                 <label>Prefijo de Caller ID</label>
                 <input
                   type="text"
-                  value={formData.calleridPrefix}
-                  onChange={(e) => setFormData({ ...formData, calleridPrefix: e.target.value })}
+                  value={formData.callerid_prefix}
+                  onChange={(e) => setFormData({ ...formData, callerid_prefix: e.target.value })}
                   placeholder="3001234567"
                 />
                 <small>Número que se mostrará como identificador de llamadas salientes</small>
@@ -182,8 +210,8 @@ const OutboundRoutes = () => {
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Crear Ruta
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Creando...' : 'Crear Ruta'}
                 </button>
               </div>
             </form>

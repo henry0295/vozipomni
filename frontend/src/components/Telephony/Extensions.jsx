@@ -1,46 +1,81 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { extensionsService } from '../../services/telephonyService'
 import './Extensions.css'
 
 const Extensions = () => {
   const [showModal, setShowModal] = useState(false)
-  const [extensions, setExtensions] = useState([
-    { id: 1, extension: '1001', name: 'Juan Pérez', type: 'SIP', secret: '********', context: 'from-internal', status: 'Activo' },
-    { id: 2, extension: '1002', name: 'María García', type: 'SIP', secret: '********', context: 'from-internal', status: 'Activo' },
-    { id: 3, extension: '1003', name: 'Carlos López', type: 'SIP', secret: '********', context: 'from-internal', status: 'Inactivo' },
-  ])
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     extension: '',
     name: '',
-    type: 'SIP',
+    extension_type: 'SIP',
     secret: '',
     context: 'from-internal',
     callerid: '',
     email: '',
-    voicemail: false,
+    voicemail_enabled: false,
+  })
+
+  // Query para obtener extensiones
+  const { data: extensions = [], isLoading, error } = useQuery({
+    queryKey: ['extensions'],
+    queryFn: async () => {
+      const response = await extensionsService.getAll()
+      return response.data
+    },
+  })
+
+  // Mutation para crear extensión
+  const createMutation = useMutation({
+    mutationFn: extensionsService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['extensions'])
+      toast.success('Extensión creada exitosamente')
+      setShowModal(false)
+      setFormData({
+        extension: '',
+        name: '',
+        extension_type: 'SIP',
+        secret: '',
+        context: 'from-internal',
+        callerid: '',
+        email: '',
+        voicemail_enabled: false,
+      })
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Error al crear extensión')
+    },
+  })
+
+  // Mutation para eliminar extensión
+  const deleteMutation = useMutation({
+    mutationFn: extensionsService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['extensions'])
+      toast.success('Extensión eliminada')
+    },
+    onError: () => {
+      toast.error('Error al eliminar extensión')
+    },
   })
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating extension:', formData)
-    setShowModal(false)
-    setFormData({
-      extension: '',
-      name: '',
-      type: 'SIP',
-      secret: '',
-      context: 'from-internal',
-      callerid: '',
-      email: '',
-      voicemail: false,
-    })
+    createMutation.mutate(formData)
   }
 
   const handleDelete = (id) => {
     if (window.confirm('¿Está seguro de eliminar esta extensión?')) {
-      setExtensions(extensions.filter(ext => ext.id !== id))
+      deleteMutation.mutate(id)
     }
   }
+
+  if (isLoading) return <div className="extensions-container"><p>Cargando...</p></div>
+  if (error) return <div className="extensions-container"><p>Error al cargar extensiones</p></div>
 
   return (
     <div className="extensions-container">
@@ -73,7 +108,7 @@ const Extensions = () => {
                 <tr key={ext.id}>
                   <td><strong>{ext.extension}</strong></td>
                   <td>{ext.name}</td>
-                  <td>{ext.type}</td>
+                  <td>{ext.extension_type}</td>
                   <td>{ext.context}</td>
                   <td>
                     <span className={`status-badge ${ext.status === 'Activo' ? 'active' : 'inactive'}`}>
@@ -126,8 +161,8 @@ const Extensions = () => {
                 <div className="form-group">
                   <label>Tipo</label>
                   <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    value={formData.extension_type}
+                    onChange={(e) => setFormData({ ...formData, extension_type: e.target.value })}
                   >
                     <option value="SIP">SIP</option>
                     <option value="IAX2">IAX2</option>
@@ -183,8 +218,8 @@ const Extensions = () => {
                 <label className="checkbox-label">
                   <input
                     type="checkbox"
-                    checked={formData.voicemail}
-                    onChange={(e) => setFormData({ ...formData, voicemail: e.target.checked })}
+                    checked={formData.voicemail_enabled}
+                    onChange={(e) => setFormData({ ...formData, voicemail_enabled: e.target.checked })}
                   />
                   <span>Habilitar buzón de voz</span>
                 </label>
@@ -194,8 +229,8 @@ const Extensions = () => {
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Crear Extensión
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Creando...' : 'Crear Extensión'}
                 </button>
               </div>
             </form>

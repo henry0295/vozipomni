@@ -23,4 +23,7 @@ urlpatterns = [
     
     # ViewSets
     path('', include(router.urls)),
+    
+    # Telephony
+    path('telephony/', include('apps.telephony.urls')),
 ]

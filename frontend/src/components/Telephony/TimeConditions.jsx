@@ -1,81 +1,87 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { timeConditionsService } from '../../services/telephonyService'
 import './TimeConditions.css'
 
 const TimeConditions = () => {
   const [showModal, setShowModal] = useState(false)
-  const [conditions, setConditions] = useState([
-    { 
-      id: 1, 
-      name: 'Horario de Oficina', 
-      times: 'Lun-Vie 08:00-18:00',
-      trueDestination: 'IVR Principal',
-      falseDestination: 'Buzón General',
-      status: 'Activo' 
-    },
-    { 
-      id: 2, 
-      name: 'Fin de Semana', 
-      times: 'Sáb-Dom 00:00-23:59',
-      trueDestination: 'Anuncio Cerrado',
-      falseDestination: 'IVR Principal',
-      status: 'Activo' 
-    },
-    { 
-      id: 3, 
-      name: 'Festivos', 
-      times: 'Días festivos',
-      trueDestination: 'Anuncio Festivo',
-      falseDestination: 'IVR Principal',
-      status: 'Inactivo' 
-    },
-  ])
+  const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
     name: '',
-    timeGroups: [{ days: [], startTime: '09:00', endTime: '18:00' }],
-    trueDestinationType: 'ivr',
-    trueDestination: '',
-    falseDestinationType: 'voicemail',
-    falseDestination: '',
+    time_groups: [{ days: [], startTime: '09:00', endTime: '18:00' }],
+    true_destination_type: 'ivr',
+    true_destination: '',
+    false_destination_type: 'voicemail',
+    false_destination: '',
+  })
+
+  const { data: conditions = [], isLoading } = useQuery({
+    queryKey: ['time-conditions'],
+    queryFn: async () => {
+      const response = await timeConditionsService.getAll()
+      return response.data
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: timeConditionsService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['time-conditions'])
+      toast.success('Condición creada exitosamente')
+      setShowModal(false)
+      setFormData({
+        name: '',
+        time_groups: [{ days: [], startTime: '09:00', endTime: '18:00' }],
+        true_destination_type: 'ivr',
+        true_destination: '',
+        false_destination_type: 'voicemail',
+        false_destination: '',
+      })
+    },
+    onError: () => toast.error('Error al crear condición'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: timeConditionsService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['time-conditions'])
+      toast.success('Condición eliminada')
+    },
+    onError: () => toast.error('Error al eliminar condición'),
   })
 
   const addTimeGroup = () => {
     setFormData({
       ...formData,
-      timeGroups: [...formData.timeGroups, { days: [], startTime: '09:00', endTime: '18:00' }]
+      time_groups: [...formData.time_groups, { days: [], startTime: '09:00', endTime: '18:00' }]
     })
   }
 
   const removeTimeGroup = (index) => {
-    const newGroups = formData.timeGroups.filter((_, i) => i !== index)
-    setFormData({ ...formData, timeGroups: newGroups })
+    const newGroups = formData.time_groups.filter((_, i) => i !== index)
+    setFormData({ ...formData, time_groups: newGroups })
   }
 
   const updateTimeGroup = (index, field, value) => {
-    const newGroups = [...formData.timeGroups]
+    const newGroups = [...formData.time_groups]
     newGroups[index][field] = value
-    setFormData({ ...formData, timeGroups: newGroups })
+    setFormData({ ...formData, time_groups: newGroups })
   }
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating time condition:', formData)
-    setShowModal(false)
-    setFormData({
-      name: '',
-      timeGroups: [{ days: [], startTime: '09:00', endTime: '18:00' }],
-      trueDestinationType: 'ivr',
-      trueDestination: '',
-      falseDestinationType: 'voicemail',
-      falseDestination: '',
-    })
+    createMutation.mutate(formData)
   }
 
   const handleDelete = (id) => {
     if (window.confirm('¿Está seguro de eliminar esta condición de horario?')) {
-      setConditions(conditions.filter(c => c.id !== id))
+      deleteMutation.mutate(id)
     }
   }
+
+  if (isLoading) return <div className="time-conditions-container"><p>Cargando...</p></div>
 
   return (
     <div className="time-conditions-container">
@@ -157,11 +163,11 @@ const TimeConditions = () => {
                   </button>
                 </div>
 
-                {formData.timeGroups.map((group, index) => (
+                {formData.time_groups.map((group, index) => (
                   <div key={index} className="time-group-card">
                     <div className="card-header">
                       <span>Horario {index + 1}</span>
-                      {formData.timeGroups.length > 1 && (
+                      {formData.time_groups.length > 1 && (
                         <button 
                           type="button" 
                           className="btn-remove" 
@@ -220,8 +226,8 @@ const TimeConditions = () => {
                     <div className="form-group">
                       <label>Tipo de Destino</label>
                       <select
-                        value={formData.trueDestinationType}
-                        onChange={(e) => setFormData({ ...formData, trueDestinationType: e.target.value })}
+                        value={formData.true_destination_type}
+                        onChange={(e) => setFormData({ ...formData, true_destination_type: e.target.value })}
                       >
                         <option value="ivr">IVR</option>
                         <option value="queue">Cola</option>
@@ -234,8 +240,8 @@ const TimeConditions = () => {
                       <label>Destino</label>
                       <input
                         type="text"
-                        value={formData.trueDestination}
-                        onChange={(e) => setFormData({ ...formData, trueDestination: e.target.value })}
+                        value={formData.true_destination}
+                        onChange={(e) => setFormData({ ...formData, true_destination: e.target.value })}
                         placeholder="Seleccione destino"
                       />
                     </div>
@@ -248,8 +254,8 @@ const TimeConditions = () => {
                     <div className="form-group">
                       <label>Tipo de Destino</label>
                       <select
-                        value={formData.falseDestinationType}
-                        onChange={(e) => setFormData({ ...formData, falseDestinationType: e.target.value })}
+                        value={formData.false_destination_type}
+                        onChange={(e) => setFormData({ ...formData, false_destination_type: e.target.value })}
                       >
                         <option value="ivr">IVR</option>
                         <option value="queue">Cola</option>
@@ -262,8 +268,8 @@ const TimeConditions = () => {
                       <label>Destino</label>
                       <input
                         type="text"
-                        value={formData.falseDestination}
-                        onChange={(e) => setFormData({ ...formData, falseDestination: e.target.value })}
+                        value={formData.false_destination}
+                        onChange={(e) => setFormData({ ...formData, false_destination: e.target.value })}
                         placeholder="Seleccione destino"
                       />
                     </div>
@@ -275,8 +281,8 @@ const TimeConditions = () => {
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Crear Condición
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? 'Creando...' : 'Crear Condición'}
                 </button>
               </div>
             </form>
