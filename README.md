@@ -14,7 +14,7 @@ Sistema de Contact Center omnicanal desarrollado con Django, React y Asterisk. S
 Para instalar VoziPOmni en un servidor Linux (VPS, Cloud o VM), ejecuta:
 
 ```bash
-curl -o install.sh -L "https://raw.githubusercontent.com/VOZIP/vozipomni/main/install.sh" && chmod +x install.sh
+curl -o install.sh -L "https://raw.githubusercontent.com/henry0295/vozipomni/main/install.sh" && chmod +x install.sh
 ```
 
 Luego ejecuta el instalador indicando la IP pública de tu servidor:
