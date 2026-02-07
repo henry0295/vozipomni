@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /tmp
 RUN git clone --depth 1 --branch 21 https://github.com/asterisk/asterisk.git asterisk-src && \
     cd asterisk-src && \
-    contrib/scripts/get_mp3_source.sh || true && \
     ./configure --with-jansson-bundled --with-pjproject-bundled && \
     make menuselect.makeopts && \
     menuselect/menuselect \
@@ -44,7 +43,7 @@ RUN git clone --depth 1 --branch 21 https://github.com/asterisk/asterisk.git ast
         --enable res_pjsip \
         --enable res_pjsip_session \
         --enable chan_pjsip \
-        --enable format_mp3 \
+        --disable format_mp3 \
         menuselect.makeopts && \
     make -j$(nproc) && \
     make install && \
