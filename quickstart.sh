@@ -60,15 +60,24 @@ docker compose up -d
 
 echo ""
 echo "Esperando a que los servicios estén listos..."
-sleep 15
+echo "Verificando PostgreSQL..."
+for i in {1..30}; do
+    if docker compose exec -T postgres pg_isready -U vozipomni -d vozipomni > /dev/null 2>&1; then
+        echo "✓ PostgreSQL listo"
+        break
+    fi
+    echo -n "."
+    sleep 2
+done
+echo ""
 
 echo ""
 echo "Ejecutando migraciones..."
-docker compose exec backend python manage.py migrate
+docker compose run --rm backend python manage.py migrate
 
 echo ""
 echo "Creando superusuario..."
-docker compose exec backend python manage.py shell <<EOF
+docker compose run --rm backend python manage.py shell <<EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():

@@ -352,7 +352,21 @@ run_migrations() {
     log_info "Ejecutando migraciones de base de datos..."
     
     cd $INSTALL_DIR
-    docker compose exec -T backend python manage.py migrate --noinput
+    
+    # Esperar a que PostgreSQL esté listo
+    log_info "Esperando a que PostgreSQL esté disponible..."
+    for i in {1..30}; do
+        if docker compose exec -T postgres pg_isready -U vozipomni_user -d vozipomni_db > /dev/null 2>&1; then
+            log_success "PostgreSQL está listo"
+            break
+        fi
+        echo -n "."
+        sleep 2
+    done
+    echo ""
+    
+    # Ejecutar migraciones usando run en lugar de exec
+    docker compose run --rm backend python manage.py migrate --noinput
     
     log_success "Migraciones completadas"
 }
@@ -361,7 +375,7 @@ create_superuser() {
     log_info "Creando usuario administrador..."
     
     cd $INSTALL_DIR
-    docker compose exec -T backend python manage.py shell <<EOF
+    docker compose run --rm backend python manage.py shell <<EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
