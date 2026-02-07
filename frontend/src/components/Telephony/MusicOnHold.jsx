@@ -20,7 +20,7 @@ const MusicOnHold = () => {
     queryKey: ['music-on-hold'],
     queryFn: async () => {
       const response = await musicOnHoldService.getAll()
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     },
   })
 

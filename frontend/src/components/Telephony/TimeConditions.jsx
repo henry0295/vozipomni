@@ -21,7 +21,7 @@ const TimeConditions = () => {
     queryKey: ['time-conditions'],
     queryFn: async () => {
       const response = await timeConditionsService.getAll()
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     },
   })
 

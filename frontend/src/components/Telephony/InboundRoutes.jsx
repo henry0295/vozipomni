@@ -22,7 +22,7 @@ const InboundRoutes = () => {
     queryKey: ['inbound-routes'],
     queryFn: async () => {
       const response = await inboundRoutesService.getAll()
-      return response.data
+      return Array.isArray(response.data) ? response.data : []
     },
   })
 

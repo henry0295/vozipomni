@@ -24,7 +24,8 @@ const Extensions = () => {
     queryKey: ['extensions'],
     queryFn: async () => {
       const response = await extensionsService.getAll()
-      return response.data
+      // Asegurar que siempre devuelve un array
+      return Array.isArray(response.data) ? response.data : []
     },
   })
 
