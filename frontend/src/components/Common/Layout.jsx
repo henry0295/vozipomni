@@ -5,7 +5,7 @@ import './Layout.css'
 const Layout = ({ children }) => {
   const location = useLocation()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  const [showConfigSubmenu, setShowConfigSubmenu] = useState(false)
+  const [showTelephonySubmenu, setShowTelephonySubmenu] = useState(false)
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -21,13 +21,19 @@ const Layout = ({ children }) => {
     { path: '/contacts', icon: '👥', label: 'Contactos' },
     { path: '/queues', icon: '📋', label: 'Colas' },
     { path: '/recordings', icon: '🎙️', label: 'Grabaciones' },
-    { path: '/reports', icon: '📊', label: 'Reportes' },
+    { path: '/users', icon: '👤', label: 'Usuarios' },
+    { path: '/reports', icon: '📈', label: 'Reportes' },
   ]
 
-  const configItems = [
-    { path: '/users', icon: '👤', label: 'Usuarios' },
-    { path: '/ivr', icon: '☎️', label: 'IVR' },
+  const telephonyItems = [
+    { path: '/extensions', icon: '📞', label: 'Extensiones' },
     { path: '/trunks', icon: '🌐', label: 'Troncales' },
+    { path: '/ivr', icon: '☎️', label: 'IVR' },
+    { path: '/inbound-routes', icon: '📥', label: 'Rutas Entrantes' },
+    { path: '/outbound-routes', icon: '📤', label: 'Rutas Salientes' },
+    { path: '/voicemail', icon: '📧', label: 'Buzones de Voz' },
+    { path: '/music-on-hold', icon: '🎵', label: 'Música en Espera' },
+    { path: '/time-conditions', icon: '⏰', label: 'Horarios' },
   ]
 
   return (
@@ -62,20 +68,20 @@ const Layout = ({ children }) => {
 
           <div className="nav-group">
             <div
-              className={`nav-item config-toggle ${showConfigSubmenu || configItems.some(i => isActive(i.path)) ? 'active' : ''}`}
-              onClick={() => setShowConfigSubmenu(!showConfigSubmenu)}
+              className={`nav-item config-toggle ${showTelephonySubmenu || telephonyItems.some(i => isActive(i.path)) ? 'active' : ''}`}
+              onClick={() => setShowTelephonySubmenu(!showTelephonySubmenu)}
             >
-              <span className="nav-icon">⚙️</span>
+              <span className="nav-icon">📞</span>
               {isSidebarOpen && (
                 <>
-                  <span className="nav-label">Configuración</span>
-                  <span className="arrow">{showConfigSubmenu ? '▼' : '▶'}</span>
+                  <span className="nav-label">Telefonía</span>
+                  <span className="arrow">{showTelephonySubmenu ? '▼' : '▶'}</span>
                 </>
               )}
             </div>
-            {(showConfigSubmenu || !isSidebarOpen) && (
+            {(showTelephonySubmenu || !isSidebarOpen) && (
               <div className="submenu">
-                {configItems.map((item) => (
+                {telephonyItems.map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}

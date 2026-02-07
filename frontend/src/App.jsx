@@ -17,6 +17,14 @@ import QueuesManager from './components/Queues/QueuesManager'
 import ContactsManager from './components/Contacts/ContactsManager'
 import RecordingsManager from './components/Recordings/RecordingsManager'
 
+// Telephony Components
+import Extensions from './components/Telephony/Extensions'
+import InboundRoutes from './components/Telephony/InboundRoutes'
+import OutboundRoutes from './components/Telephony/OutboundRoutes'
+import Voicemail from './components/Telephony/Voicemail'
+import MusicOnHold from './components/Telephony/MusicOnHold'
+import TimeConditions from './components/Telephony/TimeConditions'
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -47,11 +55,19 @@ function App() {
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/reports" element={<Reports />} />
             <Route path="/users" element={<Users />} />
-            <Route path="/ivr" element={<IVR />} />
-            <Route path="/trunks" element={<Trunks />} />
             <Route path="/queues" element={<QueuesManager />} />
             <Route path="/contacts" element={<ContactsManager />} />
             <Route path="/recordings" element={<RecordingsManager />} />
+            
+            {/* Telephony Routes */}
+            <Route path="/extensions" element={<Extensions />} />
+            <Route path="/trunks" element={<Trunks />} />
+            <Route path="/ivr" element={<IVR />} />
+            <Route path="/inbound-routes" element={<InboundRoutes />} />
+            <Route path="/outbound-routes" element={<OutboundRoutes />} />
+            <Route path="/voicemail" element={<Voicemail />} />
+            <Route path="/music-on-hold" element={<MusicOnHold />} />
+            <Route path="/time-conditions" element={<TimeConditions />} />
           </Routes>
         </Layout>
       </Router>
