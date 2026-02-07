@@ -6,6 +6,7 @@ import './Extensions.css'
 
 const Extensions = () => {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
@@ -36,20 +37,23 @@ const Extensions = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['extensions'])
       toast.success('Extensión creada exitosamente')
-      setShowModal(false)
-      setFormData({
-        extension: '',
-        name: '',
-        extension_type: 'SIP',
-        secret: '',
-        context: 'from-internal',
-        callerid: '',
-        email: '',
-        voicemail_enabled: false,
-      })
+      resetForm()
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Error al crear extensión')
+    },
+  })
+
+  // Mutation para actualizar extensión
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => extensionsService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['extensions'])
+      toast.success('Extensión actualizada exitosamente')
+      resetForm()
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Error al actualizar extensión')
     },
   })
 
@@ -62,9 +66,43 @@ const Extensions = () => {
     },
     onError: () => {
       toast.error('Error al eliminar extensión')
-    },
-  })
+    },resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({
+      extension: '',
+      name: '',
+      extension_type: 'SIP',
+      secret: '',
+      context: 'from-internal',
+      callerid: '',
+      email: '',
+      voicemail_enabled: false,
+    })
+  }
 
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const handleEdit = (ext) => {
+    setEditingId(ext.id)
+    setFormData({
+      extension: ext.extension,
+      name: ext.name,
+      extension_type: ext.extension_type,
+      secret: '', // No prellenar contraseña por seguridad
+      context: ext.context,
+      callerid: ext.callerid || '',
+      email: ext.email || '',
+      voicemail_enabled: ext.voicemail_enabled,
+    })
+    setShowModal(true
   const handleSubmit = (e) => {
     e.preventDefault()
     createMutation.mutate(formData)
@@ -84,7 +122,7 @@ const Extensions = () => {
       <div className="page-header">
         <h1>Extensiones</h1>
         <button className="btn-primary" onClick={() => setShowModal(true)}>
-          + Nueva Extensión
+          + Nueva Extensión onClick={() => handleEdit(ext)}
         </button>
       </div>
 
@@ -129,11 +167,11 @@ const Extensions = () => {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nueva Extensión</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <h2>{editingId ? 'Editar Extensión' : 'Nueva Extensión'}</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="modal-body">
               <div className="form-row">
@@ -144,6 +182,7 @@ const Extensions = () => {
                     value={formData.extension}
                     onChange={(e) => setFormData({ ...formData, extension: e.target.value })}
                     placeholder="1001"
+                    disabled={!!editingId}
                     required
                   />
                 </div>
@@ -171,13 +210,13 @@ const Extensions = () => {
                     <option value="PJSIP">PJSIP</option>
                   </select>
                 </div>
-                <div className="form-group">
-                  <label>Contraseña *</label>
+                <div className="form{!editingId && '*'}</label>
                   <input
                     type="password"
                     value={formData.secret}
                     onChange={(e) => setFormData({ ...formData, secret: e.target.value })}
-                    placeholder="********"
+                    placeholder={editingId ? "Dejar vacío para mantener" : "********"}
+                    required={!editingId}der="********"
                     required
                   />
                 </div>
@@ -227,11 +266,14 @@ const Extensions = () => {
                 </label>
               </div>
 
-              <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+              <div className="form-actions">resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Extensión')
+                    : (createMutation.isPending ? 'Creando...' : 'Crear Extensión')
+                  Mutation.isPending}>
                   {createMutation.isPending ? 'Creando...' : 'Crear Extensión'}
                 </button>
               </div>

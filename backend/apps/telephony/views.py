@@ -11,6 +11,8 @@ from .serializers import (
     ExtensionSerializer, InboundRouteSerializer, OutboundRouteSerializer,
     VoicemailSerializer, MusicOnHoldSerializer, TimeConditionSerializer
 )
+from .asterisk_config import AsteriskConfigGenerator
+from .asterisk_ami import AsteriskAMI
 
 
 class CallViewSet(viewsets.ModelViewSet):
@@ -67,17 +69,57 @@ class ExtensionViewSet(viewsets.ModelViewSet):
     filterset_fields = ['extension_type', 'is_active']
     ordering = ['extension']
     
+    def perform_create(self, serializer):
+        """Crear extensión y regenerar configuración de Asterisk"""
+        extension = serializer.save()
+        self._reload_asterisk_config()
+        return extension
+    
+    def perform_update(self, serializer):
+        """Actualizar extensión y regenerar configuración de Asterisk"""
+        extension = serializer.save()
+        self._reload_asterisk_config()
+        return extension
+    
+    def perform_destroy(self, instance):
+        """Eliminar extensión y regenerar configuración de Asterisk"""
+        instance.delete()
+        self._reload_asterisk_config()
+    
+    def _reload_asterisk_config(self):
+        """Regenerar archivos de configuración y recargar Asterisk"""
+        try:
+            # Generar archivos de configuración
+            generator = AsteriskConfigGenerator()
+            generator.write_all_configs()
+            
+            # Recargar Asterisk vía AMI
+            ami = AsteriskAMI()
+            if ami.connect():
+                ami.reload_module('chan_sip.so')
+                ami.reload_module('chan_pjsip.so')
+                ami.reload_dialplan()
+                ami.disconnect()
+        except Exception as e:
+            print(f"Error recargando configuración de Asterisk: {e}")
+    
     @action(detail=True, methods=['post'])
     def reload_config(self, request, pk=None):
         """
         Recargar configuración de la extensión en Asterisk
         """
         extension = self.get_object()
-        # TODO: Generar configuración SIP y recargar Asterisk
-        return Response({
-            'success': True,
-            'message': f'Configuración de extensión {extension.extension} recargada'
-        })
+        try:
+            self._reload_asterisk_config()
+            return Response({
+                'success': True,
+                'message': f'Configuración de extensión {extension.extension} recargada'
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class InboundRouteViewSet(viewsets.ModelViewSet):
@@ -89,8 +131,29 @@ class InboundRouteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     search_fields = ['did', 'description']
     filterset_fields = ['destination_type', 'is_active']
-    ordering = ['priority', 'did']
-
+    ordering = ['priority', 'did']    
+    def perform_create(self, serializer):
+        serializer.save()
+        self._reload_asterisk_config()
+    
+    def perform_update(self, serializer):
+        serializer.save()
+        self._reload_asterisk_config()
+    
+    def perform_destroy(self, instance):
+        instance.delete()
+        self._reload_asterisk_config()
+    
+    def _reload_asterisk_config(self):
+        try:
+            generator = AsteriskConfigGenerator()
+            generator.write_all_configs()
+            ami = AsteriskAMI()
+            if ami.connect():
+                ami.reload_dialplan()
+                ami.disconnect()
+        except Exception as e:
+            print(f"Error recargando configuración: {e}")
 
 class OutboundRouteViewSet(viewsets.ModelViewSet):
     """
@@ -101,6 +164,29 @@ class OutboundRouteViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     search_fields = ['name', 'pattern']
     filterset_fields = ['trunk', 'is_active']
+    
+    def perform_create(self, serializer):
+        serializer.save()
+        self._reload_asterisk_config()
+    
+    def perform_update(self, serializer):
+        serializer.save()
+        self._reload_asterisk_config()
+    
+    def perform_destroy(self, instance):
+        instance.delete()
+        self._reload_asterisk_config()
+    
+    def _reload_asterisk_config(self):
+        try:
+            generator = AsteriskConfigGenerator()
+            generator.write_all_configs()
+            ami = AsteriskAMI()
+            if ami.connect():
+                ami.reload_dialplan()
+                ami.disconnect()
+        except Exception as e:
+            print(f"Error recargando configuración: {e}")
 
 
 class VoicemailViewSet(viewsets.ModelViewSet):
@@ -112,8 +198,29 @@ class VoicemailViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     search_fields = ['mailbox', 'name', 'email']
     filterset_fields = ['is_active']
-    ordering = ['mailbox']
+    ordering = ['mailbox']    
+    def perform_create(self, serializer):
+        serializer.save()
+        self._reload_asterisk_config()
     
+    def perform_update(self, serializer):
+        serializer.save()
+        self._reload_asterisk_config()
+    
+    def perform_destroy(self, instance):
+        instance.delete()
+        self._reload_asterisk_config()
+    
+    def _reload_asterisk_config(self):
+        try:
+            generator = AsteriskConfigGenerator()
+            generator.write_all_configs()
+            ami = AsteriskAMI()
+            if ami.connect():
+                ami.reload_module('app_voicemail.so')
+                ami.disconnect()
+        except Exception as e:
+            print(f"Error recargando configuración: {e}")    
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         """

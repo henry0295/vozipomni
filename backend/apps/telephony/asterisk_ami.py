@@ -3,6 +3,7 @@ Asterisk Manager Interface (AMI) Service
 Maneja la conexión y comunicación con Asterisk
 """
 import asyncio
+import socket
 import logging
 from typing import Optional, Dict, Callable
 from panoramisk import Manager
@@ -22,41 +23,159 @@ class AsteriskAMI:
         self.event_handlers: Dict[str, Callable] = {}
         self.channel_layer = get_channel_layer()
         
-    async def connect(self):
-        """Conectar al AMI de Asterisk"""
+        # Configuración AMI
+        self.ami_host = getattr(settings, 'ASTERISK_HOST', 'asterisk')
+        self.ami_port = getattr(settings, 'ASTERISK_AMI_PORT', 5038)
+        self.ami_user = getattr(settings, 'ASTERISK_AMI_USER', 'admin')
+        self.ami_password = getattr(settings, 'ASTERISK_AMI_PASSWORD', 'VoziPOmni2026!')
+    
+    # ========== MÉTODOS SINCRÓNICOS PARA COMANDOS SIMPLES ==========
+    
+    def connect(self):
+        """Conectar al AMI de Asterisk (versión sincrónica)"""
         try:
-            ami_host = settings.ASTERISK_HOST or 'asterisk'
-            ami_port = settings.ASTERISK_AMI_PORT or 5038
-            ami_user = settings.ASTERISK_AMI_USER or 'admin'
-            ami_password = settings.ASTERISK_AMI_PASSWORD or 'VoziPOmni2026!'
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.sock.settimeout(5)
+            self.sock.connect((self.ami_host, self.ami_port))
             
+            # Leer banner
+            self._read_response()
+            
+            # Autenticarse
+            self._send_command(f"Action: Login\r\nUsername: {self.ami_user}\r\nSecret: {self.ami_password}\r\n\r\n")
+            response = self._read_response()
+            
+            if 'Success' in response:
+                self.connected = True
+                logger.info(f"✓ Conectado a Asterisk AMI en {self.ami_host}:{self.ami_port}")
+                return True
+            else:
+                logger.error("Error de autenticación AMI")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error conectando a Asterisk AMI: {e}")
+            self.connected = False
+            return False
+    
+    def disconnect(self):
+        """Desconectar del AMI (versión sincrónica)"""
+        if hasattr(self, 'sock'):
+            try:
+                self._send_command("Action: Logoff\r\n\r\n")
+                self.sock.close()
+            except:
+                pass
+            self.connected = False
+            logger.info("Desconectado de Asterisk AMI")
+    
+    def _send_command(self, command):
+        """Enviar comando al AMI"""
+        if hasattr(self, 'sock'):
+            self.sock.sendall(command.encode('utf-8'))
+    
+    def _read_response(self):
+        """Leer respuesta del AMI"""
+        response = b''
+        while True:
+            try:
+                chunk = self.sock.recv(1024)
+                if not chunk:
+                    break
+                response += chunk
+                if b'\r\n\r\n' in response:
+                    break
+            except socket.timeout:
+                break
+        return response.decode('utf-8', errors='ignore')
+    
+    def reload_module(self, module_name):
+        """Recargar un módulo específico de Asterisk"""
+        if not self.connected:
+            return False
+        
+        try:
+            self._send_command(f"Action: ModuleLoad\r\nLoadType: reload\r\nModule: {module_name}\r\n\r\n")
+            response = self._read_response()
+            logger.info(f"Módulo {module_name} recargado")
+            return 'Success' in response
+        except Exception as e:
+            logger.error(f"Error recargando módulo {module_name}: {e}")
+            return False
+    
+    def reload_dialplan(self):
+        """Recargar el dialplan (extensions.conf)"""
+        if not self.connected:
+            return False
+        
+        try:
+            self._send_command("Action: Command\r\nCommand: dialplan reload\r\n\r\n")
+            response = self._read_response()
+            logger.info("Dialplan recargado")
+            return True
+        except Exception as e:
+            logger.error(f"Error recargando dialplan: {e}")
+            return False
+    
+    def sip_show_peers(self):
+        """Obtener lista de peers SIP"""
+        if not self.connected:
+            return []
+        
+        try:
+            self._send_command("Action: SIPpeers\r\n\r\n")
+            response = self._read_response()
+            # Parsear respuesta (simplificado)
+            return response
+        except Exception as e:
+            logger.error(f"Error obteniendo peers SIP: {e}")
+            return []
+    
+    def pjsip_show_endpoints(self):
+        """Obtener lista de endpoints PJSIP"""
+        if not self.connected:
+            return []
+        
+        try:
+            self._send_command("Action: PJSIPShowEndpoints\r\n\r\n")
+            response = self._read_response()
+            return response
+        except Exception as e:
+            logger.error(f"Error obteniendo endpoints PJSIP: {e}")
+            return []
+    
+    # ========== MÉTODOS ASINCRÓNICOS PARA EVENTOS ==========
+    
+    async def connect_async(self):
+        """Conectar al AMI de Asterisk (versión asíncrona para eventos)"""
+        try:
             self.manager = Manager(
-                host=ami_host,
-                port=ami_port,
-                username=ami_user,
-                secret=ami_password,
+                host=self.ami_host,
+                port=self.ami_port,
+                username=self.ami_user,
+                secret=self.ami_password,
                 ping_delay=10,
                 ping_tries=3
             )
             
             await self.manager.connect()
             self.connected = True
-            logger.info(f"✓ Conectado a Asterisk AMI en {ami_host}:{ami_port}")
+            logger.info(f"✓ Conectado a Asterisk AMI (async) en {self.ami_host}:{self.ami_port}")
             
             # Registrar handlers de eventos
             self._register_event_handlers()
             
         except Exception as e:
-            logger.error(f"Error conectando a Asterisk AMI: {e}")
+            logger.error(f"Error conectando a Asterisk AMI (async): {e}")
             self.connected = False
             raise
     
-    async def disconnect(self):
-        """Desconectar del AMI"""
+    async def disconnect_async(self):
+        """Desconectar del AMI (versión asíncrona)"""
         if self.manager:
             await self.manager.close()
             self.connected = False
-            logger.info("Desconectado de Asterisk AMI")
+            logger.info("Desconectado de Asterisk AMI (async)")
     
     def _register_event_handlers(self):
         """Registrar handlers para eventos de Asterisk"""
