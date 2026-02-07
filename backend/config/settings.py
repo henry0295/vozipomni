@@ -15,6 +15,9 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 
 # Application definition
 INSTALLED_APPS = [
+    # Local apps (debe ir primero para modelo de usuario personalizado)
+    'apps.users',
+    
     # Django apps
     'django.contrib.admin',
     'django.contrib.auth',
@@ -34,8 +37,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'django_celery_results',
     
-    # Local apps
-    'apps.users',
+    # Local apps (resto de apps)
     'apps.campaigns',
     'apps.agents',
     'apps.contacts',
