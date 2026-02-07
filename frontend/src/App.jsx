@@ -9,6 +9,13 @@ import AgentConsole from './components/AgentConsole/AgentConsole'
 import Campaigns from './components/Campaigns/Campaigns'
 import Reports from './components/Reports/Reports'
 import Login from './components/Common/Login'
+import Navbar from './components/Common/Navbar'
+import Users from './components/Settings/Users'
+import IVR from './components/Settings/IVR'
+import Trunks from './components/Settings/Trunks'
+import QueuesManager from './components/Queues/QueuesManager'
+import ContactsManager from './components/Contacts/ContactsManager'
+import RecordingsManager from './components/Recordings/RecordingsManager'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +39,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <Router>
         <div className="app">
+          <Navbar />
           <Toaster position="top-right" />
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -39,6 +47,12 @@ function App() {
             <Route path="/agent-console" element={<AgentConsole />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/users" element={<Users />} />
+            <Route path="/ivr" element={<IVR />} />
+            <Route path="/trunks" element={<Trunks />} />
+            <Route path="/queues" element={<QueuesManager />} />
+            <Route path="/contacts" element={<ContactsManager />} />
+            <Route path="/recordings" element={<RecordingsManager />} />
           </Routes>
         </div>
       </Router>

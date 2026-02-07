@@ -1,0 +1,103 @@
+.ivr-container {
+  padding: 2rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.ivr-table {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.ivr-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ivr-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.ivr-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.ivr-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.modal-content.large {
+  max-width: 900px;
+}
+
+.ivr-form textarea {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  resize: vertical;
+  transition: all 0.3s;
+}
+
+.ivr-form textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.options-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 2px solid #f0f0f0;
+}
+
+.options-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.options-header h3 {
+  margin: 0;
+  color: #333;
+}
+
+.option-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 2fr 50px;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+.btn-remove {
+  background: #ff5252;
+  color: white;
+  border: none;
+  padding: 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-remove:hover {
+  background: #ff1744;
+  transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+  .option-row {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,66 @@
+.trunks-container {
+  padding: 2rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.trunks-table {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.trunks-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.trunks-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.trunks-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.trunks-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.trunk-form .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.trunk-form .form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.trunk-form .form-group label {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.trunk-form input,
+.trunk-form select {
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.3s;
+}
+
+.trunk-form input:focus,
+.trunk-form select:focus {
+  outline: none;
+  border-color: #667eea;
+}
