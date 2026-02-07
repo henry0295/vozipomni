@@ -9,7 +9,7 @@ import AgentConsole from './components/AgentConsole/AgentConsole'
 import Campaigns from './components/Campaigns/Campaigns'
 import Reports from './components/Reports/Reports'
 import Login from './components/Common/Login'
-import Navbar from './components/Common/Navbar'
+import Layout from './components/Common/Layout'
 import Users from './components/Settings/Users'
 import IVR from './components/Settings/IVR'
 import Trunks from './components/Settings/Trunks'
@@ -38,8 +38,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router>
-        <div className="app">
-          <Navbar />
+        <Layout>
           <Toaster position="top-right" />
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -54,7 +53,7 @@ function App() {
             <Route path="/contacts" element={<ContactsManager />} />
             <Route path="/recordings" element={<RecordingsManager />} />
           </Routes>
-        </div>
+        </Layout>
       </Router>
     </QueryClientProvider>
   )
