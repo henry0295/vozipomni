@@ -186,7 +186,16 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = config('CORS_ORIGINS', default='http://localhost:3000,http://localhost,http://127.0.0.1').split(',')
+# Limpiar espacios en blanco de cada origen
+CORS_ALLOWED_ORIGINS = [
+    origin.strip() 
+    for origin in config('CORS_ORIGINS', default='http://localhost:3000,http://localhost,http://127.0.0.1').split(',')
+]
+
+# Habilitar todos los orígenes temporalmente para depuración
+# CAMBIAR A False EN PRODUCCIÓN
+CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=True, cast=bool)
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -207,6 +216,9 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Configuración adicional para depuración
+CORS_PREFLIGHT_MAX_AGE = 86400  # 24 horas
 
 # Asterisk Configuration
 ASTERISK_CONFIG = {
