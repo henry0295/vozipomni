@@ -66,7 +66,10 @@ const Extensions = () => {
     },
     onError: () => {
       toast.error('Error al eliminar extensión')
-    },resetForm = () => {
+    },
+  })
+
+  const resetForm = () => {
     setShowModal(false)
     setEditingId(null)
     setFormData({
