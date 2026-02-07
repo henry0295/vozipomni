@@ -43,7 +43,6 @@ print_status "Docker Compose instalado"
 # Crear directorios necesarios
 echo ""
 echo "Creando directorios..."
-mkdir -p backend/logs
 mkdir -p backend/static
 mkdir -p backend/media
 mkdir -p backend/recordings

@@ -32,7 +32,7 @@ RUN pip install --upgrade pip && \
 COPY . .
 
 # Crear directorios necesarios
-RUN mkdir -p logs static media recordings
+RUN mkdir -p static media recordings
 
 # Crear usuario no-root para ejecutar la aplicación
 RUN useradd -m -u 1000 vozipomni && \
