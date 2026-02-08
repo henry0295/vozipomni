@@ -6,6 +6,7 @@ import './InboundRoutes.css'
 
 const InboundRoutes = () => {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
@@ -33,17 +34,20 @@ const InboundRoutes = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['inbound-routes'])
       toast.success('Ruta creada exitosamente')
-      setShowModal(false)
-      setFormData({
-        did: '',
-        description: '',
-        destination_type: 'ivr',
-        destination: '',
-        priority: 1,
-        time_condition: '',
-      })
+      resetForm()
     },
     onError: () => toast.error('Error al crear ruta'),
+  })
+
+  // Mutation para actualizar
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => inboundRoutesService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['inbound-routes'])
+      toast.success('Ruta actualizada exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al actualizar ruta'),
   })
 
   // Mutation para eliminar
@@ -56,9 +60,39 @@ const InboundRoutes = () => {
     onError: () => toast.error('Error al eliminar ruta'),
   })
 
+  const resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({
+      did: '',
+      description: '',
+      destination_type: 'ivr',
+      destination: '',
+      priority: 1,
+      time_condition: '',
+    })
+  }
+
+  const handleEdit = (route) => {
+    setEditingId(route.id)
+    setFormData({
+      did: route.did,
+      description: route.description,
+      destination_type: route.destination_type,
+      destination: route.destination,
+      priority: route.priority,
+      time_condition: route.time_condition || '',
+    })
+    setShowModal(true)
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
   }
 
   const handleDelete = (id) => {
@@ -108,7 +142,7 @@ const InboundRoutes = () => {
                     </span>
                   </td>
                   <td>
-                    <button className="btn-icon" title="Editar">✏️</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(route)}>✏️</button>
                     <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(route.id)}>🗑️</button>
                   </td>
                 </tr>
@@ -119,11 +153,11 @@ const InboundRoutes = () => {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nueva Ruta Entrante</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <h2>{editingId ? 'Editar' : 'Nueva'} Ruta Entrante</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="modal-body">
               <div className="form-row">
@@ -201,11 +235,14 @@ const InboundRoutes = () => {
               </div>
 
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Creando...' : 'Crear Ruta'}
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Ruta')
+                    : (createMutation.isPending ? 'Creando...' : 'Crear Ruta')
+                  }
                 </button>
               </div>
             </form>

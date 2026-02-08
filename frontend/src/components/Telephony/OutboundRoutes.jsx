@@ -6,6 +6,7 @@ import './OutboundRoutes.css'
 
 const OutboundRoutes = () => {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
@@ -40,10 +41,19 @@ const OutboundRoutes = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['outbound-routes'])
       toast.success('Ruta creada exitosamente')
-      setShowModal(false)
-      setFormData({ name: '', pattern: '', trunk: '', prepend: '', prefix: '', callerid_prefix: '' })
+      resetForm()
     },
     onError: () => toast.error('Error al crear ruta'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => outboundRoutesService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['outbound-routes'])
+      toast.success('Ruta actualizada exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al actualizar ruta'),
   })
 
   const deleteMutation = useMutation({
@@ -55,9 +65,32 @@ const OutboundRoutes = () => {
     onError: () => toast.error('Error al eliminar ruta'),
   })
 
+  const resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({ name: '', pattern: '', trunk: '', prepend: '', prefix: '', callerid_prefix: '' })
+  }
+
+  const handleEdit = (route) => {
+    setEditingId(route.id)
+    setFormData({
+      name: route.name,
+      pattern: route.pattern,
+      trunk: route.trunk,
+      prepend: route.prepend || '',
+      prefix: route.prefix || '',
+      callerid_prefix: route.callerid_prefix || '',
+    })
+    setShowModal(true)
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
   }
 
   const handleDelete = (id) => {
@@ -118,7 +151,7 @@ const OutboundRoutes = () => {
                     </span>
                   </td>
                   <td>
-                    <button className="btn-icon" title="Editar">✏️</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(route)}>✏️</button>
                     <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(route.id)}>🗑️</button>
                   </td>
                 </tr>
@@ -129,11 +162,11 @@ const OutboundRoutes = () => {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nueva Ruta Saliente</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <h2>{editingId ? 'Editar' : 'Nueva'} Ruta Saliente</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="modal-body">
               <div className="form-group">
@@ -209,11 +242,14 @@ const OutboundRoutes = () => {
               </div>
 
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Creando...' : 'Crear Ruta'}
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Ruta')
+                    : (createMutation.isPending ? 'Creando...' : 'Crear Ruta')
+                  }
                 </button>
               </div>
             </form>

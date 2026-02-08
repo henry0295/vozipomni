@@ -6,6 +6,7 @@ import './TimeConditions.css'
 
 const TimeConditions = () => {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
@@ -31,17 +32,19 @@ const TimeConditions = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['time-conditions'])
       toast.success('Condición creada exitosamente')
-      setShowModal(false)
-      setFormData({
-        name: '',
-        time_groups: [{ days: [], startTime: '09:00', endTime: '18:00' }],
-        true_destination_type: 'ivr',
-        true_destination: '',
-        false_destination_type: 'voicemail',
-        false_destination: '',
-      })
+      resetForm()
     },
     onError: () => toast.error('Error al crear condición'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => timeConditionsService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['time-conditions'])
+      toast.success('Condición actualizada exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al actualizar condición'),
   })
 
   const deleteMutation = useMutation({
@@ -52,6 +55,32 @@ const TimeConditions = () => {
     },
     onError: () => toast.error('Error al eliminar condición'),
   })
+
+  const resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({
+      name: '',
+      time_groups: [{ days: [], startTime: '09:00', endTime: '18:00' }],
+      true_destination_type: 'ivr',
+      true_destination: '',
+      false_destination_type: 'voicemail',
+      false_destination: '',
+    })
+  }
+
+  const handleEdit = (condition) => {
+    setEditingId(condition.id)
+    setFormData({
+      name: condition.name,
+      time_groups: condition.time_groups || [{ days: [], startTime: '09:00', endTime: '18:00' }],
+      true_destination_type: condition.true_destination_type,
+      true_destination: condition.true_destination,
+      false_destination_type: condition.false_destination_type,
+      false_destination: condition.false_destination,
+    })
+    setShowModal(true)
+  }
 
   const addTimeGroup = () => {
     setFormData({
@@ -73,7 +102,11 @@ const TimeConditions = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
   }
 
   const handleDelete = (id) => {
@@ -127,7 +160,7 @@ const TimeConditions = () => {
                     </span>
                   </td>
                   <td>
-                    <button className="btn-icon" title="Editar">✏️</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(condition)}>✏️</button>
                     <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(condition.id)}>🗑️</button>
                   </td>
                 </tr>
@@ -138,11 +171,11 @@ const TimeConditions = () => {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content large-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nueva Condición de Horario</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <h2>{editingId ? 'Editar' : 'Nueva'} Condición de Horario</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="modal-body">
               <div className="form-group">
@@ -279,11 +312,14 @@ const TimeConditions = () => {
               </div>
 
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Creando...' : 'Crear Condición'}
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Condición')
+                    : (createMutation.isPending ? 'Creando...' : 'Crear Condición')
+                  }
                 </button>
               </div>
             </form>

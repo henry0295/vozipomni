@@ -6,6 +6,7 @@ import './Voicemail.css'
 
 const Voicemail = () => {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
@@ -32,10 +33,19 @@ const Voicemail = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['voicemail'])
       toast.success('Buzón creado exitosamente')
-      setShowModal(false)
-      setFormData({ mailbox: '', name: '', email: '', password: '', email_attach: true, email_delete: false, max_messages: 100 })
+      resetForm()
     },
     onError: () => toast.error('Error al crear buzón'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => voicemailService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['voicemail'])
+      toast.success('Buzón actualizado exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al actualizar buzón'),
   })
 
   const deleteMutation = useMutation({
@@ -47,9 +57,37 @@ const Voicemail = () => {
     onError: () => toast.error('Error al eliminar buzón'),
   })
 
+  const resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({ mailbox: '', name: '', email: '', password: '', email_attach: true, email_delete: false, max_messages: 100 })
+  }
+
+  const handleEdit = (vm) => {
+    setEditingId(vm.id)
+    setFormData({
+      mailbox: vm.mailbox,
+      name: vm.name,
+      email: vm.email,
+      password: '',
+      email_attach: vm.email_attach,
+      email_delete: vm.email_delete,
+      max_messages: vm.max_messages,
+    })
+    setShowModal(true)
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
+    if (editingId) {
+      const updateData = { ...formData }
+      if (!updateData.password) {
+        delete updateData.password
+      }
+      updateMutation.mutate({ id: editingId, data: updateData })
+    } else {
+      createMutation.mutate(formData)
+    }
   }
 
   const handleDelete = (id) => {
@@ -104,7 +142,7 @@ const Voicemail = () => {
                   </td>
                   <td>
                     <button className="btn-icon" title="Escuchar mensajes">📧</button>
-                    <button className="btn-icon" title="Editar">✏️</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(vm)}>✏️</button>
                     <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(vm.id)}>🗑️</button>
                   </td>
                 </tr>
@@ -115,11 +153,11 @@ const Voicemail = () => {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nuevo Buzón de Voz</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <h2>{editingId ? 'Editar' : 'Nuevo'} Buzón de Voz</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="modal-body">
               <div className="form-row">
@@ -130,6 +168,7 @@ const Voicemail = () => {
                     value={formData.mailbox}
                     onChange={(e) => setFormData({ ...formData, mailbox: e.target.value })}
                     placeholder="1001"
+                    disabled={!!editingId}
                     required
                   />
                 </div>
@@ -157,13 +196,13 @@ const Voicemail = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Contraseña *</label>
+                  <label>Contraseña {!editingId && '*'}</label>
                   <input
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="****"
-                    required
+                    placeholder={editingId ? "Dejar vacío para mantener" : "****"}
+                    required={!editingId}
                   />
                 </div>
               </div>
@@ -202,11 +241,14 @@ const Voicemail = () => {
               </div>
 
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Creando...' : 'Crear Buzón'}
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Buzón')
+                    : (createMutation.isPending ? 'Creando...' : 'Crear Buzón')
+                  }
                 </button>
               </div>
             </form>

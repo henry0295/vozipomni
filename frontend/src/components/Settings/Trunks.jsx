@@ -1,9 +1,14 @@
 import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { trunksService } from '../../services/telephonyService'
 import './Trunks.css'
 
 const Trunks = () => {
-  const [trunks, setTrunks] = useState([])
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const queryClient = useQueryClient()
+
   const [formData, setFormData] = useState({
     name: '',
     host: '',
@@ -16,11 +21,98 @@ const Trunks = () => {
     is_active: true
   })
 
+  const { data: trunks = [], isLoading } = useQuery({
+    queryKey: ['trunks'],
+    queryFn: async () => {
+      const response = await trunksService.getAll()
+      const data = response.data?.results || response.data
+      return Array.isArray(data) ? data : []
+    },
+  })
+
+  const createMutation = useMutation({
+    mutationFn: trunksService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['trunks'])
+      toast.success('Troncal creada exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al crear troncal'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => trunksService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['trunks'])
+      toast.success('Troncal actualizada exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al actualizar troncal'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: trunksService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['trunks'])
+      toast.success('Troncal eliminada')
+    },
+    onError: () => toast.error('Error al eliminar troncal'),
+  })
+
+  const resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({
+      name: '',
+      host: '',
+      port: 5060,
+      username: '',
+      password: '',
+      protocol: 'udp',
+      max_channels: 10,
+      codec: 'ulaw,alaw,g729',
+      is_active: true
+    })
+  }
+
+  const handleEdit = (trunk) => {
+    setEditingId(trunk.id)
+    setFormData({
+      name: trunk.name,
+      host: trunk.host,
+      port: trunk.port,
+      username: trunk.username,
+      password: '',
+      protocol: trunk.protocol,
+      max_channels: trunk.max_channels,
+      codec: trunk.codec,
+      is_active: trunk.is_active
+    })
+    setShowModal(true)
+  }
+
+  const handleDelete = (id) => {
+    if (window.confirm('¿Está seguro de eliminar esta troncal?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    console.log('Creating Trunk:', formData)
-    setShowModal(false)
+    if (editingId) {
+      const updateData = { ...formData }
+      if (!updateData.password) {
+        delete updateData.password
+      }
+      updateMutation.mutate({ id: editingId, data: updateData })
+    } else {
+      createMutation.mutate(formData)
+    }
   }
+
+  if (isLoading) return <div className="trunks-container"><p>Cargando...</p></div>
+
+  if (isLoading) return <div className="trunks-container"><p>Cargando...</p></div>
 
   return (
     <div className="trunks-container">
@@ -46,21 +138,43 @@ const Trunks = () => {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td colSpan="8" className="no-data">
-                No hay troncales SIP configuradas. Crea una nueva para comenzar.
-              </td>
-            </tr>
+            {trunks.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="no-data">
+                  No hay troncales SIP configuradas. Crea una nueva para comenzar.
+                </td>
+              </tr>
+            ) : (
+              trunks.map((trunk) => (
+                <tr key={trunk.id}>
+                  <td><strong>{trunk.name}</strong></td>
+                  <td>{trunk.host}</td>
+                  <td>{trunk.port}</td>
+                  <td>{trunk.username}</td>
+                  <td>{trunk.protocol?.toUpperCase()}</td>
+                  <td>{trunk.max_channels}</td>
+                  <td>
+                    <span className={`status-badge ${trunk.is_active ? 'active' : 'inactive'}`}>
+                      {trunk.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(trunk)}>✏️</button>
+                    <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(trunk.id)}>🗑️</button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Configurar Troncal SIP</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>✕</button>
+              <h2>{editingId ? 'Editar' : 'Nueva'} Troncal SIP</h2>
+              <button className="close-btn" onClick={resetForm}>✕</button>
             </div>
             <form onSubmit={handleSubmit} className="trunk-form">
               <div className="form-group">
@@ -109,12 +223,13 @@ const Trunks = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label>Contraseña *</label>
+                  <label>Contraseña {!editingId && '*'}</label>
                   <input
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({...formData, password: e.target.value})}
-                    required
+                    placeholder={editingId ? "Dejar vacío para mantener" : "********"}
+                    required={!editingId}
                   />
                 </div>
               </div>
@@ -165,11 +280,14 @@ const Trunks = () => {
               </div>
 
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Guardar Troncal
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Troncal')
+                    : (createMutation.isPending ? 'Creando...' : 'Guardar Troncal')
+                  }
                 </button>
               </div>
             </form>

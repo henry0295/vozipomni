@@ -6,6 +6,7 @@ import './MusicOnHold.css'
 
 const MusicOnHold = () => {
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const queryClient = useQueryClient()
 
   const [formData, setFormData] = useState({
@@ -30,10 +31,19 @@ const MusicOnHold = () => {
     onSuccess: () => {
       queryClient.invalidateQueries(['music-on-hold'])
       toast.success('Clase MOH creada exitosamente')
-      setShowModal(false)
-      setFormData({ name: '', description: '', mode: 'files', directory: '', application: '' })
+      resetForm()
     },
     onError: () => toast.error('Error al crear clase MOH'),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => musicOnHoldService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['music-on-hold'])
+      toast.success('Clase MOH actualizada exitosamente')
+      resetForm()
+    },
+    onError: () => toast.error('Error al actualizar clase MOH'),
   })
 
   const deleteMutation = useMutation({
@@ -45,9 +55,31 @@ const MusicOnHold = () => {
     onError: () => toast.error('Error al eliminar clase MOH'),
   })
 
+  const resetForm = () => {
+    setShowModal(false)
+    setEditingId(null)
+    setFormData({ name: '', description: '', mode: 'files', directory: '', application: '' })
+  }
+
+  const handleEdit = (moh) => {
+    setEditingId(moh.id)
+    setFormData({
+      name: moh.name,
+      description: moh.description,
+      mode: moh.mode,
+      directory: moh.directory || '',
+      application: moh.application || '',
+    })
+    setShowModal(true)
+  }
+
   const handleSubmit = (e) => {
     e.preventDefault()
-    createMutation.mutate(formData)
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: formData })
+    } else {
+      createMutation.mutate(formData)
+    }
   }
 
   const handleDelete = (id) => {
@@ -106,7 +138,7 @@ const MusicOnHold = () => {
                   <td>
                     <button className="btn-icon" title="Gestionar archivos">📁</button>
                     <button className="btn-icon" title="Reproducir">▶️</button>
-                    <button className="btn-icon" title="Editar">✏️</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(moh)}>✏️</button>
                     <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(moh.id)}>🗑️</button>
                   </td>
                 </tr>
@@ -117,11 +149,11 @@ const MusicOnHold = () => {
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={resetForm}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Nueva Clase de Música en Espera</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+              <h2>{editingId ? 'Editar' : 'Nueva'} Clase de Música en Espera</h2>
+              <button className="close-btn" onClick={resetForm}>×</button>
             </div>
             <form onSubmit={handleSubmit} className="modal-body">
               <div className="form-row">
@@ -132,6 +164,7 @@ const MusicOnHold = () => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="default"
+                    disabled={!!editingId}
                     required
                   />
                   <small>Sin espacios, solo letras, números y guiones</small>
@@ -189,11 +222,14 @@ const MusicOnHold = () => {
               )}
 
               <div className="form-actions">
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>
+                <button type="button" className="btn-secondary" onClick={resetForm}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Creando...' : 'Crear Clase MOH'}
+                <button type="submit" className="btn-primary" disabled={createMutation.isPending || updateMutation.isPending}>
+                  {editingId 
+                    ? (updateMutation.isPending ? 'Actualizando...' : 'Actualizar Clase MOH')
+                    : (createMutation.isPending ? 'Creando...' : 'Crear Clase MOH')
+                  }
                 </button>
               </div>
             </form>
