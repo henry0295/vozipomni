@@ -168,7 +168,7 @@ class AsteriskConfigGenerator:
                 ])
                 
                 if route.destination_type == 'extension':
-                    config.append(f"same => n,Dial(SIP/{route.destination},30,tr)")
+                    config.append(f"same => n,Dial(PJSIP/{route.destination},30,tr)")
                 elif route.destination_type == 'ivr':
                     config.append(f"same => n,Goto(ivr-{route.destination},s,1)")
                 elif route.destination_type == 'queue':
@@ -204,7 +204,7 @@ class AsteriskConfigGenerator:
                     config.append("same => n,Set(dial_number=${EXTEN})")
                 
                 config.extend([
-                    f"same => n,Dial(SIP/${{dial_number}}@{route.trunk.name},60,tr)",
+                    f"same => n,Dial(PJSIP/${{dial_number}}@{route.trunk.name},60,tr)",
                     "same => n,Hangup()",
                     "",
                 ])

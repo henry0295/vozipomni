@@ -96,7 +96,7 @@ class ExtensionViewSet(viewsets.ModelViewSet):
             # Recargar Asterisk vía AMI
             ami = AsteriskAMI()
             if ami.connect():
-                ami.reload_module('chan_sip.so')
+                ami.reload_module('res_pjsip.so')
                 ami.reload_module('chan_pjsip.so')
                 ami.reload_dialplan()
                 ami.disconnect()
