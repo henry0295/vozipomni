@@ -26,6 +26,11 @@ RUN apt-get update && apt-get install -y \
     libgsm1-dev \
     curl \
     xmlstarlet \
+    procps \
+    vim \
+    nano \
+    net-tools \
+    tcpdump \
     && rm -rf /var/lib/apt/lists/*
 
 # Descargar Asterisk desde Git (siempre disponible)
@@ -54,9 +59,11 @@ RUN git clone --depth 1 --branch 21 https://github.com/asterisk/asterisk.git ast
 # Crear usuario asterisk y directorios
 RUN useradd -m asterisk && \
     mkdir -p /var/log/asterisk && \
+    mkdir -p /var/run/asterisk && \
     chown -R asterisk:asterisk /var/lib/asterisk && \
     chown -R asterisk:asterisk /var/spool/asterisk && \
     chown -R asterisk:asterisk /var/log/asterisk && \
+    chown -R asterisk:asterisk /var/run/asterisk && \
     chown -R asterisk:asterisk /etc/asterisk
 
 # Copiar configuraciones personalizadas
@@ -66,14 +73,14 @@ COPY --chown=asterisk:asterisk configs/*.conf /etc/asterisk/
 EXPOSE 5060/udp 5060/tcp 5061/tcp 8088 8089 10000-10100/udp
 
 # Volúmenes
-VOLUME ["/etc/asterisk", "/var/lib/asterisk", "/var/spool/asterisk/monitor"]
+VOLUME ["/etc/asterisk", "/var/lib/asterisk", "/var/spool/asterisk/monitor", "/var/run/asterisk"]
 
-# Healthcheck (antes de cambiar de usuario)
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD /usr/sbin/asterisk -rx "core show version" || exit 1
+    CMD su asterisk -c "/usr/sbin/asterisk -rx 'core show version'" || exit 1
 
 # Cambiar a usuario asterisk
 USER asterisk
 
-# Comando de inicio
-CMD ["/usr/sbin/asterisk", "-f", "-vvvg", "-c"]
+# Comando de inicio (sin -c para permitir conexiones remotas)
+CMD ["/usr/sbin/asterisk", "-f", "-vvvg"]
