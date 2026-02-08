@@ -41,6 +41,7 @@ services:
       - static_volume:/app/static
       - media_volume:/app/media
       - recordings_volume:/app/recordings
+      - ./docker/asterisk/configs:/etc/asterisk
     environment:
       - DEBUG=True
       - SECRET_KEY=vozipomni-secret-key-change-in-production-2026
@@ -75,6 +76,7 @@ services:
     volumes:
       - ./backend:/app
       - recordings_volume:/app/recordings
+      - ./docker/asterisk/configs:/etc/asterisk
     environment:
       - DEBUG=True
       - SECRET_KEY=vozipomni-secret-key-change-in-production-2026
