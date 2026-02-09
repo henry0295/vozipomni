@@ -132,17 +132,40 @@ class AsteriskAMI:
             return []
     
     def pjsip_show_endpoints(self):
-        """Obtener lista de endpoints PJSIP"""
+        """Obtener lista de endpoints PJSIP con sus contactos"""
         if not self.connected:
-            return []
+            return {}
         
         try:
             self._send_command("Action: PJSIPShowEndpoints\r\n\r\n")
             response = self._read_response()
-            return response
+            
+            # Parsear respuesta para obtener endpoints y sus contactos
+            endpoints = {}
+            lines = response.split('\r\n')
+            current_endpoint = None
+            
+            for line in lines:
+                if 'ObjectName:' in line:
+                    current_endpoint = line.split(':', 1)[1].strip()
+                    endpoints[current_endpoint] = {
+                        'name': current_endpoint,
+                        'state': 'Unknown',
+                        'contacts': []
+                    }
+                elif 'DeviceState:' in line and current_endpoint:
+                    state = line.split(':', 1)[1].strip()
+                    endpoints[current_endpoint]['state'] = state
+                elif 'Contacts:' in line and current_endpoint:
+                    # El formato es generalmente "Contacts: endpoint/uri"
+                    contacts = line.split(':', 1)[1].strip()
+                    if contacts and contacts != '<none>':
+                        endpoints[current_endpoint]['contacts'].append(contacts)
+            
+            return endpoints
         except Exception as e:
             logger.error(f"Error obteniendo endpoints PJSIP: {e}")
-            return []
+            return {}
     
     def pjsip_show_registrations(self):
         """Obtener estado de registros PJSIP (troncales)"""

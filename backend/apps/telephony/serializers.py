@@ -41,6 +41,25 @@ class SIPTrunkSerializer(serializers.ModelSerializer):
     def get_registration_status(self, obj):
         """Obtener estado de registro en tiempo real desde Asterisk"""
         try:
+            # Si NO envía registros, verificar disponibilidad del endpoint
+            if not obj.sends_registration:
+                ami = AsteriskAMI()
+                if ami.connect():
+                    # Verificar si el endpoint está disponible
+                    endpoints = ami.pjsip_show_endpoints()
+                    ami.disconnect()
+                    
+                    if obj.name in endpoints:
+                        endpoint = endpoints[obj.name]
+                        # Si tiene contactos disponibles, está operativo
+                        if endpoint.get('contacts'):
+                            return 'Available'
+                        # Si no tiene contactos pero el endpoint existe, está configurado pero sin contacto
+                        return 'No Contact'
+                    return 'Not Found'
+                return 'Disconnected'
+            
+            # Si SÍ envía registros, verificar estado de registro
             ami = AsteriskAMI()
             if ami.connect():
                 status = ami.get_trunk_registration_status(obj.name)
@@ -54,8 +73,20 @@ class SIPTrunkSerializer(serializers.ModelSerializer):
         """Obtener detalle legible del estado de registro"""
         status = self.get_registration_status(obj)
         
+        # Si la troncal NO requiere registro
+        if not obj.sends_registration:
+            status_map = {
+                'Available': {'text': '✓ Disponible', 'class': 'success', 'icon': '✓'},
+                'No Contact': {'text': 'Sin Contacto', 'class': 'warning', 'icon': '⚠'},
+                'Not Found': {'text': 'No Encontrado', 'class': 'error', 'icon': '✗'},
+                'Disconnected': {'text': 'Asterisk Desconectado', 'class': 'error', 'icon': '✗'},
+                'Error': {'text': 'Error', 'class': 'error', 'icon': '✗'}
+            }
+            return status_map.get(status, {'text': 'N/A (sin registro)', 'class': 'info', 'icon': 'ℹ'})
+        
+        # Si la troncal SÍ requiere registro
         status_map = {
-            'Registered': {'text': 'Registrado', 'class': 'success', 'icon': '✓'},
+            'Registered': {'text': '✓ Registrado', 'class': 'success', 'icon': '✓'},
             'Unregistered': {'text': 'No Registrado', 'class': 'warning', 'icon': '⚠'},
             'Failed': {'text': 'Fallo', 'class': 'error', 'icon': '✗'},
             'Not Configured': {'text': 'Sin Configurar', 'class': 'info', 'icon': 'ℹ'},
