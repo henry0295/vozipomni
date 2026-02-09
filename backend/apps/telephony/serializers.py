@@ -3,6 +3,7 @@ from .models import (
     Call, SIPTrunk, IVR, Extension, InboundRoute, 
     OutboundRoute, Voicemail, MusicOnHold, TimeCondition
 )
+from .asterisk_ami import AsteriskAMI
 
 
 class CallSerializer(serializers.ModelSerializer):
@@ -12,10 +13,41 @@ class CallSerializer(serializers.ModelSerializer):
 
 
 class SIPTrunkSerializer(serializers.ModelSerializer):
+    registration_status = serializers.SerializerMethodField()
+    registration_detail = serializers.SerializerMethodField()
+    
     class Meta:
         model = SIPTrunk
         fields = '__all__'
         read_only_fields = ['is_registered', 'calls_total', 'calls_active', 'created_at', 'updated_at']
+    
+    def get_registration_status(self, obj):
+        """Obtener estado de registro en tiempo real desde Asterisk"""
+        try:
+            ami = AsteriskAMI()
+            if ami.connect():
+                status = ami.get_trunk_registration_status(obj.name)
+                ami.disconnect()
+                return status
+            return 'Disconnected'
+        except Exception as e:
+            return 'Error'
+    
+    def get_registration_detail(self, obj):
+        """Obtener detalle legible del estado de registro"""
+        status = self.get_registration_status(obj)
+        
+        status_map = {
+            'Registered': {'text': 'Registrado', 'class': 'success'},
+            'Unregistered': {'text': 'No Registrado', 'class': 'warning'},
+            'Failed': {'text': 'Fallo', 'class': 'error'},
+            'Not Configured': {'text': 'Sin Configurar', 'class': 'info'},
+            'Disconnected': {'text': 'Asterisk Desconectado', 'class': 'error'},
+            'Error': {'text': 'Error', 'class': 'error'},
+            'Unknown': {'text': 'Desconocido', 'class': 'warning'}
+        }
+        
+        return status_map.get(status, {'text': status, 'class': 'info'})
 
 
 class IVRSerializer(serializers.ModelSerializer):

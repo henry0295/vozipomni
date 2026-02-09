@@ -134,13 +134,14 @@ const Trunks = () => {
               <th>Protocolo</th>
               <th>Canales Máx.</th>
               <th>Estado</th>
+              <th>Registro</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {trunks.length === 0 ? (
               <tr>
-                <td colSpan="8" className="no-data">
+                <td colSpan="9" className="no-data">
                   No hay troncales SIP configuradas. Crea una nueva para comenzar.
                 </td>
               </tr>
@@ -156,6 +157,15 @@ const Trunks = () => {
                   <td>
                     <span className={`status-badge ${trunk.is_active ? 'active' : 'inactive'}`}>
                       {trunk.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`status-badge ${
+                      trunk.registration_detail?.class === 'success' ? 'registered' :
+                      trunk.registration_detail?.class === 'error' ? 'error' :
+                      trunk.registration_detail?.class === 'warning' ? 'warning' : 'info'
+                    }`}>
+                      {trunk.registration_detail?.text || 'Verificando...'}
                     </span>
                   </td>
                   <td>

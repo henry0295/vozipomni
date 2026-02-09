@@ -144,6 +144,60 @@ class AsteriskAMI:
             logger.error(f"Error obteniendo endpoints PJSIP: {e}")
             return []
     
+    def pjsip_show_registrations(self):
+        """Obtener estado de registros PJSIP (troncales)"""
+        if not self.connected:
+            return []
+        
+        try:
+            self._send_command("Action: PJSIPShowRegistrations\r\n\r\n")
+            response = self._read_response()
+            
+            # Parsear respuesta para obtener estado de cada registro
+            registrations = {}
+            lines = response.split('\r\n')
+            current_reg = None
+            
+            for line in lines:
+                if 'ObjectName:' in line:
+                    current_reg = line.split(':', 1)[1].strip()
+                    registrations[current_reg] = {'status': 'Unknown', 'name': current_reg}
+                elif 'Status:' in line and current_reg:
+                    status = line.split(':', 1)[1].strip()
+                    registrations[current_reg]['status'] = status
+            
+            return registrations
+        except Exception as e:
+            logger.error(f"Error obteniendo registros PJSIP: {e}")
+            return {}
+    
+    def get_trunk_registration_status(self, trunk_name):
+        """Obtener estado de registro de una troncal específica"""
+        try:
+            registrations = self.pjsip_show_registrations()
+            
+            # Buscar por nombre de troncal o nombre con sufijo -reg
+            trunk_key = trunk_name
+            if trunk_key not in registrations:
+                trunk_key = f"{trunk_name}-reg"
+            
+            if trunk_key in registrations:
+                status = registrations[trunk_key].get('status', 'Unknown')
+                # Normalizar estados
+                if 'Registered' in status:
+                    return 'Registered'
+                elif 'Rejected' in status or 'Failed' in status:
+                    return 'Failed'
+                elif 'Unregistered' in status:
+                    return 'Unregistered'
+                else:
+                    return 'Unknown'
+            
+            return 'Not Configured'
+        except Exception as e:
+            logger.error(f"Error verificando estado de troncal {trunk_name}: {e}")
+            return 'Error'
+    
     # ========== MÉTODOS ASINCRÓNICOS PARA EVENTOS ==========
     
     async def connect_async(self):
