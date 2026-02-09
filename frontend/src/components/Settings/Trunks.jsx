@@ -274,13 +274,13 @@ const Trunks = () => {
           break
         
         case 'no_nat_provider':
-          updates.sends_registration = true
-          updates.sends_auth = true
+          updates.sends_registration = false
+          updates.sends_auth = false
           updates.accepts_auth = false
           updates.accepts_registrations = false
-          updates.rtp_symmetric = true
-          updates.force_rport = true
-          updates.rewrite_contact = true
+          updates.rtp_symmetric = false
+          updates.force_rport = false
+          updates.rewrite_contact = false
           updates.context = 'from-pstn'
           break
         
