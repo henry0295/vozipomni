@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('telephony', '0001_initial'),  # Ajustar al número de migración anterior
+        ('telephony', '0002_extension_inboundroute_musiconhold_timecondition_and_more'),
     ]
 
     operations = [
