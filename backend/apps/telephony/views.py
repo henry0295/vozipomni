@@ -121,9 +121,12 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def test_connection(self, request, pk=None):
         """
-        Probar conexión y obtener estado de registro de la troncal
+        Probar conexión y obtener estado de la troncal
         
         POST /api/telephony/trunks/{id}/test_connection/
+        
+        - Si requiere registro: verifica estado de registro
+        - Si NO requiere registro: verifica disponibilidad del endpoint
         """
         trunk = self.get_object()
         try:
@@ -132,10 +135,40 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                 return Response({
                     'success': False,
                     'message': 'No se pudo conectar a Asterisk AMI',
-                    'registered': False
+                    'registered': False,
+                    'available': False
                 }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
             
-            # Obtener estado de registro
+            # Si NO requiere registro, verificar disponibilidad del endpoint
+            if not trunk.sends_registration:
+                endpoints = ami.pjsip_show_endpoints()
+                ami.disconnect()
+                
+                if trunk.name in endpoints:
+                    endpoint = endpoints[trunk.name]
+                    has_contacts = len(endpoint.get('contacts', [])) > 0
+                    
+                    return Response({
+                        'success': True,
+                        'trunk': trunk.name,
+                        'registered': False,  # No aplica registro
+                        'available': has_contacts,
+                        'status': 'Disponible' if has_contacts else 'Sin Contacto',
+                        'message': f'Endpoint {trunk.name}: {"✓ Disponible" if has_contacts else "⚠ Sin contacto activo"}',
+                        'requires_registration': False
+                    })
+                else:
+                    return Response({
+                        'success': False,
+                        'trunk': trunk.name,
+                        'registered': False,
+                        'available': False,
+                        'status': 'No Encontrado',
+                        'message': f'Endpoint {trunk.name} no encontrado en Asterisk',
+                        'requires_registration': False
+                    })
+            
+            # Si SÍ requiere registro, verificar estado de registro
             reg_status = ami.get_trunk_registration_status(trunk.name)
             ami.disconnect()
             
@@ -145,14 +178,17 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                 'success': True,
                 'trunk': trunk.name,
                 'registered': is_registered,
+                'available': is_registered,
                 'status': reg_status,
-                'message': f'Estado: {reg_status}'
+                'message': f'Estado de registro: {reg_status}',
+                'requires_registration': True
             })
         except Exception as e:
             return Response({
                 'success': False,
                 'message': f'Error: {str(e)}',
-                'registered': False
+                'registered': False,
+                'available': False
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])

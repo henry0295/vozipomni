@@ -232,15 +232,27 @@ const Trunks = () => {
       toast.loading('Probando conexión...', { id: `test-${trunkId}` })
       const response = await trunksService.testConnection(trunkId)
       
-      if (response.data.registered) {
-        toast.success(`✓ Troncal registrada: ${response.data.status}`, { id: `test-${trunkId}` })
+      // Verificar si requiere registro o solo disponibilidad
+      if (response.data.requires_registration === false) {
+        // Troncal sin registro (corporate, etc)
+        if (response.data.available) {
+          toast.success(`✓ ${response.data.message}`, { id: `test-${trunkId}` })
+        } else {
+          toast.warning(`⚠ ${response.data.message}`, { id: `test-${trunkId}` })
+        }
       } else {
-        toast.error(`✗ No registrada: ${response.data.status}`, { id: `test-${trunkId}` })
+        // Troncal con registro (NAT provider, etc)
+        if (response.data.registered) {
+          toast.success(`✓ Registrado: ${response.data.status}`, { id: `test-${trunkId}` })
+        } else {
+          toast.error(`✗ No registrado: ${response.data.status}`, { id: `test-${trunkId}` })
+        }
       }
       
       refetch()
     } catch (error) {
-      toast.error('Error probando conexión', { id: `test-${trunkId}` })
+      const errorMsg = error.response?.data?.message || 'Error probando conexión'
+      toast.error(`✗ ${errorMsg}`, { id: `test-${trunkId}` })
     }
   }
 
