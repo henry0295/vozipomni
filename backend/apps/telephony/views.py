@@ -35,18 +35,180 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
     serializer_class = SIPTrunkSerializer
     permission_classes = [IsAuthenticated]
     
+    def perform_create(self, serializer):
+        """Crear troncal y regenerar configuración PJSIP"""
+        trunk = serializer.save()
+        self._regenerate_pjsip_config()
+        return trunk
+    
+    def perform_update(self, serializer):
+        """Actualizar troncal y regenerar configuración PJSIP"""
+        trunk = serializer.save()
+        self._regenerate_pjsip_config()
+        return trunk
+    
+    def perform_destroy(self, instance):
+        """Eliminar troncal y regenerar configuración PJSIP"""
+        instance.delete()
+        self._regenerate_pjsip_config()
+    
+    def _regenerate_pjsip_config(self):
+        """Regenerar configuración PJSIP y recargar Asterisk"""
+        try:
+            from .pjsip_config_generator import PJSIPConfigGenerator
+            
+            generator = PJSIPConfigGenerator()
+            success, message = generator.save_and_reload()
+            
+            if not success:
+                # Log error pero no fallar la operación
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"No se pudo recargar PJSIP automáticamente: {message}")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error regenerando configuración PJSIP: {str(e)}")
+    
+    @action(detail=False, methods=['post'])
+    def regenerate_config(self, request):
+        """
+        Regenerar configuración PJSIP de todas las troncales y recargar Asterisk
+        
+        POST /api/telephony/trunks/regenerate_config/
+        """
+        try:
+            from .pjsip_config_generator import PJSIPConfigGenerator
+            
+            generator = PJSIPConfigGenerator()
+            success, message = generator.save_and_reload()
+            
+            return Response({
+                'success': success,
+                'message': message
+            }, status=status.HTTP_200_OK if success else status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def preview_config(self, request, pk=None):
+        """
+        Previsualizar la configuración PJSIP que se generará para esta troncal
+        
+        GET /api/telephony/trunks/{id}/preview_config/
+        """
+        trunk = self.get_object()
+        try:
+            from .pjsip_config_generator import PJSIPConfigGenerator
+            
+            generator = PJSIPConfigGenerator()
+            config_text = generator.generate_trunk_config(trunk)
+            
+            return Response({
+                'success': True,
+                'trunk_name': trunk.name,
+                'config': config_text
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error generando configuración: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     @action(detail=True, methods=['post'])
     def test_connection(self, request, pk=None):
         """
-        Probar conexión con la troncal
+        Probar conexión y obtener estado de registro de la troncal
+        
+        POST /api/telephony/trunks/{id}/test_connection/
         """
         trunk = self.get_object()
-        # TODO: Implementar prueba de conexión real con Asterisk
-        return Response({
-            'success': True,
-            'message': f'Prueba de conexión para {trunk.name}',
-            'registered': trunk.is_registered
-        })
+        try:
+            ami = AsteriskAMI()
+            if not ami.connect():
+                return Response({
+                    'success': False,
+                    'message': 'No se pudo conectar a Asterisk AMI',
+                    'registered': False
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            # Obtener estado de registro
+            reg_status = ami.get_trunk_registration_status(trunk.name)
+            ami.disconnect()
+            
+            is_registered = reg_status == 'Registered'
+            
+            return Response({
+                'success': True,
+                'trunk': trunk.name,
+                'registered': is_registered,
+                'status': reg_status,
+                'message': f'Estado: {reg_status}'
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}',
+                'registered': False
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def force_register(self, request, pk=None):
+        """
+        Forzar re-registro de la troncal en Asterisk
+        
+        POST /api/telephony/trunks/{id}/force_register/
+        """
+        trunk = self.get_object()
+        
+        if not trunk.needs_registration():
+            return Response({
+                'success': False,
+                'message': 'Esta troncal no está configurada para registrarse'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Regenerar configuración y recargar
+            from .pjsip_config_generator import PJSIPConfigGenerator
+            generator = PJSIPConfigGenerator()
+            success, message = generator.save_and_reload()
+            
+            if not success:
+                return Response({
+                    'success': False,
+                    'message': message
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            # Esperar un momento y verificar estado
+            import time
+            time.sleep(2)
+            
+            # Verificar estado de registro
+            ami = AsteriskAMI()
+            if ami.connect():
+                reg_status = ami.get_trunk_registration_status(trunk.name)
+                ami.disconnect()
+                
+                return Response({
+                    'success': True,
+                    'message': 'Configuración recargada',
+                    'status': reg_status,
+                    'registered': reg_status == 'Registered'
+                })
+            
+            return Response({
+                'success': True,
+                'message': 'Configuración recargada pero no se pudo verificar estado'
+            })
+            
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class IVRViewSet(viewsets.ModelViewSet):

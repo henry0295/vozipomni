@@ -1,0 +1,606 @@
+import React, { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import toast from 'react-hot-toast'
+import { trunksService } from '../../services/telephonyService'
+import './Trunks.css'
+
+const Trunks = () => {
+  const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [activeTab, setActiveTab] = useState('basic')
+  const queryClient = useQueryClient()
+
+  const [formData, setFormData] = useState({
+    // Básico
+    name: '',
+    description: '',
+    trunk_type: 'nat_provider',
+    host: '',
+    port: 5060,
+    protocol: 'udp',
+    max_channels: 10,
+    is_active: true,
+    
+    // Autenticación Saliente
+    outbound_auth_username: '',
+    outbound_auth_password: '',
+    from_user: '',
+    from_domain: '',
+    
+    // Autenticación Entrante
+    inbound_auth_username: '',
+    inbound_auth_password: '',
+    
+    // Registro
+    sends_registration: true,
+    registration_server_uri: '',
+    registration_client_uri: '',
+    registration_retry_interval: 60,
+    registration_expiration: 3600,
+    
+    // Comportamiento SIP
+    sends_auth: true,
+    accepts_auth: false,
+    accepts_registrations: false,
+    
+    // RTP/Media
+    rtp_symmetric: true,
+    force_rport: true,
+    rewrite_contact: true,
+    direct_media: false,
+    
+    // Códecs y DTMF
+    codec: 'ulaw,alaw,g729',
+    dtmf_mode: 'rfc4733',
+    
+    // Context
+    context: 'from-pstn',
+    custom_context: '',
+    
+    // Timers
+    timers: true,
+    timers_min_se: 90,
+    timers_sess_expires: 1800,
+    
+    // Qualify
+    qualify_enabled: true,
+    qualify_frequency: 60,
+    qualify_timeout: 3.0,
+    
+    // Caller ID
+    caller_id: '',
+    caller_id_name: '',
+    
+    // NAT
+    local_net: '',
+    external_media_address: '',
+    external_signaling_address: '',
+    
+    // Avanzado
+    language: 'es',
+    trust_id_inbound: false,
+    trust_id_outbound: false,
+    send_pai: false,
+    send_rpid: false,
+    
+    // Custom
+    pjsip_config_custom: ''
+  })
+
+  // Queries y Mutations
+  const { data: trunks = [], isLoading, refetch } = useQuery({
+    queryKey: ['trunks'],
+    queryFn: async () => {
+      const response = await trunksService.getAll()
+      const data = response.data?.results || response.data
+      return Array.isArray(data) ? data : []
+    }
+  })
+
+  const createMutation = useMutation({
+    mutationFn: trunksService.create,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['trunks'])
+      toast.success('Troncal creada y configuración regenerada')
+      resetForm()
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.message || 'Error al crear troncal'
+      toast.error(msg)
+    }
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => trunksService.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['trunks'])
+      toast.success('Troncal actualizada y configuración regenerada')
+      resetForm()
+    },
+    onError: (error) => {
+      const msg = error.response?.data?.message || 'Error al actualizar troncal'
+      toast.error(msg)
+    }
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: trunksService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries(['trunks'])
+      toast.success('Troncal eliminada y configuración regenerada')
+    },
+    onError: () => toast.error('Error al eliminar troncal')
+  })
+
+  // Event Handlers
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    
+    const dataToSend = { ...formData }
+    
+    // Si no es tipo custom, limpiar pjsip_config_custom
+    if (dataToSend.trunk_type !== 'custom') {
+      dataToSend.pjsip_config_custom = ''
+    }
+    
+    // Si context no es custom, limpiar custom_context
+    if (dataToSend.context !== 'custom') {
+      dataToSend.custom_context = ''
+    }
+    
+    if (editingId) {
+      updateMutation.mutate({ id: editingId, data: dataToSend })
+    } else {
+      createMutation.mutate(dataToSend)
+    }
+  }
+
+  const handleEdit = (trunk) => {
+    setFormData({
+      ...trunk,
+      outbound_auth_password: '', // No cargar password por seguridad
+      inbound_auth_password: ''
+    })
+    setEditingId(trunk.id)
+    setShowModal(true)
+    setActiveTab('basic')
+  }
+
+  const handleDelete = async (id) => {
+    if (window.confirm('¿Estás seguro de eliminar esta troncal?')) {
+      deleteMutation.mutate(id)
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      trunk_type: 'nat_provider',
+      host: '',
+      port: 5060,
+      protocol: 'udp',
+      max_channels: 10,
+      is_active: true,
+      outbound_auth_username: '',
+      outbound_auth_password: '',
+      from_user: '',
+      from_domain: '',
+      inbound_auth_username: '',
+      inbound_auth_password: '',
+      sends_registration: true,
+      registration_server_uri: '',
+      registration_client_uri: '',
+      registration_retry_interval: 60,
+      registration_expiration: 3600,
+      sends_auth: true,
+      accepts_auth: false,
+      accepts_registrations: false,
+      rtp_symmetric: true,
+      force_rport: true,
+      rewrite_contact: true,
+      direct_media: false,
+      codec: 'ulaw,alaw,g729',
+      dtmf_mode: 'rfc4733',
+      context: 'from-pstn',
+      custom_context: '',
+      timers: true,
+      timers_min_se: 90,
+      timers_sess_expires: 1800,
+      qualify_enabled: true,
+      qualify_frequency: 60,
+      qualify_timeout: 3.0,
+      caller_id: '',
+      caller_id_name: '',
+      local_net: '',
+      external_media_address: '',
+      external_signaling_address: '',
+      language: 'es',
+      trust_id_inbound: false,
+      trust_id_outbound: false,
+      send_pai: false,
+      send_rpid: false,
+      pjsip_config_custom: ''
+    })
+    setEditingId(null)
+    setShowModal(false)
+    setActiveTab('basic')
+  }
+
+  const handleTestConnection = async (trunkId) => {
+    try {
+      toast.loading('Probando conexión...', { id: `test-${trunkId}` })
+      const response = await trunksService.testConnection(trunkId)
+      
+      if (response.data.registered) {
+        toast.success(`✓ Troncal registrada: ${response.data.status}`, { id: `test-${trunkId}` })
+      } else {
+        toast.error(`✗ No registrada: ${response.data.status}`, { id: `test-${trunkId}` })
+      }
+      
+      refetch()
+    } catch (error) {
+      toast.error('Error probando conexión', { id: `test-${trunkId}` })
+    }
+  }
+
+  // Auto-completar campos según tipo de troncal
+  const handleTrunkTypeChange = (type) => {
+    setFormData(prev => {
+      const updates = { trunk_type: type }
+      
+      switch (type) {
+        case 'nat_provider':
+          updates.sends_registration = true
+          updates.sends_auth = true
+          updates.accepts_auth = false
+          updates.accepts_registrations = false
+          updates.rtp_symmetric = true
+          updates.force_rport = true
+          updates.rewrite_contact = true
+          updates.context = 'from-pstn'
+          break
+        
+        case 'no_nat_provider':
+          updates.sends_registration = true
+          updates.sends_auth = true
+          updates.accepts_auth = false
+          updates.accepts_registrations = false
+          updates.rtp_symmetric = true
+          updates.force_rport = true
+          updates.rewrite_contact = true
+          updates.context = 'from-pstn'
+          break
+        
+        case 'pbx_lan':
+          updates.sends_registration = false
+          updates.sends_auth = true
+          updates.accepts_auth = true
+          updates.accepts_registrations = false
+          updates.rtp_symmetric = false
+          updates.force_rport = false
+          updates.rewrite_contact = false
+          updates.context = 'from-pbx'
+          break
+        
+        case 'corporate':
+          updates.sends_registration = false
+          updates.sends_auth = false
+          updates.accepts_auth = false
+          updates.accepts_registrations = false
+          updates.rtp_symmetric = false
+          updates.force_rport = false
+          updates.rewrite_contact = false
+          updates.context = 'from-pstn'
+          break
+        
+        default:
+          break
+      }
+      
+      return { ...prev, ...updates }
+    })
+  }
+
+  if (isLoading) return <div className="loading">Cargando troncales...</div>
+
+  return (
+    <div className="trunks-container">
+      <div className="trunks-header">
+        <div className="header-left">
+          <h1>🌐 Troncales SIP</h1>
+          <p>Gestiona las conexiones con proveedores&#x20;VoIP y PBX</p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowModal(true)}>
+          + Nueva Troncal
+        </button>
+      </div>
+
+      <div className="table-container">
+        <table className="trunks-table">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Host</th>
+              <th>Puerto</th>
+              <th>Usuario</th>
+              <th>Protocolo</th>
+              <th>Canales Máx.</th>
+              <th>Estado</th>
+              <th>Registro</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trunks.length === 0 ? (
+              <tr>
+                <td colSpan="10" className="no-data">
+                  No hay troncales SIP configuradas. Crea una nueva para comenzar.
+                </td>
+              </tr>
+            ) : (
+              trunks.map((trunk) => (
+                <tr key={trunk.id}>
+                  <td><strong>{trunk.name}</strong></td>
+                  <td>
+                    <span className="trunk-type-badge">
+                      {trunk.trunk_type === 'nat_provider' && '☁️ NAT'}
+                      {trunk.trunk_type === 'no_nat_provider' && '🌐 Sin NAT'}
+                      {trunk.trunk_type === 'pbx_lan' && '📞 PBX LAN'}
+                      {trunk.trunk_type === 'corporate' && '🏢 Corporativo'}
+                      {trunk.trunk_type === 'custom' && '⚙️ Custom'}
+                    </span>
+                  </td>
+                  <td>{trunk.host}</td>
+                  <td>{trunk.port}</td>
+                  <td>{trunk.outbound_auth_username || trunk.username || '-'}</td>
+                  <td>{trunk.protocol?.toUpperCase()}</td>
+                  <td>{trunk.max_channels}</td>
+                  <td>
+                    <span className={`status-badge ${trunk.is_active ? 'active' : 'inactive'}`}>
+                      {trunk.is_active ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`status-badge ${
+                      trunk.registration_detail?.class === 'success' ? 'registered' :
+                      trunk.registration_detail?.class === 'error' ? 'error' :
+                      trunk.registration_detail?.class === 'warning' ? 'warning' : 'info'
+                    }`}>
+                      {trunk.registration_detail?.icon} {trunk.registration_detail?.text || 'Verificando...'}
+                    </span>
+                  </td>
+                  <td>
+                    <button className="btn-icon" title="Probar Conexión" onClick={() => handleTestConnection(trunk.id)}>🔍</button>
+                    <button className="btn-icon" title="Editar" onClick={() => handleEdit(trunk)}>✏️</button>
+                    <button className="btn-icon" title="Eliminar" onClick={() => handleDelete(trunk.id)}>🗑️</button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL CON FORMULARIO POR PESTAÑAS */}
+      {showModal && (
+        <div className="modal-overlay" onClick={resetForm}>
+          <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>{editingId ? '✏️ Editar' : '➕ Nueva'} Troncal SIP</h2>
+              <button className="close-btn" onClick={resetForm}>✕</button>
+            </div>
+
+            {/* PESTAÑAS */}
+            <div className="tabs-container">
+              <div className="tabs">
+                <button
+                  className={`tab ${activeTab === 'basic' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('basic')}
+                >
+                  📋 Básico
+                </button>
+                <button
+                  className={`tab ${activeTab === 'auth' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('auth')}
+                >
+                  🔐 Autenticación
+                </button>
+                <button
+                  className={`tab ${activeTab === 'registration' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('registration')}
+                >
+                  📡 Registro
+                </button>
+                <button
+                  className={`tab ${activeTab === 'media' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('media')}
+                >
+                  🎵 RTP/Media
+                </button>
+                <button
+                  className={`tab ${activeTab === 'advanced' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('advanced')}
+                >
+                  ⚙️ Avanzado
+                </button>
+                {formData.trunk_type === 'custom' && (
+                  <button
+                    className={`tab ${activeTab === 'custom' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('custom')}
+                  >
+                    💻 Config Custom
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="trunk-form">
+              
+              {/* PESTAÑA: BÁSICO */}
+              {activeTab === 'basic' && (
+                <div className="tab-content">
+                  <h3>Configuración Básica</h3>
+                  
+                  <div className="form-group">
+                    <label>Nombre de la Troncal *</label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({...formData, name: e.target.value})}
+                      placeholder="Ej: proveedor_principal"
+                      required
+                    />
+                    <small>Identificador único (alfanumérico, sin espacios)</small>
+                  </div>
+
+                  <div className="form-group">
+                    <label>Descripción</label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      placeholder="Descripción opcional de la troncal"
+                      rows="2"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Tipo de Troncal *</label>
+                    <select
+                      value={formData.trunk_type}
+                      onChange={(e) => handleTrunkTypeChange(e.target.value)}
+                    >
+                      <option value="nat_provider">☁️ Proveedor con NAT (Cloud/VPS detrás de NAT)</option>
+                      <option value="no_nat_provider">🌐 Proveedor sin NAT (VPS con IP pública)</option>
+                      <option value="pbx_lan">📞 PBX en LAN (Asterisk/FreePBX/Issabel local)</option>
+                      <option value="corporate">🏢 Troncal Corporativa (sin auth/registro)</option>
+                      <option value="custom">⚙️ Personalizado (configuración manual)</option>
+                    </select>
+                    <small>
+                      {formData.trunk_type === 'nat_provider' && 'Para proveedores SIP cuando VoziPOmni está detrás de NAT'}
+                      {formData.trunk_type === 'no_nat_provider' && 'Para proveedores SIP con IP pública directa'}
+                      {formData.trunk_type === 'pbx_lan' && 'Para conectar con PBX/Asterisk en red local'}
+                      {formData.trunk_type === 'corporate' && 'Para vínculos corporativos sin autenticación'}
+                      {formData.trunk_type === 'custom' && 'Configuración PJSIP Wizard manual completa'}
+                    </small>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Host/IP o FQDN *</label>
+                      <input
+                        type="text"
+                        value={formData.host}
+                        onChange={(e) => setFormData({...formData, host: e.target.value})}
+                        placeholder="sip.provider.com o 192.168.1.100"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Puerto</label>
+                      <input
+                        type="number"
+                        value={formData.port}
+                        onChange={(e) => setFormData({...formData, port: parseInt(e.target.value)})}
+                        min="1"
+                        max="65535"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Protocolo</label>
+                      <select
+                        value={formData.protocol}
+                        onChange={(e) => setFormData({...formData, protocol: e.target.value})}
+                      >
+                        <option value="udp">UDP</option>
+                        <option value="tcp">TCP</option>
+                        <option value="tls">TLS</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Códecs (separados por coma)</label>
+                      <input
+                        type="text"
+                        value={formData.codec}
+                        onChange={(e) => setFormData({...formData, codec: e.target.value})}
+                        placeholder="ulaw,alaw,g729"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Modo DTMF</label>
+                      <select
+                        value={formData.dtmf_mode}
+                        onChange={(e) => setFormData({...formData, dtmf_mode: e.target.value})}
+                      >
+                        <option value="rfc4733">RFC4733 (Recomendado)</option>
+                        <option value="rfc2833">RFC2833</option>
+                        <option value="inband">Inband</option>
+                        <option value="info">SIP INFO</option>
+                        <option value="auto">Auto</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Canales Máximos</label>
+                      <input
+                        type="number"
+                        value={formData.max_channels}
+                        onChange={(e) => setFormData({...formData, max_channels: parseInt(e.target.value)})}
+                        min="1"
+                        max="100"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Contexto Dialplan</label>
+                      <select
+                        value={formData.context}
+                        onChange={(e) => setFormData({...formData, context: e.target.value})}
+                      >
+                        <option value="from-pstn">from-pstn (Llamadas desde PSTN)</option>
+                        <option value="from-pbx">from-pbx (Llamadas desde PBX)</option>
+                        <option value="from-trunk">from-trunk (Desde Troncal)</option>
+                        <option value="custom">Personalizado</option>
+                      </select>
+                    </div>
+                    {formData.context === 'custom' && (
+                      <div className="form-group">
+                        <label>Contexto Personalizado</label>
+                        <input
+                          type="text"
+                          value={formData.custom_context}
+                          onChange={(e) => setFormData({...formData, custom_context: e.target.value})}
+                          placeholder="mi-contexto-custom"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-group checkbox-group">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({...formData, is_active: e.target.checked})}
+                      />
+                      <strong>Troncal Activa</strong>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Continuará en la segunda parte... */}
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default Trunks

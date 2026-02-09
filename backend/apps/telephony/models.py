@@ -89,27 +89,178 @@ class Call(models.Model):
 
 class SIPTrunk(models.Model):
     """
-    Troncales SIP
+    Troncales SIP - Configuración completa PJSIP Wizard
     """
-    name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')
-    host = models.CharField(max_length=200, verbose_name='Host/IP')
-    port = models.IntegerField(default=5060, verbose_name='Puerto')
-    username = models.CharField(max_length=100, blank=True, verbose_name='Usuario')
-    password = models.CharField(max_length=100, blank=True, verbose_name='Contraseña')
+    TRUNK_TYPE_CHOICES = [
+        ('nat_provider', 'Proveedor con NAT'),
+        ('no_nat_provider', 'Proveedor sin NAT'),
+        ('pbx_lan', 'PBX en LAN'),
+        ('corporate', 'Troncal Corporativa'),
+        ('custom', 'Personalizado'),
+    ]
     
-    # Configuración
-    codec = models.CharField(max_length=50, default='ulaw,alaw,gsm', verbose_name='Códecs')
-    max_channels = models.IntegerField(default=10, verbose_name='Canales máximos')
-    dtmf_mode = models.CharField(max_length=20, default='rfc2833', verbose_name='Modo DTMF')
+    PROTOCOL_CHOICES = [
+        ('udp', 'UDP'),
+        ('tcp', 'TCP'),
+        ('tls', 'TLS'),
+    ]
+    
+    DTMF_CHOICES = [
+        ('rfc4733', 'RFC4733 (Recomendado)'),
+        ('rfc2833', 'RFC2833'),
+        ('inband', 'Inband'),
+        ('info', 'SIP INFO'),
+        ('auto', 'Auto'),
+    ]
+    
+    CONTEXT_CHOICES = [
+        ('from-pstn', 'Desde PSTN'),
+        ('from-pbx', 'Desde PBX'),
+        ('from-trunk', 'Desde Troncal'),
+        ('custom', 'Personalizado'),
+    ]
+    
+    # Información Básica
+    name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')
+    description = models.TextField(blank=True, verbose_name='Descripción')
+    trunk_type = models.CharField(
+        max_length=20, 
+        choices=TRUNK_TYPE_CHOICES, 
+        default='nat_provider', 
+        verbose_name='Tipo de Troncal'
+    )
+    
+    # Conexión
+    host = models.CharField(max_length=200, verbose_name='Host/IP o FQDN')
+    port = models.IntegerField(default=5060, verbose_name='Puerto')
+    protocol = models.CharField(max_length=10, choices=PROTOCOL_CHOICES, default='udp', verbose_name='Protocolo')
+    
+    # Autenticación Saliente (desde VoziPOmni hacia el proveedor)
+    outbound_auth_username = models.CharField(max_length=100, blank=True, verbose_name='Usuario Saliente')
+    outbound_auth_password = models.CharField(max_length=100, blank=True, verbose_name='Contraseña Saliente')
+    from_user = models.CharField(max_length=100, blank=True, verbose_name='From User')
+    from_domain = models.CharField(max_length=200, blank=True, verbose_name='From Domain')
+    
+    # Autenticación Entrante (desde el proveedor hacia VoziPOmni)
+    inbound_auth_username = models.CharField(max_length=100, blank=True, verbose_name='Usuario Entrante')
+    inbound_auth_password = models.CharField(max_length=100, blank=True, verbose_name='Contraseña Entrante')
+    
+    # Registro
+    sends_registration = models.BooleanField(default=True, verbose_name='Enviar Registro')
+    registration_server_uri = models.CharField(
+        max_length=200, 
+        blank=True, 
+        verbose_name='Server URI para Registro',
+        help_text='Ej: sip:proveedor.com o sip:proveedor.com:5060'
+    )
+    registration_client_uri = models.CharField(
+        max_length=200, 
+        blank=True, 
+        verbose_name='Client URI para Registro',
+        help_text='Ej: sip:usuario@proveedor.com'
+    )
+    registration_retry_interval = models.IntegerField(
+        default=60, 
+        verbose_name='Intervalo de Reintento (seg)'
+    )
+    registration_expiration = models.IntegerField(
+        default=3600, 
+        verbose_name='Expiración Registro (seg)'
+    )
+    
+    # Comportamiento SIP
+    sends_auth = models.BooleanField(default=True, verbose_name='Enviar Autenticación')
+    accepts_auth = models.BooleanField(default=False, verbose_name='Aceptar Autenticación')
+    accepts_registrations = models.BooleanField(default=False, verbose_name='Aceptar Registros')
+    
+    # Configuración RTP/Media
+    rtp_symmetric = models.BooleanField(default=True, verbose_name='RTP Simétrico')
+    force_rport = models.BooleanField(default=True, verbose_name='Forzar RPORT')
+    rewrite_contact = models.BooleanField(default=True, verbose_name='Reescribir Contact')
+    direct_media = models.BooleanField(default=False, verbose_name='Media Directa')
+    
+    # Códecs y DTMF
+    codec = models.CharField(
+        max_length=100, 
+        default='ulaw,alaw,g729', 
+        verbose_name='Códecs',
+        help_text='Separados por coma'
+    )
+    dtmf_mode = models.CharField(
+        max_length=20, 
+        choices=DTMF_CHOICES, 
+        default='rfc4733', 
+        verbose_name='Modo DTMF'
+    )
+    
+    # Context y Timers
+    context = models.CharField(
+        max_length=50, 
+        choices=CONTEXT_CHOICES, 
+        default='from-pstn', 
+        verbose_name='Contexto Dialplan'
+    )
+    custom_context = models.CharField(max_length=50, blank=True, verbose_name='Contexto Personalizado')
+    timers = models.BooleanField(default=True, verbose_name='Session Timers')
+    timers_min_se = models.IntegerField(default=90, verbose_name='Min SE (seg)')
+    timers_sess_expires = models.IntegerField(default=1800, verbose_name='Session Expires (seg)')
+    
+    # Qualify (Monitoreo)
+    qualify_enabled = models.BooleanField(default=True, verbose_name='Habilitar Qualify')
+    qualify_frequency = models.IntegerField(default=60, verbose_name='Frecuencia Qualify (seg)')
+    qualify_timeout = models.FloatField(default=3.0, verbose_name='Timeout Qualify (seg)')
+    
+    # Canales y Caller ID
+    max_channels = models.IntegerField(default=10, verbose_name='Canales Máximos')
+    caller_id = models.CharField(max_length=50, blank=True, verbose_name='Caller ID')
+    caller_id_name = models.CharField(max_length=100, blank=True, verbose_name='Nombre Caller ID')
+    
+    # NAT y Red
+    local_net = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name='Red Local',
+        help_text='Ej: 192.168.0.0/16, 10.0.0.0/8'
+    )
+    external_media_address = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name='IP Externa Media',
+        help_text='IP pública para RTP cuando está detrás de NAT'
+    )
+    external_signaling_address = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name='IP Externa Señalización',
+        help_text='IP pública para SIP cuando está detrás de NAT'
+    )
+    
+    # Opciones Avanzadas
+    language = models.CharField(max_length=10, default='es', verbose_name='Idioma')
+    trust_id_inbound = models.BooleanField(default=False, verbose_name='Confiar en ID Entrante')
+    trust_id_outbound = models.BooleanField(default=False, verbose_name='Confiar en ID Saliente')
+    send_pai = models.BooleanField(default=False, verbose_name='Enviar P-Asserted-Identity')
+    send_rpid = models.BooleanField(default=False, verbose_name='Enviar Remote-Party-ID')
     
     # Estado
     is_active = models.BooleanField(default=True, verbose_name='Activo')
     is_registered = models.BooleanField(default=False, verbose_name='Registrado')
+    last_registration_time = models.DateTimeField(null=True, blank=True, verbose_name='Última Registro')
     
     # Estadísticas
     calls_total = models.IntegerField(default=0, verbose_name='Total llamadas')
     calls_active = models.IntegerField(default=0, verbose_name='Llamadas activas')
+    calls_successful = models.IntegerField(default=0, verbose_name='Llamadas exitosas')
+    calls_failed = models.IntegerField(default=0, verbose_name='Llamadas fallidas')
     
+    # Configuración Raw (para tipo "custom")
+    pjsip_config_custom = models.TextField(
+        blank=True, 
+        verbose_name='Configuración PJSIP Personalizada',
+        help_text='Solo para tipo "Personalizado". Configuración PJSIP Wizard raw.'
+    )
+    
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -120,6 +271,27 @@ class SIPTrunk(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.host}:{self.port})"
+    
+    # Backward compatibility
+    @property
+    def username(self):
+        """Alias para compatibilidad con código existente"""
+        return self.outbound_auth_username
+    
+    @property
+    def password(self):
+        """Alias para compatibilidad con código existente"""
+        return self.outbound_auth_password
+    
+    def get_context_value(self):
+        """Obtener el valor real del contexto"""
+        if self.context == 'custom' and self.custom_context:
+            return self.custom_context
+        return self.context
+    
+    def needs_registration(self):
+        """Verificar si esta troncal necesita/debe registrarse"""
+        return self.sends_registration and bool(self.registration_server_uri)
 
 
 class IVR(models.Model):

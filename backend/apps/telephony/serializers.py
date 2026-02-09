@@ -16,10 +16,27 @@ class SIPTrunkSerializer(serializers.ModelSerializer):
     registration_status = serializers.SerializerMethodField()
     registration_detail = serializers.SerializerMethodField()
     
+    # Campos de solo lectura calculados
+    username = serializers.CharField(source='outbound_auth_username', read_only=True)
+    password = serializers.CharField(source='outbound_auth_password', read_only=True, allow_blank=True)
+    
     class Meta:
         model = SIPTrunk
         fields = '__all__'
-        read_only_fields = ['is_registered', 'calls_total', 'calls_active', 'created_at', 'updated_at']
+        read_only_fields = [
+            'is_registered', 
+            'last_registration_time',
+            'calls_total', 
+            'calls_active', 
+            'calls_successful',
+            'calls_failed',
+            'created_at', 
+            'updated_at'
+        ]
+        extra_kwargs = {
+            'outbound_auth_password': {'write_only': True, 'allow_blank': True},
+            'inbound_auth_password': {'write_only': True, 'allow_blank': True}
+        }
     
     def get_registration_status(self, obj):
         """Obtener estado de registro en tiempo real desde Asterisk"""
@@ -38,16 +55,63 @@ class SIPTrunkSerializer(serializers.ModelSerializer):
         status = self.get_registration_status(obj)
         
         status_map = {
-            'Registered': {'text': 'Registrado', 'class': 'success'},
-            'Unregistered': {'text': 'No Registrado', 'class': 'warning'},
-            'Failed': {'text': 'Fallo', 'class': 'error'},
-            'Not Configured': {'text': 'Sin Configurar', 'class': 'info'},
-            'Disconnected': {'text': 'Asterisk Desconectado', 'class': 'error'},
-            'Error': {'text': 'Error', 'class': 'error'},
-            'Unknown': {'text': 'Desconocido', 'class': 'warning'}
+            'Registered': {'text': 'Registrado', 'class': 'success', 'icon': '✓'},
+            'Unregistered': {'text': 'No Registrado', 'class': 'warning', 'icon': '⚠'},
+            'Failed': {'text': 'Fallo', 'class': 'error', 'icon': '✗'},
+            'Not Configured': {'text': 'Sin Configurar', 'class': 'info', 'icon': 'ℹ'},
+            'Disconnected': {'text': 'Asterisk Desconectado', 'class': 'error', 'icon': '✗'},
+            'Error': {'text': 'Error', 'class': 'error', 'icon': '✗'},
+            'Unknown': {'text': 'Desconocido', 'class': 'warning', 'icon': '?'}
         }
         
-        return status_map.get(status, {'text': status, 'class': 'info'})
+        return status_map.get(status, {'text': status, 'class': 'info', 'icon': '?'})
+    
+    def to_representation(self, instance):
+        """Personalizar representación de salida"""
+        data = super().to_representation(instance)
+        
+        # Ocultar contraseñas en respuesta
+        if 'outbound_auth_password' in data and data['outbound_auth_password']:
+            data['outbound_auth_password'] = '********'
+        if 'inbound_auth_password' in data and data['inbound_auth_password']:
+            data['inbound_auth_password'] = '********'
+        
+        # Agregar campos de compatibilidad
+        data['username'] = instance.outbound_auth_username
+        data['password'] = '********' if instance.outbound_auth_password else ''
+        
+        return data
+    
+    def validate(self, attrs):
+        """Validar datos antes de guardar"""
+        # Si es tipo custom, debe tener configuración personalizada
+        if attrs.get('trunk_type') == 'custom' and not attrs.get('pjsip_config_custom'):
+            raise serializers.ValidationError({
+                'pjsip_config_custom': 'Debes proporcionar configuración PJSIP personalizada para tipo "Personalizado"'
+            })
+        
+        # Si sends_registration está habilitado, validar URIs de registro
+        if attrs.get('sends_registration'):
+            if not attrs.get('registration_server_uri'):
+                raise serializers.ValidationError({
+                    'registration_server_uri': 'Debes proporcionar Server URI para habilitar registro'
+                })
+        
+        # Si sends_auth está habilitado, debe haber credenciales
+        if attrs.get('sends_auth'):
+            if not attrs.get('outbound_auth_username'):
+                raise serializers.ValidationError({
+                    'outbound_auth_username': 'Debes proporcionar usuario para autenticación saliente'
+                })
+        
+        # Si accepts_auth está habilitado, debe haber credenciales entrantes
+        if attrs.get('accepts_auth'):
+            if not attrs.get('inbound_auth_username'):
+                raise serializers.ValidationError({
+                    'inbound_auth_username': 'Debes proporcionar usuario para autenticación entrante'
+                })
+        
+        return attrs
 
 
 class IVRSerializer(serializers.ModelSerializer):
