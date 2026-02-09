@@ -39,7 +39,15 @@ class SIPTrunkSerializer(serializers.ModelSerializer):
         }
     
     def get_registration_status(self, obj):
-        """Obtener estado de registro en tiempo real desde Asterisk"""
+        """Obtener estado de registro en tiempo real desde Asterisk
+        Solo se calcula si include_status=true en contexto"""
+        # No calcular en listados para evitar lentitud
+        request = self.context.get('request')
+        if request and request.parser_context.get('view').__class__.__name__ == 'SIPTrunkViewSet':
+            # Solo calcular en retrieve(), no en list()
+            if request.parser_context.get('view').action != 'retrieve':
+                return None
+        
         try:
             # Si NO envía registros, verificar disponibilidad del endpoint
             if not obj.sends_registration:
@@ -72,6 +80,13 @@ class SIPTrunkSerializer(serializers.ModelSerializer):
     def get_registration_detail(self, obj):
         """Obtener detalle legible del estado de registro"""
         status = self.get_registration_status(obj)
+        
+        # Si no se calculó el estado (listado), retornar estado por defecto basado en configuración
+        if status is None:
+            if not obj.sends_registration:
+                return {'text': '✓ Sin Configurar', 'class': 'info', 'icon': 'ℹ'}
+            else:
+                return {'text': 'ℹ Sin Configurar', 'class': 'info', 'icon': 'ℹ'}
         
         # Si la troncal NO requiere registro
         if not obj.sends_registration:
