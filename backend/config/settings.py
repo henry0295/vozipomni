@@ -238,6 +238,11 @@ ASTERISK_CONFIG = {
     'RTP_END': 10100,
 }
 
+# PJSIP Configuration Path
+# Ruta donde se generará automáticamente el archivo pjsip_wizard.conf
+# con las configuraciones de troncales creadas desde la interfaz web
+PJSIP_CONFIG_PATH = config('PJSIP_CONFIG_PATH', default='/etc/asterisk/pjsip_wizard.conf')
+
 # API Documentation
 SPECTACULAR_SETTINGS = {
     'TITLE': 'VoziPOmni Contact Center API',
