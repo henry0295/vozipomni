@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary: 56 189 248; /* sky-400 */
+  --color-secondary: 100 116 139; /* slate-500 */
+}
