@@ -1,0 +1,42 @@
+# Archivos viejos de React/Vite (NO copiar a Docker)
+src/
+public/index.html
+index.html
+vite.config.js
+postcss.config.js
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+.output/
+.nuxt/
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.log
+.cache/
