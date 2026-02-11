@@ -36,6 +36,26 @@ app.conf.beat_schedule = {
         'task': 'apps.reports.tasks.generate_daily_reports',
         'schedule': crontab(hour=1, minute=0),  # 1 AM diario
     },
+    
+    # ===== TAREAS PERIODICAS DE TELEFONIA =====
+    
+    # Sincronizar configuración de telefonía a Redis cada 5 minutos
+    'sync-telephony-redis': {
+        'task': 'apps.telephony.tasks.sync_all_telephony_config_to_redis',
+        'schedule': 300.0,  # 5 minutos
+    },
+    
+    # Verificar salud de Asterisk cada minuto
+    'check-asterisk-health': {
+        'task': 'apps.telephony.tasks.check_asterisk_health',
+        'schedule': 60.0,  # 1 minuto
+    },
+    
+    # Reiniciar métricas diarias de agentes a medianoche
+    'reset-daily-agent-metrics': {
+        'task': 'apps.agents.tasks.reset_daily_agent_metrics',
+        'schedule': crontab(hour=0, minute=0),  # 00:00 diario
+    },
 }
 
 @app.task(bind=True, ignore_result=True)
