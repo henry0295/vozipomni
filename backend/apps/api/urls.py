@@ -4,6 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 # Importar viewsets (se crearán después)
 from apps.api import viewsets
+from apps.api import views
 
 router = DefaultRouter()
 router.register(r'users', viewsets.UserViewSet, basename='user')
@@ -20,6 +21,7 @@ urlpatterns = [
     # Authentication
     path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/me/', views.CurrentUserView.as_view(), name='current_user'),
     
     # ViewSets
     path('', include(router.urls)),
