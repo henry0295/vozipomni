@@ -181,8 +181,8 @@ services:
       - NODE_ENV=production
       - NUXT_HOST=0.0.0.0
       - NUXT_PORT=3000
-      - NUXT_PUBLIC_API_BASE=http://backend:8000/api
-      - NUXT_PUBLIC_WS_BASE=ws://backend:8000/ws
+      - NUXT_PUBLIC_API_BASE=/api
+      - NUXT_PUBLIC_WS_BASE=/ws
       - NUXT_PUBLIC_APP_NAME=VozipOmni
     depends_on:
       - backend
@@ -209,8 +209,8 @@ services:
       - "3001:3000"
     environment:
       - NODE_ENV=development
-      - NUXT_PUBLIC_API_BASE=http://backend:8000/api
-      - NUXT_PUBLIC_WS_BASE=ws://backend:8000/ws
+      - NUXT_PUBLIC_API_BASE=/api
+      - NUXT_PUBLIC_WS_BASE=/ws
     networks:
       - vozipomni_network
     stdin_open: true
