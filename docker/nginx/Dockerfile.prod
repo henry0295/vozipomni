@@ -1,0 +1,17 @@
+# Dockerfile para Nginx en Producción
+FROM nginx:alpine
+
+# Instalar certbot para SSL
+RUN apk add --no-cache certbot certbot-nginx
+
+# Copiar configuración
+COPY nginx.prod.conf /etc/nginx/nginx.conf
+COPY default.prod.conf /etc/nginx/conf.d/default.conf
+
+# Crear directorios necesarios
+RUN mkdir -p /var/log/nginx /var/cache/nginx
+
+# Exponer puertos
+EXPOSE 80 443
+
+CMD ["nginx", "-g", "daemon off;"]

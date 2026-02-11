@@ -80,6 +80,11 @@ export const useAuthStore = defineStore('auth', {
 
         if (token && userStr) {
           try {
+            // Validar que userStr no esté vacío y sea JSON válido
+            if (userStr.trim() === '' || userStr === 'undefined' || userStr === 'null') {
+              throw new Error('Invalid user data in localStorage')
+            }
+            
             this.token = token
             this.user = JSON.parse(userStr)
             if (refreshToken) {
@@ -87,6 +92,7 @@ export const useAuthStore = defineStore('auth', {
             }
           } catch (error) {
             console.error('Error loading auth from storage:', error)
+            // Limpiar localStorage corrupto
             this.clearAuth()
           }
         }
