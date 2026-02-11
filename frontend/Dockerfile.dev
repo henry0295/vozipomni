@@ -1,14 +1,22 @@
+# Dockerfile para desarrollo con hot reload (Nuxt 3)
 FROM node:20-alpine
 
 WORKDIR /app
 
 # Instalar dependencias
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
-# Copiar código
+# Copiar código fuente
 COPY . .
 
+# Exponer puerto de desarrollo
 EXPOSE 3000
 
+# Variables de entorno para desarrollo
+ENV NODE_ENV=development
+ENV NUXT_HOST=0.0.0.0
+ENV NUXT_PORT=3000
+
+# Iniciar en modo desarrollo con hot reload
 CMD ["npm", "run", "dev"]
