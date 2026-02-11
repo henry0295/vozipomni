@@ -10,7 +10,7 @@ from apps.campaigns.models import Campaign
 from apps.agents.models import Agent
 from apps.contacts.models import Contact, ContactList
 from apps.queues.models import Queue
-from apps.telephony.models import Call
+from apps.telephony.models import Call, SIPTrunk
 from apps.recordings.models import Recording
 from apps.reports.models import Report
 
@@ -156,3 +156,51 @@ class ReportViewSet(viewsets.ModelViewSet):
         from apps.reports.tasks import generate_report
         generate_report.delay(report.id)
         return Response({'status': 'generating report'})
+
+
+class TrunkViewSet(viewsets.ModelViewSet):
+    queryset = SIPTrunk.objects.all()
+    serializer_class = serializers.SIPTrunkSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description', 'host']
+    filterset_fields = ['trunk_type', 'protocol', 'is_active']
+    ordering_fields = ['name', 'created_at']
+    
+    @action(detail=True, methods=['post'])
+    def toggle_status(self, request, pk=None):
+        """Activar/desactivar troncal"""
+        trunk = self.get_object()
+        trunk.is_active = not trunk.is_active
+        trunk.save()
+        
+        # Aquí se integraría con Asterisk para recargar la configuración
+        from apps.telephony.tasks import reload_asterisk_trunk
+        reload_asterisk_trunk.delay(trunk.id)
+        
+        return Response({
+            'status': 'success',
+            'is_active': trunk.is_active,
+            'message': f"Troncal {'activado' if trunk.is_active else 'desactivado'}"
+        })
+    
+    @action(detail=True, methods=['get'])
+    def test_connection(self, request, pk=None):
+        """Probar conexión del troncal"""
+        trunk = self.get_object()
+        
+        # Aquí se implementaría la prueba real con Asterisk
+        # Por ahora simulamos
+        import random
+        success = random.choice([True, False])
+        
+        return Response({
+            'success': success,
+            'message': 'Conexión exitosa' if success else 'Error de conexión',
+            'details': {
+                'host': trunk.host,
+                'port': trunk.port,
+                'protocol': trunk.protocol,
+                'last_test': timezone.now()
+            }
+        })

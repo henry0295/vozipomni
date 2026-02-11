@@ -16,6 +16,7 @@ router.register(r'queues', viewsets.QueueViewSet, basename='queue')
 router.register(r'calls', viewsets.CallViewSet, basename='call')
 router.register(r'recordings', viewsets.RecordingViewSet, basename='recording')
 router.register(r'reports', viewsets.ReportViewSet, basename='report')
+router.register(r'trunks', viewsets.TrunkViewSet, basename='trunk')
 
 urlpatterns = [
     # Authentication

@@ -4,7 +4,7 @@ from apps.campaigns.models import Campaign, CampaignDisposition
 from apps.agents.models import Agent
 from apps.contacts.models import Contact, ContactList
 from apps.queues.models import Queue
-from apps.telephony.models import Call
+from apps.telephony.models import Call, SIPTrunk
 from apps.recordings.models import Recording
 from apps.reports.models import Report
 
@@ -95,3 +95,28 @@ class ReportSerializer(serializers.ModelSerializer):
         model = Report
         fields = '__all__'
         read_only_fields = ['created_at', 'completed_at', 'file_size', 'error_message']
+
+
+class SIPTrunkSerializer(serializers.ModelSerializer):
+    concurrent_calls = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SIPTrunk
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def get_concurrent_calls(self, obj):
+        """Obtener llamadas concurrentes actuales"""
+        # Aquí conectaríamos con Asterisk para obtener datos reales
+        return Call.objects.filter(
+            status__in=['ringing', 'answered', 'initiated'],
+            # Filtrar por troncal cuando tengamos esa relación
+        ).count()
+    
+    def get_status(self, obj):
+        """Determinar el estado del troncal"""
+        if obj.is_active:
+            # Aquí podríamos verificar con Asterisk AMI/ARI
+            return 'Activo'
+        return 'Inactivo'

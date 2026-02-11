@@ -4,23 +4,39 @@ export interface User {
   id: number
   username: string
   email: string
-  name: string
+  first_name: string
+  last_name: string
+  name?: string
   avatar?: string
   role: 'admin' | 'supervisor' | 'agent'
+  phone?: string
+  department?: string
+  is_active_agent: boolean
+  last_activity?: string
   permissions?: string[]
-  extension?: string
 }
 
 export interface Agent {
   id: number
-  name: string
-  email: string
-  extension: string
-  queue: string
-  status: 'available' | 'busy' | 'break' | 'offline'
-  statusLabel: string
-  callsToday: number
-  avgTime: string
+  user: number
+  user_details?: User
+  agent_id: string
+  sip_extension: string
+  status: 'available' | 'busy' | 'oncall' | 'break' | 'offline' | 'wrapup'
+  webrtc_enabled: boolean
+  max_concurrent_calls: number
+  auto_answer: boolean
+  recording_enabled: boolean
+  current_calls: number
+  last_call_time?: string
+  logged_in_at?: string
+  calls_today: number
+  talk_time_today: number
+  available_time_today: number
+  break_time_today: number
+  is_available?: boolean
+  created_at: string
+  updated_at: string
 }
 
 export interface Queue {
@@ -37,16 +53,101 @@ export interface Queue {
 
 export interface Call {
   id: number
-  number: string
-  duration: string
-  type: 'inbound' | 'outbound' | 'internal'
-  typeLabel: string
-  status: 'ringing' | 'connected' | 'hold' | 'ended' | 'missed'
-  agent?: string
-  queue?: string
-  startTime: string
-  endTime?: string
-  recording?: string
+  call_id: string
+  channel: string
+  unique_id: string
+  direction: 'inbound' | 'outbound'
+  status: 'initiated' | 'ringing' | 'answered' | 'completed' | 'busy' | 'no_answer' | 'failed' | 'cancelled'
+  caller_id: string
+  called_number: string
+  agent?: number
+  agent_name?: string
+  campaign?: number
+  campaign_name?: string
+  contact?: number
+  queue?: number
+  start_time: string
+  answer_time?: string
+  end_time?: string
+  wait_time: number
+  talk_time: number
+  hold_time: number
+  duration?: number
+  recording_file?: string
+  is_recorded: boolean
+  transferred: boolean
+  transfer_to?: string
+  notes?: string
+  metadata?: any
+}
+
+export interface Recording {
+  id: number
+  call: number
+  call_details?: Call
+  filename: string
+  file_path: string
+  file_size: number
+  file_size_mb?: number
+  format: string
+  duration: number
+  codec?: string
+  status: 'recording' | 'completed' | 'failed' | 'archived'
+  agent?: number
+  campaign?: number
+  transcription?: string
+  transcription_status?: string
+  is_public: boolean
+  access_count: number
+  created_at: string
+  updated_at: string
+  archived_at?: string
+}
+
+export interface SipTrunk {
+  id: number
+  name: string
+  description?: string
+  trunk_type: string
+  host: string
+  port: number
+  protocol: string
+  outbound_auth_username?: string
+  outbound_auth_password?: string
+  from_user?: string
+  from_domain?: string
+  inbound_auth_username?: string
+  inbound_auth_password?: string
+  sends_registration: boolean
+  registration_server_uri?: string
+  registration_client_uri?: string
+  sends_auth: boolean
+  accepts_auth: boolean
+  accepts_registrations: boolean
+  rtp_symmetric: boolean
+  force_rport: boolean
+  rewrite_contact: boolean
+  direct_media: boolean
+  codec: string
+  dtmf_mode: string
+  context: string
+  custom_context?: string
+  max_channels: number
+  caller_id?: string
+  caller_id_name?: string
+  is_active: boolean
+  is_registered: boolean
+  last_registration_time?: string
+  calls_total: number
+  calls_active: number
+  calls_successful: number
+  calls_failed: number
+  concurrent_calls?: number
+  status?: string
+  username?: string
+  password?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface Campaign {
