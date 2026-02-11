@@ -160,7 +160,7 @@ const navigation = [
   { label: 'Llamadas', icon: 'i-heroicons-phone-arrow-up-right', to: '/calls' },
   { label: 'Reportes', icon: 'i-heroicons-chart-bar', to: '/reports' },
   
-  // Menú desplegable de Telefonía
+  // Menú desplegable de Telefonía - Contact Center
   {
     label: 'Telefonía',
     icon: 'i-heroicons-phone',
@@ -168,7 +168,13 @@ const navigation = [
     children: [
       { label: 'Colas', icon: 'i-heroicons-queue-list', to: '/queues' },
       { label: 'Troncales SIP', icon: 'i-heroicons-server', to: '/trunks' },
-      { label: 'Grabaciones', icon: 'i-heroicons-microphone', to: '/recordings' },
+      { label: 'Rutas Entrantes (DIDs)', icon: 'i-heroicons-arrow-down-left', to: '/inbound-routes' },
+      { label: 'Rutas Salientes', icon: 'i-heroicons-arrow-up-right', to: '/outbound-routes' },
+      { label: 'IVR Menus', icon: 'i-heroicons-microphone', to: '/ivr' },
+      { label: 'Extensiones', icon: 'i-heroicons-hashtag', to: '/extensions' },
+      { label: 'Buzones de Voz', icon: 'i-heroicons-inbox', to: '/voicemail' },
+      { label: 'Condiciones Horario', icon: 'i-heroicons-clock', to: '/time-conditions' },
+      { label: 'Grabaciones', icon: 'i-heroicons-video-camera', to: '/recordings' },
       { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings' }
     ]
   }
