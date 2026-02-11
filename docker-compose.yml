@@ -55,8 +55,8 @@ services:
       - ASTERISK_AMI_PORT=5038
       - ASTERISK_AMI_USER=admin
       - ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
-      - ALLOWED_HOSTS=localhost,127.0.0.1,backend
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:80
+      - ALLOWED_HOSTS=localhost,127.0.0.1,backend,172.21.207.121,*
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:80,http://172.21.207.121
     ports:
       - "8000:8000"
     depends_on:
