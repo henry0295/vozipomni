@@ -2,17 +2,40 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-3xl font-bold">Rutas Entrantes (DIDs)</h1>
-      <UButton
-        icon="i-heroicons-plus"
-        color="primary"
-        @click="openCreateModal"
-      >
-        Agregar Ruta
-      </UButton>
+      <div class="flex gap-2">
+        <UButton
+          v-if="error"
+          icon="i-heroicons-arrow-path"
+          @click="loadRoutes"
+          :loading="loading"
+        >
+          Reintentar
+        </UButton>
+        <UButton
+          icon="i-heroicons-plus"
+          color="primary"
+          @click="openCreateModal"
+          :disabled="loading"
+        >
+          Agregar Ruta
+        </UButton>
+      </div>
     </div>
 
+    <!-- Estado de carga/error -->
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando rutas entrantes...</p>
+      </div>
+    </UCard>
+
     <!-- Filtros -->
-    <UCard class="divide-y">
+    <UCard v-if="!loading" class="divide-y">
       <template #header>
         <div class="flex gap-2">
           <UInput
@@ -133,7 +156,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface InboundRoute {
   id: number
@@ -154,27 +177,9 @@ const destinationTypes = [
   { label: 'Anuncio', value: 'announcement' }
 ]
 
-const routes = ref<InboundRoute[]>([
-  {
-    id: 1,
-    did: '+573001234567',
-    description: 'DID Principal',
-    destination_type: 'ivr',
-    destination: 'ivr_main',
-    priority: 1,
-    is_active: true
-  },
-  {
-    id: 2,
-    did: '+573001234568',
-    description: 'DID Ventas',
-    destination_type: 'queue',
-    destination: 'sales_queue',
-    priority: 2,
-    is_active: true
-  }
-])
-
+const routes = ref<InboundRoute[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
@@ -214,27 +219,53 @@ const editRoute = (route: InboundRoute) => {
 
 const saveRoute = async () => {
   isSaving.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  if (editingId.value) {
-    const index = routes.value.findIndex(r => r.id === editingId.value)
-    if (index > -1) {
-      routes.value[index] = { ...form.value, id: editingId.value } as InboundRoute
+  error.value = null
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/inbound-routes/${editingId.value}/`, {
+        method: 'PUT',
+        body: form.value
+      })
+    } else {
+      await $fetch('/api/inbound-routes/', {
+        method: 'POST',
+        body: form.value
+      })
     }
-  } else {
-    const newRoute: InboundRoute = {
-      ...form.value,
-      id: Math.max(...routes.value.map(r => r.id), 0) + 1
-    } as InboundRoute
-    routes.value.push(newRoute)
+    await loadRoutes()
+    isModalOpen.value = false
+  } catch (err) {
+    error.value = 'Error al guardar la ruta'
+    console.error('Error saving route:', err)
+  } finally {
+    isSaving.value = false
   }
-  
-  isSaving.value = false
-  isModalOpen.value = false
 }
 
-const deleteRoute = (id: number) => {
-  routes.value = routes.value.filter(r => r.id !== id)
+const deleteRoute = async (id: number) => {
+  if (confirm('¿Estás seguro de que deseas eliminar esta ruta?')) {
+    try {
+      await $fetch(`/api/inbound-routes/${id}/`, { method: 'DELETE' })
+      await loadRoutes()
+    } catch (err) {
+      error.value = 'Error al eliminar la ruta'
+      console.error('Error deleting route:', err)
+    }
+  }
+}
+
+const loadRoutes = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await $fetch('/api/inbound-routes/')
+    routes.value = data
+  } catch (err) {
+    error.value = 'Error al cargar las rutas entrantes'
+    console.error('Error loading inbound routes:', err)
+  } finally {
+    loading.value = false
+  }
 }
 
 const resetForm = () => {
@@ -249,6 +280,8 @@ const resetForm = () => {
   }
   editingId.value = null
 }
+
+onMounted(() => loadRoutes())
 
 const getDestinationTypeLabel = (type: string) => {
   return destinationTypes.find(t => t.value === type)?.label || type

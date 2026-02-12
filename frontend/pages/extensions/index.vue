@@ -2,17 +2,40 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-3xl font-bold">Extensiones</h1>
-      <UButton
-        icon="i-heroicons-plus"
-        color="primary"
-        @click="openCreateModal"
-      >
-        Agregar Extensión
-      </UButton>
+      <div class="flex gap-2">
+        <UButton
+          v-if="error"
+          icon="i-heroicons-arrow-path"
+          @click="loadExtensions"
+          :loading="loading"
+        >
+          Reintentar
+        </UButton>
+        <UButton
+          icon="i-heroicons-plus"
+          color="primary"
+          @click="openCreateModal"
+          :disabled="loading"
+        >
+          Agregar Extensión
+        </UButton>
+      </div>
     </div>
 
+    <!-- Estado de carga/error -->
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando extensiones...</p>
+      </div>
+    </UCard>
+
     <!-- Filtros -->
-    <UCard class="divide-y">
+    <UCard v-if="!loading" class="divide-y">
       <template #header>
         <div class="flex gap-2">
           <UInput
@@ -163,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface Extension {
   id: number
@@ -178,33 +201,9 @@ interface Extension {
   is_active: boolean
 }
 
-const extensions = ref<Extension[]>([
-  {
-    id: 1,
-    extension: '100',
-    name: 'Recepción',
-    extension_type: 'SIP',
-    secret: 'pass123',
-    context: 'from-internal',
-    callerid: '100 <2001000000>',
-    email: 'recepcion@example.com',
-    voicemail_enabled: true,
-    is_active: true
-  },
-  {
-    id: 2,
-    extension: '101',
-    name: 'Ventas 1',
-    extension_type: 'SIP',
-    secret: 'pass123',
-    context: 'from-internal',
-    callerid: '101 <2001000001>',
-    email: 'ventas1@example.com',
-    voicemail_enabled: true,
-    is_active: true
-  }
-])
-
+const extensions = ref<Extension[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const searchQuery = ref('')
 const extensionFilter = ref<string | null>(null)
 const statusFilter = ref<boolean | null>(null)
@@ -246,29 +245,55 @@ const editExtension = (ext: Extension) => {
   isModalOpen.value = true
 }
 
-const saveExtension = async () => {
-  isSaving.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  if (editingId.value) {
-    const index = extensions.value.findIndex(e => e.id === editingId.value)
-    if (index > -1) {
-      extensions.value[index] = { ...form.value, id: editingId.value } as Extension
-    }
-  } else {
-    const newExt: Extension = {
-      ...form.value,
-      id: Math.max(...extensions.value.map(e => e.id), 0) + 1
-    } as Extension
-    extensions.value.push(newExt)
+const loadExtensions = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await $fetch('/api/extensions/')
+    extensions.value = data
+  } catch (err) {
+    error.value = 'Error al cargar las extensiones'
+    console.error('Error loading extensions:', err)
+  } finally {
+    loading.value = false
   }
-  
-  isSaving.value = false
-  isModalOpen.value = false
 }
 
-const deleteExtension = (id: number) => {
-  extensions.value = extensions.value.filter(e => e.id !== id)
+const saveExtension = async () => {
+  isSaving.value = true
+  error.value = null
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/extensions/${editingId.value}/`, {
+        method: 'PUT',
+        body: form.value
+      })
+    } else {
+      await $fetch('/api/extensions/', {
+        method: 'POST',
+        body: form.value
+      })
+    }
+    await loadExtensions()
+    isModalOpen.value = false
+  } catch (err) {
+    error.value = 'Error al guardar la extensión'
+    console.error('Error saving extension:', err)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const deleteExtension = async (id: number) => {
+  if (confirm('¿Estás seguro de que deseas eliminar esta extensión?')) {
+    try {
+      await $fetch(`/api/extensions/${id}/`, { method: 'DELETE' })
+      await loadExtensions()
+    } catch (err) {
+      error.value = 'Error al eliminar la extensión'
+      console.error('Error deleting extension:', err)
+    }
+  }
 }
 
 const resetForm = () => {

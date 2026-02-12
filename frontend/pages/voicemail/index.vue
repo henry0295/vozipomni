@@ -2,17 +2,40 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-3xl font-bold">Buzones de Voz</h1>
-      <UButton
-        icon="i-heroicons-plus"
-        color="primary"
-        @click="openCreateModal"
-      >
-        Crear Buzón
-      </UButton>
+      <div class="flex gap-2">
+        <UButton
+          v-if="error"
+          icon="i-heroicons-arrow-path"
+          @click="loadVoicemails"
+          :loading="loading"
+        >
+          Reintentar
+        </UButton>
+        <UButton
+          icon="i-heroicons-plus"
+          color="primary"
+          @click="openCreateModal"
+          :disabled="loading"
+        >
+          Crear Buzón
+        </UButton>
+      </div>
     </div>
 
+    <!-- Estado de carga/error -->
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando buzones de voz...</p>
+      </div>
+    </UCard>
+
     <!-- Filtros -->
-    <UCard class="divide-y">
+    <UCard v-if="!loading" class="divide-y">
       <template #header>
         <div class="flex gap-2">
           <UInput
@@ -137,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface Voicemail {
   id: number
@@ -151,20 +174,9 @@ interface Voicemail {
   is_active: boolean
 }
 
-const voicemails = ref<Voicemail[]>([
-  {
-    id: 1,
-    mailbox: '100',
-    name: 'Recepción',
-    email: 'recepcion@example.com',
-    password: 'pass123',
-    max_messages: 100,
-    email_attach: true,
-    email_delete: false,
-    is_active: true
-  }
-])
-
+const voicemails = ref<Voicemail[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
@@ -203,29 +215,55 @@ const editVoicemail = (voicemail: Voicemail) => {
   isModalOpen.value = true
 }
 
-const saveVoicemail = async () => {
-  isSaving.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  if (editingId.value) {
-    const index = voicemails.value.findIndex(vm => vm.id === editingId.value)
-    if (index > -1) {
-      voicemails.value[index] = { ...form.value, id: editingId.value } as Voicemail
-    }
-  } else {
-    const newVoicemail: Voicemail = {
-      ...form.value,
-      id: Math.max(...voicemails.value.map(vm => vm.id), 0) + 1
-    } as Voicemail
-    voicemails.value.push(newVoicemail)
+const loadVoicemails = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await $fetch('/api/voicemail/')
+    voicemails.value = data
+  } catch (err) {
+    error.value = 'Error al cargar los buzones de voz'
+    console.error('Error loading voicemails:', err)
+  } finally {
+    loading.value = false
   }
-  
-  isSaving.value = false
-  isModalOpen.value = false
 }
 
-const deleteVoicemail = (id: number) => {
-  voicemails.value = voicemails.value.filter(vm => vm.id !== id)
+const saveVoicemail = async () => {
+  isSaving.value = true
+  error.value = null
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/voicemail/${editingId.value}/`, {
+        method: 'PUT',
+        body: form.value
+      })
+    } else {
+      await $fetch('/api/voicemail/', {
+        method: 'POST',
+        body: form.value
+      })
+    }
+    await loadVoicemails()
+    isModalOpen.value = false
+  } catch (err) {
+    error.value = 'Error al guardar el buzón'
+    console.error('Error saving voicemail:', err)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const deleteVoicemail = async (id: number) => {
+  if (confirm('¿Estás seguro de que deseas eliminar este buzón de voz?')) {
+    try {
+      await $fetch(`/api/voicemail/${id}/`, { method: 'DELETE' })
+      await loadVoicemails()
+    } catch (err) {
+      error.value = 'Error al eliminar el buzón'
+      console.error('Error deleting voicemail:', err)
+    }
+  }
 }
 
 const resetForm = () => {

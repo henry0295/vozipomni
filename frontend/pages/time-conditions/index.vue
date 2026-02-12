@@ -2,17 +2,40 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-3xl font-bold">Condiciones de Horario</h1>
-      <UButton
-        icon="i-heroicons-plus"
-        color="primary"
-        @click="openCreateModal"
-      >
-        Crear Condición
-      </UButton>
+      <div class="flex gap-2">
+        <UButton
+          v-if="error"
+          icon="i-heroicons-arrow-path"
+          @click="loadConditions"
+          :loading="loading"
+        >
+          Reintentar
+        </UButton>
+        <UButton
+          icon="i-heroicons-plus"
+          color="primary"
+          @click="openCreateModal"
+          :disabled="loading"
+        >
+          Crear Condición
+        </UButton>
+      </div>
     </div>
 
+    <!-- Estado de carga/error -->
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando condiciones de horario...</p>
+      </div>
+    </UCard>
+
     <!-- Filtros -->
-    <UCard class="divide-y">
+    <UCard v-if="!loading" class="divide-y">
       <template #header>
         <div class="flex gap-2">
           <UInput
@@ -179,7 +202,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface TimeGroup {
   name: string
@@ -207,22 +230,9 @@ const destinationTypes = [
   { label: 'Anuncio', value: 'announcement' }
 ]
 
-const conditions = ref<TimeCondition[]>([
-  {
-    id: 1,
-    name: 'Horario Comercial',
-    time_groups: [
-      { name: 'Lunes-Viernes', days: 'Mon-Fri', start_time: '08:00', end_time: '18:00' },
-      { name: 'Sábado', days: 'Sat', start_time: '09:00', end_time: '14:00' }
-    ],
-    true_destination_type: 'queue',
-    true_destination: 'sales-queue',
-    false_destination_type: 'voicemail',
-    false_destination: '100',
-    is_active: true
-  }
-])
-
+const conditions = ref<TimeCondition[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
@@ -258,29 +268,55 @@ const editCondition = (condition: TimeCondition) => {
   isModalOpen.value = true
 }
 
-const saveCondition = async () => {
-  isSaving.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  if (editingId.value) {
-    const index = conditions.value.findIndex(c => c.id === editingId.value)
-    if (index > -1) {
-      conditions.value[index] = { ...form.value, id: editingId.value } as TimeCondition
-    }
-  } else {
-    const newCondition: TimeCondition = {
-      ...form.value,
-      id: Math.max(...conditions.value.map(c => c.id), 0) + 1
-    } as TimeCondition
-    conditions.value.push(newCondition)
+const loadConditions = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await $fetch('/api/time-conditions/')
+    conditions.value = data
+  } catch (err) {
+    error.value = 'Error al cargar las condiciones de horario'
+    console.error('Error loading time conditions:', err)
+  } finally {
+    loading.value = false
   }
-  
-  isSaving.value = false
-  isModalOpen.value = false
 }
 
-const deleteCondition = (id: number) => {
-  conditions.value = conditions.value.filter(c => c.id !== id)
+const saveCondition = async () => {
+  isSaving.value = true
+  error.value = null
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/time-conditions/${editingId.value}/`, {
+        method: 'PUT',
+        body: form.value
+      })
+    } else {
+      await $fetch('/api/time-conditions/', {
+        method: 'POST',
+        body: form.value
+      })
+    }
+    await loadConditions()
+    isModalOpen.value = false
+  } catch (err) {
+    error.value = 'Error al guardar la condición'
+    console.error('Error saving condition:', err)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const deleteCondition = async (id: number) => {
+  if (confirm('¿Estás seguro de que deseas eliminar esta condición?')) {
+    try {
+      await $fetch(`/api/time-conditions/${id}/`, { method: 'DELETE' })
+      await loadConditions()
+    } catch (err) {
+      error.value = 'Error al eliminar la condición'
+      console.error('Error deleting condition:', err)
+    }
+  }
 }
 
 const deleteTimeGroup = (index: number) => {

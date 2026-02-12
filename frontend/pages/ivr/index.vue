@@ -2,17 +2,40 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-3xl font-bold">IVR - Menús Interactivos</h1>
-      <UButton
-        icon="i-heroicons-plus"
-        color="primary"
-        @click="openCreateModal"
-      >
-        Crear IVR
-      </UButton>
+      <div class="flex gap-2">
+        <UButton
+          v-if="error"
+          icon="i-heroicons-arrow-path"
+          @click="loadIVRs"
+          :loading="loading"
+        >
+          Reintentar
+        </UButton>
+        <UButton
+          icon="i-heroicons-plus"
+          color="primary"
+          @click="openCreateModal"
+          :disabled="loading"
+        >
+          Crear IVR
+        </UButton>
+      </div>
     </div>
 
+    <!-- Estado de carga/error -->
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando IVRs...</p>
+      </div>
+    </UCard>
+
     <!-- Filtros -->
-    <UCard class="divide-y">
+    <UCard v-if="!loading" class="divide-y">
       <template #header>
         <div class="flex gap-2">
           <UInput
@@ -165,7 +188,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface IVR {
   id: number
@@ -180,25 +203,9 @@ interface IVR {
   is_active: boolean
 }
 
-const ivrs = ref<IVR[]>([
-  {
-    id: 1,
-    name: 'IVR Principal',
-    extension: '100',
-    welcome_message: 'Bienvenido a nuestro centro de contacto. Presione 1 para ventas o 2 para soporte',
-    invalid_message: 'Opción no válida, intente nuevamente',
-    timeout_message: 'Se agotó el tiempo, transferiendo a operador',
-    timeout: 5,
-    max_attempts: 3,
-    menu_options: {
-      '1': 'sales-queue',
-      '2': 'support-queue',
-      '0': '200'
-    },
-    is_active: true
-  }
-])
-
+const ivrs = ref<IVR[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
@@ -238,29 +245,55 @@ const editIVR = (ivr: IVR) => {
   isModalOpen.value = true
 }
 
-const saveIVR = async () => {
-  isSaving.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  if (editingId.value) {
-    const index = ivrs.value.findIndex(i => i.id === editingId.value)
-    if (index > -1) {
-      ivrs.value[index] = { ...form.value, id: editingId.value } as IVR
-    }
-  } else {
-    const newIVR: IVR = {
-      ...form.value,
-      id: Math.max(...ivrs.value.map(i => i.id), 0) + 1
-    } as IVR
-    ivrs.value.push(newIVR)
+const loadIVRs = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await $fetch('/api/ivr/')
+    ivrs.value = data
+  } catch (err) {
+    error.value = 'Error al cargar los IVR'
+    console.error('Error loading IVRs:', err)
+  } finally {
+    loading.value = false
   }
-  
-  isSaving.value = false
-  isModalOpen.value = false
 }
 
-const deleteIVR = (id: number) => {
-  ivrs.value = ivrs.value.filter(i => i.id !== id)
+const saveIVR = async () => {
+  isSaving.value = true
+  error.value = null
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/ivr/${editingId.value}/`, {
+        method: 'PUT',
+        body: form.value
+      })
+    } else {
+      await $fetch('/api/ivr/', {
+        method: 'POST',
+        body: form.value
+      })
+    }
+    await loadIVRs()
+    isModalOpen.value = false
+  } catch (err) {
+    error.value = 'Error al guardar el IVR'
+    console.error('Error saving IVR:', err)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const deleteIVR = async (id: number) => {
+  if (confirm('¿Estás seguro de que deseas eliminar este IVR?')) {
+    try {
+      await $fetch(`/api/ivr/${id}/`, { method: 'DELETE' })
+      await loadIVRs()
+    } catch (err) {
+      error.value = 'Error al eliminar el IVR'
+      console.error('Error deleting IVR:', err)
+    }
+  }
 }
 
 const resetForm = () => {

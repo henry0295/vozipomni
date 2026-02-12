@@ -2,17 +2,40 @@
   <div class="space-y-6">
     <div class="flex justify-between items-center">
       <h1 class="text-3xl font-bold">Rutas Salientes</h1>
-      <UButton
-        icon="i-heroicons-plus"
-        color="primary"
-        @click="openCreateModal"
-      >
-        Agregar Ruta
-      </UButton>
+      <div class="flex gap-2">
+        <UButton
+          v-if="error"
+          icon="i-heroicons-arrow-path"
+          @click="loadRoutes"
+          :loading="loading"
+        >
+          Reintentar
+        </UButton>
+        <UButton
+          icon="i-heroicons-plus"
+          color="primary"
+          @click="openCreateModal"
+          :disabled="loading"
+        >
+          Agregar Ruta
+        </UButton>
+      </div>
     </div>
 
+    <!-- Estado de carga/error -->
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando rutas salientes...</p>
+      </div>
+    </UCard>
+
     <!-- Filtros -->
-    <UCard class="divide-y">
+    <UCard v-if="!loading" class="divide-y">
       <template #header>
         <div class="flex gap-2">
           <UInput
@@ -128,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 interface OutboundRoute {
   id: number
@@ -141,29 +164,9 @@ interface OutboundRoute {
   is_active: boolean
 }
 
-const routes = ref<OutboundRoute[]>([
-  {
-    id: 1,
-    name: 'Colombia Nacional',
-    pattern: '^2[0-9]{9}$',
-    trunk: 'Claro',
-    prepend: '57',
-    prefix: '',
-    callerid_prefix: '300',
-    is_active: true
-  },
-  {
-    id: 2,
-    name: 'Internacional',
-    pattern: '^\\+?[0-9]{10,}$',
-    trunk: 'DigiTel',
-    prepend: '00',
-    prefix: '',
-    callerid_prefix: '',
-    is_active: true
-  }
-])
-
+const routes = ref<OutboundRoute[]>([])
+const loading = ref(false)
+const error = ref<string | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
@@ -201,29 +204,55 @@ const editRoute = (route: OutboundRoute) => {
   isModalOpen.value = true
 }
 
-const saveRoute = async () => {
-  isSaving.value = true
-  await new Promise(resolve => setTimeout(resolve, 500))
-  
-  if (editingId.value) {
-    const index = routes.value.findIndex(r => r.id === editingId.value)
-    if (index > -1) {
-      routes.value[index] = { ...form.value, id: editingId.value } as OutboundRoute
-    }
-  } else {
-    const newRoute: OutboundRoute = {
-      ...form.value,
-      id: Math.max(...routes.value.map(r => r.id), 0) + 1
-    } as OutboundRoute
-    routes.value.push(newRoute)
+const loadRoutes = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const data = await $fetch('/api/outbound-routes/')
+    routes.value = data
+  } catch (err) {
+    error.value = 'Error al cargar las rutas salientes'
+    console.error('Error loading outbound routes:', err)
+  } finally {
+    loading.value = false
   }
-  
-  isSaving.value = false
-  isModalOpen.value = false
 }
 
-const deleteRoute = (id: number) => {
-  routes.value = routes.value.filter(r => r.id !== id)
+const saveRoute = async () => {
+  isSaving.value = true
+  error.value = null
+  try {
+    if (editingId.value) {
+      await $fetch(`/api/outbound-routes/${editingId.value}/`, {
+        method: 'PUT',
+        body: form.value
+      })
+    } else {
+      await $fetch('/api/outbound-routes/', {
+        method: 'POST',
+        body: form.value
+      })
+    }
+    await loadRoutes()
+    isModalOpen.value = false
+  } catch (err) {
+    error.value = 'Error al guardar la ruta'
+    console.error('Error saving route:', err)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+const deleteRoute = async (id: number) => {
+  if (confirm('¿Estás seguro de que deseas eliminar esta ruta?')) {
+    try {
+      await $fetch(`/api/outbound-routes/${id}/`, { method: 'DELETE' })
+      await loadRoutes()
+    } catch (err) {
+      error.value = 'Error al eliminar la ruta'
+      console.error('Error deleting route:', err)
+    }
+  }
 }
 
 const resetForm = () => {
