@@ -249,7 +249,7 @@ const loadExtensions = async () => {
   loading.value = true
   error.value = null
   try {
-    const data = await $fetch('/api/extensions/')
+    const data = await $fetch('/api/telephony/extensions/')
     extensions.value = data
   } catch (err) {
     error.value = 'Error al cargar las extensiones'
@@ -264,12 +264,12 @@ const saveExtension = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/extensions/${editingId.value}/`, {
+      await $fetch(`/api/telephony/extensions/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
     } else {
-      await $fetch('/api/extensions/', {
+      await $fetch('/api/telephony/extensions/', {
         method: 'POST',
         body: form.value
       })
@@ -287,7 +287,7 @@ const saveExtension = async () => {
 const deleteExtension = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta extensión?')) {
     try {
-      await $fetch(`/api/extensions/${id}/`, { method: 'DELETE' })
+      await $fetch(`/api/telephony/extensions/${id}/`, { method: 'DELETE' })
       await loadExtensions()
     } catch (err) {
       error.value = 'Error al eliminar la extensión'

@@ -249,7 +249,7 @@ const loadIVRs = async () => {
   loading.value = true
   error.value = null
   try {
-    const data = await $fetch('/api/ivr/')
+    const data = await $fetch('/api/telephony/ivr/')
     ivrs.value = data
   } catch (err) {
     error.value = 'Error al cargar los IVR'
@@ -264,12 +264,12 @@ const saveIVR = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/ivr/${editingId.value}/`, {
+      await $fetch(`/api/telephony/ivr/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
     } else {
-      await $fetch('/api/ivr/', {
+      await $fetch('/api/telephony/ivr/', {
         method: 'POST',
         body: form.value
       })
@@ -287,7 +287,7 @@ const saveIVR = async () => {
 const deleteIVR = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar este IVR?')) {
     try {
-      await $fetch(`/api/ivr/${id}/`, { method: 'DELETE' })
+      await $fetch(`/api/telephony/ivr/${id}/`, { method: 'DELETE' })
       await loadIVRs()
     } catch (err) {
       error.value = 'Error al eliminar el IVR'

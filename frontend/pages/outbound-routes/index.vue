@@ -208,7 +208,7 @@ const loadRoutes = async () => {
   loading.value = true
   error.value = null
   try {
-    const data = await $fetch('/api/outbound-routes/')
+    const data = await $fetch('/api/telephony/outbound-routes/')
     routes.value = data
   } catch (err) {
     error.value = 'Error al cargar las rutas salientes'
@@ -223,12 +223,12 @@ const saveRoute = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/outbound-routes/${editingId.value}/`, {
+      await $fetch(`/api/telephony/outbound-routes/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
     } else {
-      await $fetch('/api/outbound-routes/', {
+      await $fetch('/api/telephony/outbound-routes/', {
         method: 'POST',
         body: form.value
       })
@@ -246,7 +246,7 @@ const saveRoute = async () => {
 const deleteRoute = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta ruta?')) {
     try {
-      await $fetch(`/api/outbound-routes/${id}/`, { method: 'DELETE' })
+      await $fetch(`/api/telephony/outbound-routes/${id}/`, { method: 'DELETE' })
       await loadRoutes()
     } catch (err) {
       error.value = 'Error al eliminar la ruta'

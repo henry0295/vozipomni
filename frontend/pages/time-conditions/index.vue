@@ -272,7 +272,7 @@ const loadConditions = async () => {
   loading.value = true
   error.value = null
   try {
-    const data = await $fetch('/api/time-conditions/')
+    const data = await $fetch('/api/telephony/time-conditions/')
     conditions.value = data
   } catch (err) {
     error.value = 'Error al cargar las condiciones de horario'
@@ -287,12 +287,12 @@ const saveCondition = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/time-conditions/${editingId.value}/`, {
+      await $fetch(`/api/telephony/time-conditions/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
     } else {
-      await $fetch('/api/time-conditions/', {
+      await $fetch('/api/telephony/time-conditions/', {
         method: 'POST',
         body: form.value
       })
@@ -310,7 +310,7 @@ const saveCondition = async () => {
 const deleteCondition = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta condición?')) {
     try {
-      await $fetch(`/api/time-conditions/${id}/`, { method: 'DELETE' })
+      await $fetch(`/api/telephony/time-conditions/${id}/`, { method: 'DELETE' })
       await loadConditions()
     } catch (err) {
       error.value = 'Error al eliminar la condición'

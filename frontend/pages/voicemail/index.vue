@@ -219,7 +219,7 @@ const loadVoicemails = async () => {
   loading.value = true
   error.value = null
   try {
-    const data = await $fetch('/api/voicemail/')
+    const data = await $fetch('/api/telephony/voicemail/')
     voicemails.value = data
   } catch (err) {
     error.value = 'Error al cargar los buzones de voz'
@@ -234,12 +234,12 @@ const saveVoicemail = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/voicemail/${editingId.value}/`, {
+      await $fetch(`/api/telephony/voicemail/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
     } else {
-      await $fetch('/api/voicemail/', {
+      await $fetch('/api/telephony/voicemail/', {
         method: 'POST',
         body: form.value
       })
@@ -257,7 +257,7 @@ const saveVoicemail = async () => {
 const deleteVoicemail = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar este buzón de voz?')) {
     try {
-      await $fetch(`/api/voicemail/${id}/`, { method: 'DELETE' })
+      await $fetch(`/api/telephony/voicemail/${id}/`, { method: 'DELETE' })
       await loadVoicemails()
     } catch (err) {
       error.value = 'Error al eliminar el buzón'
