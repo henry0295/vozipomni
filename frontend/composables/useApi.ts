@@ -8,6 +8,11 @@ export const useApi = () => {
     url: string,
     options: UseFetchOptions<T> = {}
   ) => {
+    // Cargar token desde localStorage si no está en el store
+    if (process.client && !authStore.token) {
+      authStore.loadFromStorage()
+    }
+
     const token = authStore.token
 
     const defaults: UseFetchOptions<T> = {
@@ -17,8 +22,11 @@ export const useApi = () => {
         : {},
       onResponseError({ response }) {
         if (response.status === 401) {
-          authStore.clearAuth()
-          navigateTo('/login')
+          // Token inválido o expirado
+          if (process.client) {
+            authStore.clearAuth()
+            navigateTo('/login')
+          }
         }
       }
     }

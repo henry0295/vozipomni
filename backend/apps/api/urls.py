@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 # Importar viewsets (se crearán después)
 from apps.api import viewsets
@@ -20,7 +20,7 @@ router.register(r'trunks', viewsets.TrunkViewSet, basename='trunk')
 
 urlpatterns = [
     # Authentication
-    path('auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('auth/login/', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', views.CurrentUserView.as_view(), name='current_user'),
     

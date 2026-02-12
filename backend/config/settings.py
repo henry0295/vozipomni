@@ -198,9 +198,8 @@ CORS_ALLOWED_ORIGINS = [
     for origin in config('CORS_ORIGINS', default='http://localhost:3000,http://localhost,http://127.0.0.1').split(',')
 ]
 
-# Habilitar todos los orígenes temporalmente para depuración
-# CAMBIAR A False EN PRODUCCIÓN
-CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=True, cast=bool)
+# Configuración de CORS para producción
+CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=False, cast=bool)
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [

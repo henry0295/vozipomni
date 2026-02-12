@@ -10,11 +10,17 @@ from apps.reports.models import Report
 
 
 class UserSerializer(serializers.ModelSerializer):
+    name = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'name', 'role', 
                   'phone', 'department', 'is_active_agent', 'last_activity']
         read_only_fields = ['last_activity']
+    
+    def get_name(self, obj):
+        """Retorna el nombre completo del usuario"""
+        return obj.get_full_name() or obj.username
 
 
 class CampaignDispositionSerializer(serializers.ModelSerializer):

@@ -1,6 +1,15 @@
 from rest_framework import generics, permissions
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.api.serializers import UserSerializer
+from apps.api.auth_serializers import CustomTokenObtainPairSerializer
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    """
+    Vista personalizada para login que incluye información del usuario
+    """
+    serializer_class = CustomTokenObtainPairSerializer
 
 
 class CurrentUserView(generics.RetrieveAPIView):

@@ -35,7 +35,8 @@ export const useAuth = () => {
       }
 
       if (data.value) {
-        authStore.setAuth(data.value.access, data.value.user)
+        // Guardar access, refresh token y user
+        authStore.setAuth(data.value.access, data.value.user, data.value.refresh)
         return { success: true, user: data.value.user }
       }
 

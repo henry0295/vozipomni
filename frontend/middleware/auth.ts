@@ -1,16 +1,20 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { checkAuth, isAuthenticated } = useAuth()
+  const authStore = useAuthStore()
 
-  // Si ya está autenticado, continuar
-  if (isAuthenticated.value) {
+  // Cargar desde localStorage si aún no se ha hecho
+  if (process.client && !authStore.token) {
+    authStore.loadFromStorage()
+  }
+
+  // Verificar si hay token
+  if (!authStore.token) {
+    // No hay token, redirigir a login
+    if (to.path !== '/login') {
+      return navigateTo('/login')
+    }
     return
   }
 
-  // Intentar verificar la autenticación
-  const isAuth = await checkAuth()
-
-  // Si no está autenticado y no está yendo a login, redirigir a login
-  if (!isAuth && to.path !== '/login') {
-    return navigateTo('/login')
-  }
+  // Hay token, continuar
+  // La validación del token se hará cuando se use la API
 })
