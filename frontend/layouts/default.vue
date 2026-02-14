@@ -148,8 +148,29 @@
 const route = useRoute()
 const { user, logout } = useAuth()
 
-// Estados para submenús
+// Estados para submenús - persistir en localStorage
 const expandedMenus = ref<string[]>([])
+
+// Cargar estado del localStorage al montar
+onMounted(() => {
+  if (process.client) {
+    const saved = localStorage.getItem('sidebar-expanded-menus')
+    if (saved) {
+      try {
+        expandedMenus.value = JSON.parse(saved)
+      } catch (e) {
+        console.error('Error loading sidebar state:', e)
+      }
+    }
+  }
+})
+
+// Guardar en localStorage cuando cambie
+watch(expandedMenus, (newValue) => {
+  if (process.client) {
+    localStorage.setItem('sidebar-expanded-menus', JSON.stringify(newValue))
+  }
+}, { deep: true })
 
 // Navegación del sidebar con submenu para Telefonía
 const navigation = [
@@ -247,17 +268,28 @@ const isChildActive = (children: any[]) => {
   return children.some(child => isActive(child.to))
 }
 
-// Auto-expandir menú si un hijo está activo
+// Auto-expandir menú solo en primera carga si un hijo está activo
+let hasInitialized = false
 watch(
   () => route.path,
   () => {
-    navigation.forEach(item => {
-      if (item.children && isChildActive(item.children)) {
-        if (!isMenuExpanded(item.id)) {
-          expandedMenus.value.push(item.id)
-        }
+    // Solo auto-expandir en la primera carga si no hay estado guardado
+    if (!hasInitialized && process.client) {
+      const hasSavedState = localStorage.getItem('sidebar-expanded-menus')
+      
+      // Si no hay estado guardado, auto-expandir basado en ruta activa
+      if (!hasSavedState) {
+        navigation.forEach(item => {
+          if (item.children && isChildActive(item.children)) {
+            if (!isMenuExpanded(item.id)) {
+              expandedMenus.value.push(item.id)
+            }
+          }
+        })
       }
-    })
+      
+      hasInitialized = true
+    }
   },
   { immediate: true }
 )
