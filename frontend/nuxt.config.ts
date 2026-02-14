@@ -24,12 +24,9 @@ export default defineNuxtConfig({
     serverBundle: {
       collections: ['heroicons', 'lucide']
     },
-    customCollections: [
-      {
-        prefix: 'custom',
-        dir: './assets/icons'
-      }
-    ]
+    client: {
+      syncLoad: true  // Cargar iconos de forma síncrona en SSR
+    }
   },
 
   // Desactivar SSR para el layout si es necesario, pero preferimos mantener SSR activo

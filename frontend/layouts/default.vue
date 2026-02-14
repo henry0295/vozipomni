@@ -150,8 +150,8 @@
 const route = useRoute()
 const { user, logout } = useAuth()
 
-// Estados para submenús - usar localStorage con useLocalStorage de @vueuse
-const expandedMenus = useLocalStorage<string[]>('sidebar-expanded-menus', [])
+// Estados para submenús - usar localStorage con useLocalStorage de @vueuse (SSR-safe)
+const expandedMenus = process.client ? useLocalStorage<string[]>('sidebar-expanded-menus', []) : ref<string[]>([])
 
 // Navegación del sidebar con submenu para Telefonía
 const navigation = [
@@ -254,19 +254,18 @@ let hasInitialized = false
 watch(
   () => route.path,
   () => {
-    // Solo auto-expandir en la primera carga si no hay estado guardado
-    if (!hasInitialized) {
+    if (!hasInitialized && process.client) {
       // Si el array está vacío (no hay estado guardado), auto-expandir basado en ruta activa
-      if (expandedMenus.value.length === 0) {
+      const expandedRef = expandedMenus as any
+      if (expandedRef.value?.length === 0) {
         navigation.forEach(item => {
           if (item.children && isChildActive(item.children)) {
             if (!isMenuExpanded(item.id)) {
-              expandedMenus.value.push(item.id)
+              expandedRef.value?.push(item.id)
             }
           }
         })
       }
-      
       hasInitialized = true
     }
   },
