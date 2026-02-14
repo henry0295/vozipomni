@@ -71,4 +71,6 @@ logs/
 #doc
 *.docx
 *.pdf
-*.md exceptions README.md
+*.md
+!README.md
+
