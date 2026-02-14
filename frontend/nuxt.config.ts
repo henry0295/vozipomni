@@ -18,10 +18,27 @@ export default defineNuxtConfig({
     icons: ['heroicons', 'lucide']
   },
 
+  // Configuración mejorada de iconos para evitar hydration mismatch
   icon: {
+    mode: 'css',
     serverBundle: {
       collections: ['heroicons', 'lucide']
-    }
+    },
+    customCollections: [
+      {
+        prefix: 'custom',
+        dir: './assets/icons'
+      }
+    ]
+  },
+
+  // Desactivar SSR para el layout si es necesario, pero preferimos mantener SSR activo
+  ssr: true,
+
+  // Ignorar hydration mismatches causados por cambios de estado dinámico
+  experimental: {
+    payloadExtraction: false,
+    renderJsonPayload: false
   },
 
   runtimeConfig: {
@@ -48,6 +65,14 @@ export default defineNuxtConfig({
   typescript: {
     strict: true,
     shim: false
+  },
+
+  // Mejorar build performance y SSR
+  nitro: {
+    prerender: {
+      crawlLinks: false,
+      routes: ['/sitemap.xml', '/rss.xml']
+    }
   },
 
   compatibilityDate: '2024-02-09'

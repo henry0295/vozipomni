@@ -71,68 +71,70 @@
     <!-- Sidebar y contenido principal -->
     <div class="flex h-[calc(100vh-4rem)]">
       <!-- Sidebar -->
-      <aside class="w-64 bg-white border-r border-gray-200 overflow-y-auto">
-        <nav class="p-4 space-y-1">
-          <template v-for="item in navigation" :key="item.label">
-            <!-- Item sin submenu -->
-            <NuxtLink
-              v-if="!item.children"
-              :to="item.to"
-              class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-              :class="{ 'bg-sky-50 text-sky-700 font-medium': isActive(item.to) }"
-            >
-              <UIcon :name="item.icon" class="h-5 w-5" />
-              <span>{{ item.label }}</span>
-            </NuxtLink>
-
-            <!-- Item con submenu -->
-            <div v-else class="space-y-1">
-              <!-- Botón para expandir/contraer -->
-              <button
-                @click="toggleMenu(item.id)"
-                class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                :class="{ 
-                  'bg-sky-50 text-sky-700 font-medium': isChildActive(item.children),
-                  'bg-gray-100': isMenuExpanded(item.id) && !isChildActive(item.children)
-                }"
+      <ClientOnly>
+        <aside class="w-64 bg-white border-r border-gray-200 overflow-y-auto">
+          <nav class="p-4 space-y-1">
+            <template v-for="item in navigation" :key="item.label">
+              <!-- Item sin submenu -->
+              <NuxtLink
+                v-if="!item.children"
+                :to="item.to"
+                class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                :class="{ 'bg-sky-50 text-sky-700 font-medium': isActive(item.to) }"
               >
-                <div class="flex items-center space-x-3">
-                  <UIcon :name="item.icon" class="h-5 w-5" />
-                  <span>{{ item.label }}</span>
-                </div>
-                <UIcon 
-                  name="i-heroicons-chevron-right" 
-                  class="h-4 w-4 transition-transform"
-                  :class="{ 'rotate-90': isMenuExpanded(item.id) }"
-                />
-              </button>
+                <UIcon :name="item.icon" class="h-5 w-5" />
+                <span>{{ item.label }}</span>
+              </NuxtLink>
 
-              <!-- Submenu desplegable -->
-              <transition
-                enter-active-class="transition ease-out duration-200"
-                enter-from-class="opacity-0 -translate-y-1"
-                enter-to-class="opacity-100 translate-y-0"
-                leave-active-class="transition ease-in duration-150"
-                leave-from-class="opacity-100 translate-y-0"
-                leave-to-class="opacity-0 -translate-y-1"
-              >
-                <div v-if="isMenuExpanded(item.id)" class="space-y-1 pl-4">
-                  <NuxtLink
-                    v-for="child in item.children"
-                    :key="child.label"
-                    :to="child.to"
-                    class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors text-sm"
-                    :class="{ 'bg-sky-50 text-sky-700 font-medium': isActive(child.to) }"
-                  >
-                    <UIcon :name="child.icon" class="h-4 w-4" />
-                    <span>{{ child.label }}</span>
-                  </NuxtLink>
-                </div>
-              </transition>
-            </div>
-          </template>
-        </nav>
-      </aside>
+              <!-- Item con submenu -->
+              <div v-else class="space-y-1">
+                <!-- Botón para expandir/contraer -->
+                <button
+                  @click="toggleMenu(item.id)"
+                  class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+                  :class="{ 
+                    'bg-sky-50 text-sky-700 font-medium': isChildActive(item.children),
+                    'bg-gray-100': isMenuExpanded(item.id) && !isChildActive(item.children)
+                  }"
+                >
+                  <div class="flex items-center space-x-3">
+                    <UIcon :name="item.icon" class="h-5 w-5" />
+                    <span>{{ item.label }}</span>
+                  </div>
+                  <UIcon 
+                    name="i-heroicons-chevron-right" 
+                    class="h-4 w-4 transition-transform"
+                    :class="{ 'rotate-90': isMenuExpanded(item.id) }"
+                  />
+                </button>
+
+                <!-- Submenu desplegable -->
+                <transition
+                  enter-active-class="transition ease-out duration-200"
+                  enter-from-class="opacity-0 -translate-y-1"
+                  enter-to-class="opacity-100 translate-y-0"
+                  leave-active-class="transition ease-in duration-150"
+                  leave-from-class="opacity-100 translate-y-0"
+                  leave-to-class="opacity-0 -translate-y-1"
+                >
+                  <div v-if="isMenuExpanded(item.id)" class="space-y-1 pl-4">
+                    <NuxtLink
+                      v-for="child in item.children"
+                      :key="child.label"
+                      :to="child.to"
+                      class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors text-sm"
+                      :class="{ 'bg-sky-50 text-sky-700 font-medium': isActive(child.to) }"
+                    >
+                      <UIcon :name="child.icon" class="h-4 w-4" />
+                      <span>{{ child.label }}</span>
+                    </NuxtLink>
+                  </div>
+                </transition>
+              </div>
+            </template>
+          </nav>
+        </aside>
+      </ClientOnly>
 
       <!-- Contenido principal -->
       <main class="flex-1 overflow-y-auto">
@@ -148,29 +150,8 @@
 const route = useRoute()
 const { user, logout } = useAuth()
 
-// Estados para submenús - persistir en localStorage
-const expandedMenus = ref<string[]>([])
-
-// Cargar estado del localStorage al montar
-onMounted(() => {
-  if (process.client) {
-    const saved = localStorage.getItem('sidebar-expanded-menus')
-    if (saved) {
-      try {
-        expandedMenus.value = JSON.parse(saved)
-      } catch (e) {
-        console.error('Error loading sidebar state:', e)
-      }
-    }
-  }
-})
-
-// Guardar en localStorage cuando cambie
-watch(expandedMenus, (newValue) => {
-  if (process.client) {
-    localStorage.setItem('sidebar-expanded-menus', JSON.stringify(newValue))
-  }
-}, { deep: true })
+// Estados para submenús - usar localStorage con useLocalStorage de @vueuse
+const expandedMenus = useLocalStorage<string[]>('sidebar-expanded-menus', [])
 
 // Navegación del sidebar con submenu para Telefonía
 const navigation = [
@@ -274,11 +255,9 @@ watch(
   () => route.path,
   () => {
     // Solo auto-expandir en la primera carga si no hay estado guardado
-    if (!hasInitialized && process.client) {
-      const hasSavedState = localStorage.getItem('sidebar-expanded-menus')
-      
-      // Si no hay estado guardado, auto-expandir basado en ruta activa
-      if (!hasSavedState) {
+    if (!hasInitialized) {
+      // Si el array está vacío (no hay estado guardado), auto-expandir basado en ruta activa
+      if (expandedMenus.value.length === 0) {
         navigation.forEach(item => {
           if (item.children && isChildActive(item.children)) {
             if (!isMenuExpanded(item.id)) {
