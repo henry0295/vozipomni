@@ -67,3 +67,8 @@ logs/
 *.bak
 *.backup
 *.sql
+
+#doc
+*.docx
+*.pdf
+*.md exceptions README.md
