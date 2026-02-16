@@ -99,6 +99,11 @@
                 />
               </td>
             </tr>
+            <tr v-if="filteredIVRs.length === 0 && !loading">
+              <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                No hay IVRs configurados
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -250,12 +255,13 @@ const editIVR = (ivr: IVR) => {
 const loadIVRs = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<IVR[]>('/telephony/ivr/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/ivr/')
   if (fetchError.value) {
     error.value = 'Error al cargar los IVR'
     console.error('Error loading IVRs:', fetchError.value)
   } else {
-    ivrs.value = data.value || []
+    const raw = data.value
+    ivrs.value = Array.isArray(raw) ? raw : (raw?.results || [])
   }
   loading.value = false
 }

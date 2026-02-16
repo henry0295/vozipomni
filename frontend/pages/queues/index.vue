@@ -94,11 +94,13 @@ const queues = ref<any[]>([])
 const loadQueues = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<any[]>('/queues/')
+  const { data, error: fetchError } = await apiFetch<any>('/queues/')
   if (fetchError.value) {
     error.value = 'Error al cargar las colas'
   } else {
-    queues.value = (data.value || []).map(queue => ({
+    const raw = data.value
+    const list = Array.isArray(raw) ? raw : (raw?.results || [])
+    queues.value = list.map((queue: any) => ({
       id: queue.id,
       name: queue.name,
       icon: 'i-heroicons-user-group',

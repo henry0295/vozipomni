@@ -116,6 +116,11 @@
                 />
               </td>
             </tr>
+            <tr v-if="filteredExtensions.length === 0 && !loading">
+              <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                No hay extensiones configuradas
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -250,12 +255,13 @@ const editExtension = (ext: Extension) => {
 const loadExtensions = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<Extension[]>('/telephony/extensions/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/extensions/')
   if (fetchError.value) {
     error.value = 'Error al cargar las extensiones'
     console.error('Error loading extensions:', fetchError.value)
   } else {
-    extensions.value = data.value || []
+    const raw = data.value
+    extensions.value = Array.isArray(raw) ? raw : (raw?.results || [])
   }
   loading.value = false
 }

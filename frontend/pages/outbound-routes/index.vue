@@ -97,6 +97,11 @@
                 />
               </td>
             </tr>
+            <tr v-if="filteredRoutes.length === 0 && !loading">
+              <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                No hay rutas salientes configuradas
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -210,12 +215,13 @@ const editRoute = (route: OutboundRoute) => {
 const loadRoutes = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<OutboundRoute[]>('/telephony/outbound-routes/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/outbound-routes/')
   if (fetchError.value) {
     error.value = 'Error al cargar las rutas salientes'
     console.error('Error loading outbound routes:', fetchError.value)
   } else {
-    routes.value = data.value || []
+    const raw = data.value
+    routes.value = Array.isArray(raw) ? raw : (raw?.results || [])
   }
   loading.value = false
 }
@@ -279,9 +285,11 @@ const getTrunkLabel = (trunkValue: string | number) => {
 }
 
 const loadTrunks = async () => {
-  const { data, error: fetchError } = await apiFetch<any[]>('/telephony/trunks/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/trunks/')
   if (!fetchError.value) {
-    trunkOptions.value = (data.value || []).map(trunk => ({
+    const raw = data.value
+    const list = Array.isArray(raw) ? raw : (raw?.results || [])
+    trunkOptions.value = list.map((trunk: any) => ({
       label: trunk.name,
       value: trunk.id
     }))

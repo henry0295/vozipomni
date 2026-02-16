@@ -58,6 +58,7 @@
         :rows="contacts"
         :columns="columns"
         :loading="loading"
+        :empty-state="{ icon: 'i-heroicons-circle-stack-20-solid', label: 'No hay contactos registrados' }"
       >
         <template #name-data="{ row }">
           <div>
@@ -189,12 +190,14 @@ const { apiFetch } = useApi()
 const loadContacts = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<any[]>('/contacts/')
+  const { data, error: fetchError } = await apiFetch<any>('/contacts/')
   if (fetchError.value) {
     error.value = 'Error al cargar contactos'
     contacts.value = []
   } else {
-    contacts.value = (data.value || []).map(contact => ({
+    const raw = data.value
+    const list = Array.isArray(raw) ? raw : (raw?.results || [])
+    contacts.value = list.map((contact: any) => ({
       id: contact.id,
       firstName: contact.first_name,
       lastName: contact.last_name,

@@ -101,6 +101,11 @@
                 />
               </td>
             </tr>
+            <tr v-if="filteredRoutes.length === 0 && !loading">
+              <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                No hay rutas entrantes configuradas
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -262,12 +267,13 @@ const deleteRoute = async (id: number) => {
 const loadRoutes = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<InboundRoute[]>('/telephony/inbound-routes/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/inbound-routes/')
   if (fetchError.value) {
     error.value = 'Error al cargar las rutas entrantes'
     console.error('Error loading inbound routes:', fetchError.value)
   } else {
-    routes.value = data.value || []
+    const raw = data.value
+    routes.value = Array.isArray(raw) ? raw : (raw?.results || [])
   }
   loading.value = false
 }

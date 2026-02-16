@@ -104,6 +104,11 @@
                 />
               </td>
             </tr>
+            <tr v-if="filteredVoicemails.length === 0 && !loading">
+              <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                No hay buzones de voz configurados
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -220,12 +225,13 @@ const editVoicemail = (voicemail: Voicemail) => {
 const loadVoicemails = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<Voicemail[]>('/telephony/voicemail/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/voicemail/')
   if (fetchError.value) {
     error.value = 'Error al cargar los buzones de voz'
     console.error('Error loading voicemails:', fetchError.value)
   } else {
-    voicemails.value = data.value || []
+    const raw = data.value
+    voicemails.value = Array.isArray(raw) ? raw : (raw?.results || [])
   }
   loading.value = false
 }

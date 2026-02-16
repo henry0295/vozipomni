@@ -1,5 +1,19 @@
 import type { UseFetchOptions } from 'nuxt/app'
 
+// Helper para extraer datos de respuestas paginadas de Django REST Framework
+// Django retorna: { count, next, previous, results: [...] }
+export function extractResults<T>(data: any): { items: T[], count: number } {
+  if (!data) return { items: [], count: 0 }
+  // Si es un array directo (sin paginación)
+  if (Array.isArray(data)) return { items: data, count: data.length }
+  // Si es objeto paginado de DRF
+  if (data.results && Array.isArray(data.results)) {
+    return { items: data.results as T[], count: data.count || data.results.length }
+  }
+  // Fallback: intentar usar como array
+  return { items: [], count: 0 }
+}
+
 export const useApi = () => {
   const config = useRuntimeConfig()
   const authStore = useAuthStore()

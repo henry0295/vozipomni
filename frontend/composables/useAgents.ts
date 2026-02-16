@@ -1,14 +1,16 @@
 import type { Agent } from '~/types'
+import { extractResults } from '~/composables/useApi'
 
 export const useAgents = () => {
   const { apiFetch } = useApi()
 
   // Obtener todos los agentes
   const getAgents = async (params: any = {}) => {
-    const { data, error } = await apiFetch<Agent[]>('/agents/', {
+    const { data, error } = await apiFetch<any>('/agents/', {
       query: params
     })
-    return { data: data.value, error: error.value }
+    const { items, count } = extractResults<Agent>(data.value)
+    return { data: items, total: count, error: error.value }
   }
 
   // Obtener un agente específico

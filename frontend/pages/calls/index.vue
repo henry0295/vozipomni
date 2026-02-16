@@ -86,6 +86,7 @@
         :rows="calls"
         :columns="columns"
         :loading="loading"
+        :empty-state="{ icon: 'i-heroicons-circle-stack-20-solid', label: 'No hay llamadas registradas' }"
       >
         <template #number-data="{ row }">
           <div class="flex items-center space-x-2">

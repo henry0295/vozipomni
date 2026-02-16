@@ -1,14 +1,16 @@
 import type { SipTrunk } from '~/types'
+import { extractResults } from '~/composables/useApi'
 
 export const useTrunks = () => {
   const { apiFetch } = useApi()
 
   // Obtener todos los troncales
   const getTrunks = async (params: any = {}) => {
-    const { data, error } = await apiFetch<SipTrunk[]>('/trunks/', {
+    const { data, error } = await apiFetch<any>('/trunks/', {
       query: params
     })
-    return { data: data.value, error: error.value }
+    const { items, count } = extractResults<SipTrunk>(data.value)
+    return { data: items, total: count, error: error.value }
   }
 
   // Obtener un troncal específico

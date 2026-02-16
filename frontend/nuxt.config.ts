@@ -18,14 +18,11 @@ export default defineNuxtConfig({
     icons: ['heroicons', 'lucide']
   },
 
-  // Configuración mejorada de iconos para evitar hydration mismatch
+  // Iconos: incluir en el bundle para evitar requests HTTP en producción
   icon: {
-    mode: 'css',
-    serverBundle: {
-      collections: ['heroicons', 'lucide']
-    },
-    client: {
-      syncLoad: true  // Cargar iconos de forma síncrona en SSR
+    serverBundle: 'local',
+    clientBundle: {
+      scan: true
     }
   },
 

@@ -178,12 +178,14 @@ const statusLabels: Record<string, string> = {
 const loadCampaigns = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<any[]>('/campaigns/')
+  const { data, error: fetchError } = await apiFetch<any>('/campaigns/')
   if (fetchError.value) {
     error.value = 'Error al cargar campañas'
     campaigns.value = []
   } else {
-    campaigns.value = (data.value || []).map(campaign => ({
+    const raw = data.value
+    const list = Array.isArray(raw) ? raw : (raw?.results || [])
+    campaigns.value = list.map((campaign: any) => ({
       id: campaign.id,
       name: campaign.name,
       description: campaign.description,

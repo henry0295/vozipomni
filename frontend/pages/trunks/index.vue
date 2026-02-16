@@ -57,6 +57,7 @@
         :rows="filteredTrunks" 
         :columns="columns"
         :loading="loading"
+        :empty-state="{ icon: 'i-heroicons-circle-stack-20-solid', label: 'No hay troncales configurados' }"
       >
         <template #name-data="{ row }">
           <div>

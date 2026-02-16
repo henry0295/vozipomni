@@ -57,6 +57,7 @@
         :rows="recordings" 
         :columns="columns"
         :loading="loading"
+        :empty-state="{ icon: 'i-heroicons-circle-stack-20-solid', label: 'No hay grabaciones disponibles' }"
       >
         <template #duration-data="{ row }">
           <span class="font-mono text-sm">{{ formatDuration(row.duration) }}</span>

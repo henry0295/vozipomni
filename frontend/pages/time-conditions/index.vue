@@ -109,6 +109,11 @@
                 />
               </td>
             </tr>
+            <tr v-if="filteredConditions.length === 0 && !loading">
+              <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                No hay condiciones de horario configuradas
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -273,12 +278,13 @@ const editCondition = (condition: TimeCondition) => {
 const loadConditions = async () => {
   loading.value = true
   error.value = null
-  const { data, error: fetchError } = await apiFetch<TimeCondition[]>('/telephony/time-conditions/')
+  const { data, error: fetchError } = await apiFetch<any>('/telephony/time-conditions/')
   if (fetchError.value) {
     error.value = 'Error al cargar las condiciones de horario'
     console.error('Error loading time conditions:', fetchError.value)
   } else {
-    conditions.value = data.value || []
+    const raw = data.value
+    conditions.value = Array.isArray(raw) ? raw : (raw?.results || [])
   }
   loading.value = false
 }
