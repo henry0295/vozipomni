@@ -133,7 +133,10 @@ services:
       - asterisk_lib:/var/lib/asterisk
       - ./docker/asterisk/configs:/etc/asterisk
     ports:
-      - "5060:5060/udp"    # SIP
+      # NO exponer 5060 en Asterisk - Kamailio es el proxy SIP externo
+      # Asterisk recibe SIP de Kamailio internamente via Docker network
+      - "5161:5161/udp"    # Trunk sin NAT (proveedor directo)
+      - "5162:5162/udp"    # Trunk con NAT (proveedor NAT)
       - "10000-10099:10000-10099/udp"  # RTP
     restart: unless-stopped
     networks:

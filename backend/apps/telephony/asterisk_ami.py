@@ -27,7 +27,7 @@ class AsteriskAMI:
         self.ami_host = getattr(settings, 'ASTERISK_HOST', 'asterisk')
         self.ami_port = getattr(settings, 'ASTERISK_AMI_PORT', 5038)
         self.ami_user = getattr(settings, 'ASTERISK_AMI_USER', 'admin')
-        self.ami_password = getattr(settings, 'ASTERISK_AMI_PASSWORD', 'VoziPOmni2026!')
+        self.ami_password = getattr(settings, 'ASTERISK_AMI_PASSWORD', 'vozipomni_ami_2026')
     
     # ========== MÉTODOS SINCRÓNICOS PARA COMANDOS SIMPLES ==========
     

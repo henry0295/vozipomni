@@ -77,16 +77,24 @@ class PJSIPConfigGenerator:
             f"endpoint/timers={'yes' if trunk.timers else 'no'}",
         ]
         
+        # Timers avanzados
+        if trunk.timers:
+            config_lines.append(f"endpoint/timers_min_se={trunk.timers_min_se}")
+            config_lines.append(f"endpoint/timers_sess_expires={trunk.timers_sess_expires}")
+        
+        # Direct media
+        config_lines.append(f"endpoint/direct_media={'yes' if trunk.direct_media else 'no'}")
+        
         # Qualify
         if trunk.qualify_enabled:
             config_lines.append(f"aor/qualify_frequency={trunk.qualify_frequency}")
             if trunk.qualify_timeout:
                 config_lines.append(f"aor/qualify_timeout={trunk.qualify_timeout}")
         
-        # Códecs y DTMF
+        # Códecs y DTMF - !all limpia codecs por defecto antes de agregar los deseados
         if trunk.codec:
             codecs = trunk.codec.replace(' ', '')
-            config_lines.append(f"endpoint/allow={codecs}")
+            config_lines.append(f"endpoint/allow=!all,{codecs}")
         config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
         
         # Context
@@ -122,6 +130,16 @@ class PJSIPConfigGenerator:
         # Caller ID
         if trunk.caller_id:
             config_lines.append(f"endpoint/callerid={trunk.caller_id}")
+        
+        # Identidad y caller ID avanzado
+        if trunk.trust_id_inbound:
+            config_lines.append("endpoint/trust_id_inbound=yes")
+        if trunk.trust_id_outbound:
+            config_lines.append("endpoint/trust_id_outbound=yes")
+        if trunk.send_pai:
+            config_lines.append("endpoint/send_pai=yes")
+        if trunk.send_rpid:
+            config_lines.append("endpoint/send_rpid=yes")
         
         # Registro (si está habilitado)
         if trunk.sends_registration and trunk.registration_server_uri:
@@ -165,13 +183,21 @@ class PJSIPConfigGenerator:
             f"endpoint/timers={'yes' if trunk.timers else 'no'}",
         ]
         
+        # Timers avanzados
+        if trunk.timers:
+            config_lines.append(f"endpoint/timers_min_se={trunk.timers_min_se}")
+            config_lines.append(f"endpoint/timers_sess_expires={trunk.timers_sess_expires}")
+        
+        # Direct media
+        config_lines.append(f"endpoint/direct_media={'yes' if trunk.direct_media else 'no'}")
+        
         # Qualify
         if trunk.qualify_enabled:
             config_lines.append(f"aor/qualify_frequency={trunk.qualify_frequency}")
         
-        # Códecs
+        # Códecs - !all limpia codecs por defecto
         if trunk.codec:
-            config_lines.append(f"endpoint/allow={trunk.codec.replace(' ', '')}")
+            config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
         config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
         
@@ -193,6 +219,22 @@ class PJSIPConfigGenerator:
         
         if trunk.from_user:
             config_lines.append(f"endpoint/from_user={trunk.from_user}")
+        if trunk.from_domain:
+            config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
+        
+        # Caller ID
+        if trunk.caller_id:
+            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
+        
+        # Identidad avanzada
+        if trunk.trust_id_inbound:
+            config_lines.append("endpoint/trust_id_inbound=yes")
+        if trunk.trust_id_outbound:
+            config_lines.append("endpoint/trust_id_outbound=yes")
+        if trunk.send_pai:
+            config_lines.append("endpoint/send_pai=yes")
+        if trunk.send_rpid:
+            config_lines.append("endpoint/send_rpid=yes")
         
         # Registro
         if trunk.sends_registration and trunk.registration_server_uri:
@@ -235,13 +277,21 @@ class PJSIPConfigGenerator:
             f"endpoint/timers={'yes' if trunk.timers else 'no'}",
         ]
         
+        # Timers avanzados
+        if trunk.timers:
+            config_lines.append(f"endpoint/timers_min_se={trunk.timers_min_se}")
+            config_lines.append(f"endpoint/timers_sess_expires={trunk.timers_sess_expires}")
+        
+        # Direct media (siempre no en LAN para grabación)
+        config_lines.append(f"endpoint/direct_media={'yes' if trunk.direct_media else 'no'}")
+        
         # Qualify
         if trunk.qualify_enabled:
             config_lines.append(f"aor/qualify_frequency={trunk.qualify_frequency}")
         
-        # Códecs
+        # Códecs - !all limpia codecs por defecto
         if trunk.codec:
-            config_lines.append(f"endpoint/allow={trunk.codec.replace(' ', '')}")
+            config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
         config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
         config_lines.append(f"endpoint/language={trunk.language}")
@@ -259,6 +309,20 @@ class PJSIPConfigGenerator:
             config_lines.append(f"outbound_auth/username={trunk.outbound_auth_username}")
             config_lines.append(f"outbound_auth/password={trunk.outbound_auth_password}")
             config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
+        
+        # Caller ID
+        if trunk.caller_id:
+            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
+        
+        # Identidad avanzada
+        if trunk.trust_id_inbound:
+            config_lines.append("endpoint/trust_id_inbound=yes")
+        if trunk.trust_id_outbound:
+            config_lines.append("endpoint/trust_id_outbound=yes")
+        if trunk.send_pai:
+            config_lines.append("endpoint/send_pai=yes")
+        if trunk.send_rpid:
+            config_lines.append("endpoint/send_rpid=yes")
         
         config_lines.append("")
         return "\n".join(config_lines)
@@ -287,13 +351,21 @@ class PJSIPConfigGenerator:
             f"endpoint/timers={'yes' if trunk.timers else 'no'}",
         ]
         
+        # Timers avanzados
+        if trunk.timers:
+            config_lines.append(f"endpoint/timers_min_se={trunk.timers_min_se}")
+            config_lines.append(f"endpoint/timers_sess_expires={trunk.timers_sess_expires}")
+        
+        # Direct media
+        config_lines.append(f"endpoint/direct_media={'yes' if trunk.direct_media else 'no'}")
+        
         # Qualify
         if trunk.qualify_enabled:
             config_lines.append(f"aor/qualify_frequency={trunk.qualify_frequency}")
         
-        # Códecs
+        # Códecs - !all limpia codecs por defecto
         if trunk.codec:
-            config_lines.append(f"endpoint/allow={trunk.codec.replace(' ', '')}")
+            config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
         config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
         config_lines.append(f"endpoint/language={trunk.language}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
@@ -328,13 +400,25 @@ class PJSIPConfigGenerator:
             f"endpoint/timers={'yes' if trunk.timers else 'no'}",
         ]
         
+        # Timers avanzados
+        if trunk.timers:
+            config_lines.append(f"endpoint/timers_min_se={trunk.timers_min_se}")
+            config_lines.append(f"endpoint/timers_sess_expires={trunk.timers_sess_expires}")
+        
+        # Direct media
+        config_lines.append(f"endpoint/direct_media={'yes' if trunk.direct_media else 'no'}")
+        
         if trunk.qualify_enabled:
             config_lines.append(f"aor/qualify_frequency={trunk.qualify_frequency}")
         
+        # Códecs - !all limpia codecs por defecto
         if trunk.codec:
-            config_lines.append(f"endpoint/allow={trunk.codec.replace(' ', '')}")
+            config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
         config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
+        
+        if trunk.language:
+            config_lines.append(f"endpoint/language={trunk.language}")
         
         remote_host = f"{trunk.host}:{trunk.port}" if trunk.port != 5060 else trunk.host
         config_lines.append(f"remote_hosts={remote_host}")
@@ -343,10 +427,33 @@ class PJSIPConfigGenerator:
             config_lines.append(f"outbound_auth/username={trunk.outbound_auth_username}")
             config_lines.append(f"outbound_auth/password={trunk.outbound_auth_password}")
         
+        if trunk.from_user:
+            config_lines.append(f"endpoint/from_user={trunk.from_user}")
+        if trunk.from_domain:
+            config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
+        
+        # Caller ID
+        if trunk.caller_id:
+            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
+        
+        # Identidad avanzada
+        if trunk.trust_id_inbound:
+            config_lines.append("endpoint/trust_id_inbound=yes")
+        if trunk.trust_id_outbound:
+            config_lines.append("endpoint/trust_id_outbound=yes")
+        if trunk.send_pai:
+            config_lines.append("endpoint/send_pai=yes")
+        if trunk.send_rpid:
+            config_lines.append("endpoint/send_rpid=yes")
+        
         if trunk.sends_registration and trunk.registration_server_uri:
             config_lines.append(f"registration/server_uri={trunk.registration_server_uri}")
             if trunk.registration_client_uri:
                 config_lines.append(f"registration/client_uri={trunk.registration_client_uri}")
+            config_lines.extend([
+                f"registration/retry_interval={trunk.registration_retry_interval}",
+                f"registration/expiration={trunk.registration_expiration}",
+            ])
         
         config_lines.append("")
         return "\n".join(config_lines)

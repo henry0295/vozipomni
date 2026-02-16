@@ -409,6 +409,23 @@ class OutboundRoute(models.Model):
     prepend = models.CharField(max_length=20, blank=True, verbose_name='Prefijo agregar')
     prefix = models.CharField(max_length=10, blank=True, verbose_name='Dígitos eliminar')
     callerid_prefix = models.CharField(max_length=50, blank=True, verbose_name='Prefijo Caller ID')
+    priority = models.IntegerField(
+        default=1, 
+        verbose_name='Prioridad',
+        help_text='Orden de evaluación (menor = mayor prioridad)'
+    )
+    ring_time = models.IntegerField(
+        default=60, 
+        verbose_name='Tiempo de timbre (seg)',
+        help_text='Segundos a esperar antes de desistir'
+    )
+    dial_options = models.CharField(
+        max_length=50, 
+        default='trg', 
+        blank=True,
+        verbose_name='Opciones Dial',
+        help_text='Opciones de Asterisk Dial: t=transfer, r=ring, g=continue, T=transfer caller, W=recording'
+    )
     
     is_active = models.BooleanField(default=True, verbose_name='Activo')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -416,7 +433,7 @@ class OutboundRoute(models.Model):
     
     class Meta:
         db_table = 'outbound_routes'
-        ordering = ['name']
+        ordering = ['priority', 'name']
         verbose_name = 'Ruta Saliente'
         verbose_name_plural = 'Rutas Salientes'
     
