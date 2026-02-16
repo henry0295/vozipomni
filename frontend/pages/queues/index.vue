@@ -14,8 +14,19 @@
       </UButton>
     </div>
 
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" class="mb-6">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12 mb-6">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando colas...</p>
+      </div>
+    </UCard>
+
     <!-- Grid de colas -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div v-if="!loading && queues.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <UCard
         v-for="queue in queues"
         :key="queue.id"
@@ -62,6 +73,8 @@
         </div>
       </UCard>
     </div>
+
+    <div v-else-if="!loading" class="text-sm text-gray-500">No hay colas configuradas</div>
   </div>
 </template>
 
@@ -71,39 +84,34 @@ definePageMeta({
 })
 
 const showCreateModal = ref(false)
+const loading = ref(false)
+const error = ref<string | null>(null)
 
-const queues = ref([
-  {
-    id: 1,
-    name: 'Ventas',
-    icon: 'i-heroicons-shopping-cart',
-    waiting: 3,
-    agents: 8,
-    avgWaitTime: '1:23',
-    callsToday: 156
-  },
-  {
-    id: 2,
-    name: 'Soporte Técnico',
-    icon: 'i-heroicons-wrench-screwdriver',
-    waiting: 5,
-    agents: 12,
-    avgWaitTime: '2:45',
-    callsToday: 234
-  },
-  {
-    id: 3,
-    name: 'Atención al Cliente',
-    icon: 'i-heroicons-user-group',
-    waiting: 2,
-    agents: 10,
-    avgWaitTime: '0:58',
-    callsToday: 189
+const { apiFetch } = useApi()
+
+const queues = ref<any[]>([])
+
+const loadQueues = async () => {
+  loading.value = true
+  error.value = null
+  const { data, error: fetchError } = await apiFetch<any[]>('/queues/')
+  if (fetchError.value) {
+    error.value = 'Error al cargar las colas'
+  } else {
+    queues.value = (data.value || []).map(queue => ({
+      id: queue.id,
+      name: queue.name,
+      icon: 'i-heroicons-user-group',
+      waiting: 0,
+      agents: 0,
+      avgWaitTime: '0:00',
+      callsToday: 0
+    }))
   }
-])
+  loading.value = false
+}
 
-// TODO: Cargar colas desde la API
 onMounted(() => {
-  // fetchQueues()
+  loadQueues()
 })
 </script>

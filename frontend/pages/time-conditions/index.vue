@@ -239,6 +239,8 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
+const { apiFetch } = useApi()
+
 const form = ref({
   name: '',
   time_groups: [],
@@ -271,15 +273,14 @@ const editCondition = (condition: TimeCondition) => {
 const loadConditions = async () => {
   loading.value = true
   error.value = null
-  try {
-    const data = await $fetch('/api/telephony/time-conditions/')
-    conditions.value = data
-  } catch (err) {
+  const { data, error: fetchError } = await apiFetch<TimeCondition[]>('/telephony/time-conditions/')
+  if (fetchError.value) {
     error.value = 'Error al cargar las condiciones de horario'
-    console.error('Error loading time conditions:', err)
-  } finally {
-    loading.value = false
+    console.error('Error loading time conditions:', fetchError.value)
+  } else {
+    conditions.value = data.value || []
   }
+  loading.value = false
 }
 
 const saveCondition = async () => {
@@ -287,15 +288,17 @@ const saveCondition = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/telephony/time-conditions/${editingId.value}/`, {
+      const { error: saveError } = await apiFetch(`/telephony/time-conditions/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la condición')
     } else {
-      await $fetch('/api/telephony/time-conditions/', {
+      const { error: saveError } = await apiFetch('/telephony/time-conditions/', {
         method: 'POST',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la condición')
     }
     await loadConditions()
     isModalOpen.value = false
@@ -310,7 +313,8 @@ const saveCondition = async () => {
 const deleteCondition = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta condición?')) {
     try {
-      await $fetch(`/api/telephony/time-conditions/${id}/`, { method: 'DELETE' })
+      const { error: delError } = await apiFetch(`/telephony/time-conditions/${id}/`, { method: 'DELETE' })
+      if (delError.value) throw new Error('Error al eliminar la condición')
       await loadConditions()
     } catch (err) {
       error.value = 'Error al eliminar la condición'
@@ -335,4 +339,6 @@ const resetForm = () => {
   }
   editingId.value = null
 }
+
+onMounted(() => loadConditions())
 </script>

@@ -10,6 +10,10 @@
       />
     </div>
 
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
+      {{ error }}
+    </UAlert>
+
     <!-- Filtros -->
     <UCard>
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -141,6 +145,7 @@ definePageMeta({
 
 // Estados reactivos
 const loading = ref(false)
+const error = ref<string | null>(null)
 const page = ref(1)
 const showPlayer = ref(false)
 const selectedRecording = ref(null)
@@ -153,52 +158,22 @@ const filters = reactive({
   search: ''
 })
 
-// Datos demo 
-const recordings = ref([
-  {
-    id: 1,
-    call_id: 'CALL-001-2026',
-    caller: '+57 300 123 4567',
-    agent: 'Juan Pérez',
-    duration: 185, // segundos
-    created_at: '2026-02-11T10:30:00Z',
-    status: 'Completada',
-    file_url: '/media/recordings/call-001.wav',
-    file_size: '2.1 MB'
-  },
-  {
-    id: 2,
-    call_id: 'CALL-002-2026',
-    caller: '+57 301 987 6543',
-    agent: 'María García',
-    duration: 92,
-    created_at: '2026-02-11T11:15:00Z',
-    status: 'Completada',
-    file_url: '/media/recordings/call-002.wav',
-    file_size: '1.3 MB'
-  },
-  {
-    id: 3,
-    call_id: 'CALL-003-2026',
-    caller: '+57 302 555 7890',
-    agent: 'Carlos Rodríguez',
-    duration: 245,
-    created_at: '2026-02-11T12:45:00Z',
-    status: 'Procesando',
-    file_url: '/media/recordings/call-003.wav',
-    file_size: '3.2 MB'
-  }
-])
+const recordings = ref<any[]>([])
 
-const totalRecordings = ref(25)
+const totalRecordings = ref(0)
 
-// Opciones de agentes
-const agentOptions = [
-  { label: 'Todos los agentes', value: '' },
-  { label: 'Juan Pérez', value: 'juan' },
-  { label: 'María García', value: 'maria' },
-  { label: 'Carlos Rodríguez', value: 'carlos' }
-]
+const agentOptions = computed(() => {
+  const agents = new Map<string, string>()
+  recordings.value.forEach(recording => {
+    const name = recording.agent_name
+    if (name) agents.set(name, name)
+  })
+
+  return [
+    { label: 'Todos los agentes', value: '' },
+    ...Array.from(agents.keys()).map(name => ({ label: name, value: name }))
+  ]
+})
 
 // Columnas de la tabla
 const columns = [
@@ -230,9 +205,10 @@ const formatDate = (dateString: string) => {
 
 const getStatusColor = (status: string) => {
   switch (status) {
-    case 'Completada': return 'green'
-    case 'Procesando': return 'yellow'
-    case 'Error': return 'red'
+    case 'completed': return 'green'
+    case 'recording': return 'yellow'
+    case 'failed': return 'red'
+    case 'archived': return 'gray'
     default: return 'gray'
   }
 }
@@ -244,17 +220,52 @@ const playRecording = (recording: any) => {
 }
 
 const downloadRecording = (recording: any) => {
-  // Implementar descarga
-  window.open(recording.file_url, '_blank')
+  if (recording.file_url) {
+    window.open(recording.file_url, '_blank')
+  }
 }
 
-const deleteRecording = (recording: any) => {
-  // Implementar confirmación y eliminación
-  console.log('Eliminar grabación:', recording.id)
+const deleteRecording = async (recording: any) => {
+  if (!confirm('¿Estás seguro de eliminar esta grabación?')) return
+  const { deleteRecording: deleteRecordingApi } = useRecordings()
+  const result = await deleteRecordingApi(recording.id)
+  if (!result.error) {
+    await loadRecordings()
+  }
+}
+
+const loadRecordings = async () => {
+  loading.value = true
+  error.value = null
+  const { getRecordings } = useRecordings()
+  const result = await getRecordings({ page: page.value })
+  if (result.error) {
+    error.value = 'Error al cargar grabaciones'
+    recordings.value = []
+    totalRecordings.value = 0
+  } else {
+    recordings.value = result.data.map(recording => ({
+      id: recording.id,
+      call_id: recording.call_details?.call_id || `CALL-${recording.call}`,
+      caller: recording.call_details?.caller_id || '-',
+      agent: recording.call_details?.agent_name || '-',
+      duration: recording.duration || 0,
+      created_at: recording.created_at,
+      status: recording.status,
+      file_url: recording.file_path,
+      file_size: `${recording.file_size_mb || 0} MB`
+    }))
+    totalRecordings.value = result.total || 0
+  }
+  loading.value = false
 }
 
 // Metadata de la página
 useHead({
   title: 'Grabaciones - VozipOmni'
+})
+
+onMounted(() => {
+  loadRecordings()
 })
 </script>

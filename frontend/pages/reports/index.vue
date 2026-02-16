@@ -48,8 +48,7 @@
         <div class="text-center">
           <UIcon name="i-heroicons-phone" class="h-12 w-12 text-sky-500 mx-auto mb-2" />
           <p class="text-sm text-gray-600">Total de Llamadas</p>
-          <p class="text-4xl font-bold text-gray-900 mt-2">1,234</p>
-          <p class="text-sm text-green-600 mt-2">↑ 15% vs período anterior</p>
+          <p class="text-4xl font-bold text-gray-900 mt-2">{{ stats.totalCalls }}</p>
         </div>
       </UCard>
 
@@ -57,8 +56,7 @@
         <div class="text-center">
           <UIcon name="i-heroicons-clock" class="h-12 w-12 text-purple-500 mx-auto mb-2" />
           <p class="text-sm text-gray-600">Tiempo Promedio</p>
-          <p class="text-4xl font-bold text-gray-900 mt-2">5:42</p>
-          <p class="text-sm text-red-600 mt-2">↓ 8% vs período anterior</p>
+          <p class="text-4xl font-bold text-gray-900 mt-2">{{ stats.avgTime }}</p>
         </div>
       </UCard>
 
@@ -66,8 +64,7 @@
         <div class="text-center">
           <UIcon name="i-heroicons-chart-bar" class="h-12 w-12 text-green-500 mx-auto mb-2" />
           <p class="text-sm text-gray-600">Tasa de Respuesta</p>
-          <p class="text-4xl font-bold text-gray-900 mt-2">94%</p>
-          <p class="text-sm text-green-600 mt-2">↑ 3% vs período anterior</p>
+          <p class="text-4xl font-bold text-gray-900 mt-2">{{ stats.answerRate }}</p>
         </div>
       </UCard>
     </div>
@@ -106,6 +103,12 @@ const filters = reactive({
   endDate: ''
 })
 
+const stats = reactive({
+  totalCalls: 0,
+  avgTime: '0:00',
+  answerRate: '0%'
+})
+
 const periodOptions = [
   { label: 'Hoy', value: 'today' },
   { label: 'Ayer', value: 'yesterday' },
@@ -120,8 +123,7 @@ const applyFilters = () => {
   console.log('Aplicando filtros:', filters)
 }
 
-// TODO: Cargar datos de reportes desde la API
 onMounted(() => {
-  // fetchReports()
+  // TODO: Cargar datos de reportes desde la API
 })
 </script>

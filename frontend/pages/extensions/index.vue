@@ -211,6 +211,8 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
+const { apiFetch } = useApi()
+
 const form = ref({
   extension: '',
   name: '',
@@ -248,15 +250,14 @@ const editExtension = (ext: Extension) => {
 const loadExtensions = async () => {
   loading.value = true
   error.value = null
-  try {
-    const data = await $fetch('/api/telephony/extensions/')
-    extensions.value = data
-  } catch (err) {
+  const { data, error: fetchError } = await apiFetch<Extension[]>('/telephony/extensions/')
+  if (fetchError.value) {
     error.value = 'Error al cargar las extensiones'
-    console.error('Error loading extensions:', err)
-  } finally {
-    loading.value = false
+    console.error('Error loading extensions:', fetchError.value)
+  } else {
+    extensions.value = data.value || []
   }
+  loading.value = false
 }
 
 const saveExtension = async () => {
@@ -264,15 +265,17 @@ const saveExtension = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/telephony/extensions/${editingId.value}/`, {
+      const { error: saveError } = await apiFetch(`/telephony/extensions/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la extensión')
     } else {
-      await $fetch('/api/telephony/extensions/', {
+      const { error: saveError } = await apiFetch('/telephony/extensions/', {
         method: 'POST',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la extensión')
     }
     await loadExtensions()
     isModalOpen.value = false
@@ -287,7 +290,8 @@ const saveExtension = async () => {
 const deleteExtension = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta extensión?')) {
     try {
-      await $fetch(`/api/telephony/extensions/${id}/`, { method: 'DELETE' })
+      const { error: delError } = await apiFetch(`/telephony/extensions/${id}/`, { method: 'DELETE' })
+      if (delError.value) throw new Error('Error al eliminar la extensión')
       await loadExtensions()
     } catch (err) {
       error.value = 'Error al eliminar la extensión'
@@ -310,4 +314,6 @@ const resetForm = () => {
   }
   editingId.value = null
 }
+
+onMounted(() => loadExtensions())
 </script>

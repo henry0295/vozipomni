@@ -15,6 +15,10 @@
       </UButton>
     </div>
 
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" class="mb-6">
+      {{ error }}
+    </UAlert>
+
     <!-- Estadísticas rápidas -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
       <StatCard
@@ -175,12 +179,13 @@ definePageMeta({
 })
 
 const loading = ref(false)
+const error = ref<string | null>(null)
 
 const stats = reactive({
-  total: 342,
-  inbound: 198,
-  outbound: 134,
-  missed: 10
+  total: 0,
+  inbound: 0,
+  outbound: 0,
+  missed: 0
 })
 
 const filters = reactive({
@@ -211,49 +216,9 @@ const columns = [
   { key: 'actions', label: '' }
 ]
 
-const calls = ref([
-  {
-    id: 1,
-    number: '+57 300 123 4567',
-    type: 'inbound',
-    typeLabel: 'Entrante',
-    status: 'ended',
-    statusLabel: 'Finalizada',
-    agent: 'Juan Pérez',
-    queue: 'Ventas',
-    duration: '5:23',
-    startTime: '2024-02-09T10:30:00',
-    recording: 'rec_001.wav'
-  },
-  {
-    id: 2,
-    number: '+57 301 987 6543',
-    type: 'outbound',
-    typeLabel: 'Saliente',
-    status: 'ended',
-    statusLabel: 'Finalizada',
-    agent: 'María García',
-    queue: 'Soporte',
-    duration: '3:45',
-    startTime: '2024-02-09T10:15:00',
-    recording: 'rec_002.wav'
-  },
-  {
-    id: 3,
-    number: '+57 302 555 7890',
-    type: 'inbound',
-    typeLabel: 'Entrante',
-    status: 'missed',
-    statusLabel: 'Perdida',
-    agent: null,
-    queue: 'Ventas',
-    duration: '0:15',
-    startTime: '2024-02-09T10:00:00',
-    recording: null
-  }
-])
+const calls = ref<any[]>([])
 
-const totalCalls = ref(342)
+const totalCalls = ref(0)
 
 const getCallIcon = (type: string) => {
   const icons: Record<string, string> = {
@@ -275,10 +240,12 @@ const getCallIconColor = (type: string) => {
 
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
-    connected: 'green',
-    ended: 'blue',
-    missed: 'red',
-    hold: 'yellow'
+    answered: 'green',
+    completed: 'blue',
+    no_answer: 'red',
+    failed: 'red',
+    ringing: 'yellow',
+    initiated: 'gray'
   }
   return colors[status] || 'gray'
 }
@@ -295,8 +262,9 @@ const formatDateTime = (dateTime: string) => {
 }
 
 const playRecording = (call: any) => {
-  // TODO: Implementar reproductor de grabaciones
-  console.log('Reproducir grabación:', call.recording)
+  if (call.recording) {
+    window.open(call.recording, '_blank')
+  }
 }
 
 const getActions = (row: any) => [
@@ -324,8 +292,46 @@ const clearFilters = () => {
   filters.date = ''
 }
 
-// TODO: Cargar llamadas desde la API
+const formatDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+const loadCalls = async () => {
+  loading.value = true
+  error.value = null
+  const { getCalls } = useCalls()
+  const result = await getCalls({ page_size: 50, ordering: '-start_time' })
+  if (result.error) {
+    error.value = 'Error al cargar llamadas'
+    calls.value = []
+    totalCalls.value = 0
+  } else {
+    calls.value = result.data.map(call => ({
+      id: call.id,
+      number: call.caller_id || call.called_number,
+      type: call.direction,
+      typeLabel: call.direction === 'inbound' ? 'Entrante' : 'Saliente',
+      status: call.status,
+      statusLabel: call.status,
+      agent: call.agent_name || null,
+      queue: call.queue || '-',
+      duration: formatDuration(call.talk_time || call.duration || 0),
+      startTime: call.start_time,
+      recording: call.recording_file || null
+    }))
+    totalCalls.value = result.total || 0
+
+    stats.total = result.data.length
+    stats.inbound = result.data.filter(call => call.direction === 'inbound').length
+    stats.outbound = result.data.filter(call => call.direction === 'outbound').length
+    stats.missed = result.data.filter(call => call.status === 'no_answer' || call.status === 'failed').length
+  }
+  loading.value = false
+}
+
 onMounted(() => {
-  // fetchCalls()
+  loadCalls()
 })
 </script>

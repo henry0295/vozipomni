@@ -14,6 +14,17 @@
       </UButton>
     </div>
 
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" class="mb-6">
+      {{ error }}
+    </UAlert>
+
+    <UCard v-if="loading" class="flex justify-center items-center py-12 mb-6">
+      <div class="text-center space-y-2">
+        <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
+        <p class="text-gray-500">Cargando campañas...</p>
+      </div>
+    </UCard>
+
     <!-- Tabs de estado -->
     <UTabs 
       :items="tabs" 
@@ -22,7 +33,7 @@
     />
 
     <!-- Grid de campañas -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div v-if="!loading && filteredCampaigns.length" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <UCard
         v-for="campaign in filteredCampaigns"
         :key="campaign.id"
@@ -107,6 +118,8 @@
         </template>
       </UCard>
     </div>
+
+    <div v-else-if="!loading" class="text-sm text-gray-500">No hay campañas configuradas</div>
   </div>
 </template>
 
@@ -117,6 +130,8 @@ definePageMeta({
 
 const showCreateModal = ref(false)
 const activeTab = ref(0)
+const loading = ref(false)
+const error = ref<string | null>(null)
 
 const tabs = [
   { label: 'Activas', value: 'active' },
@@ -125,49 +140,7 @@ const tabs = [
   { label: 'Todas', value: 'all' }
 ]
 
-const campaigns = ref([
-  {
-    id: 1,
-    name: 'Campaña de Ventas Q1',
-    description: 'Llamadas de prospección para nuevos clientes',
-    type: 'progressive',
-    typeLabel: 'Progresivo',
-    status: 'active',
-    statusLabel: 'Activa',
-    contactsTotal: 1000,
-    contactsCalled: 450,
-    successRate: 28,
-    startDate: '2024-01-01',
-    endDate: '2024-03-31'
-  },
-  {
-    id: 2,
-    name: 'Encuesta de Satisfacción',
-    description: 'Encuesta post-compra a clientes',
-    type: 'preview',
-    typeLabel: 'Preview',
-    status: 'active',
-    statusLabel: 'Activa',
-    contactsTotal: 500,
-    contactsCalled: 320,
-    successRate: 65,
-    startDate: '2024-02-01',
-    endDate: '2024-02-28'
-  },
-  {
-    id: 3,
-    name: 'Recuperación de Cartera',
-    description: 'Recordatorio de pagos pendientes',
-    type: 'predictive',
-    typeLabel: 'Predictivo',
-    status: 'paused',
-    statusLabel: 'Pausada',
-    contactsTotal: 800,
-    contactsCalled: 200,
-    successRate: 42,
-    startDate: '2024-01-15'
-  }
-])
+const campaigns = ref<any[]>([])
 
 const filteredCampaigns = computed(() => {
   const tabValue = tabs[activeTab.value].value
@@ -184,8 +157,51 @@ const getStatusColor = (status: string) => {
   return colors[status] || 'gray'
 }
 
-// TODO: Cargar campañas desde la API
+const { apiFetch } = useApi()
+
+const typeLabels: Record<string, string> = {
+  predictive: 'Predictivo',
+  progressive: 'Progresivo',
+  preview: 'Preview',
+  manual: 'Manual',
+  inbound: 'Entrante',
+  outbound: 'Saliente'
+}
+
+const statusLabels: Record<string, string> = {
+  active: 'Activa',
+  paused: 'Pausada',
+  finished: 'Finalizada',
+  draft: 'Borrador'
+}
+
+const loadCampaigns = async () => {
+  loading.value = true
+  error.value = null
+  const { data, error: fetchError } = await apiFetch<any[]>('/campaigns/')
+  if (fetchError.value) {
+    error.value = 'Error al cargar campañas'
+    campaigns.value = []
+  } else {
+    campaigns.value = (data.value || []).map(campaign => ({
+      id: campaign.id,
+      name: campaign.name,
+      description: campaign.description,
+      type: campaign.dialer_type || campaign.campaign_type,
+      typeLabel: typeLabels[campaign.dialer_type || campaign.campaign_type] || (campaign.dialer_type || campaign.campaign_type),
+      status: campaign.status,
+      statusLabel: statusLabels[campaign.status] || campaign.status,
+      contactsTotal: campaign.total_contacts || 0,
+      contactsCalled: campaign.contacted || 0,
+      successRate: campaign.success_rate || 0,
+      startDate: campaign.start_date,
+      endDate: campaign.end_date
+    }))
+  }
+  loading.value = false
+}
+
 onMounted(() => {
-  // fetchCampaigns()
+  loadCampaigns()
 })
 </script>

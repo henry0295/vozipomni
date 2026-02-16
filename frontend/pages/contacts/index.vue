@@ -24,6 +24,10 @@
       </div>
     </div>
 
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" class="mb-6">
+      {{ error }}
+    </UAlert>
+
     <!-- Filtros y búsqueda -->
     <UCard class="mb-6">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -118,6 +122,7 @@ definePageMeta({
 
 const showCreateModal = ref(false)
 const loading = ref(false)
+const error = ref<string | null>(null)
 
 const filters = reactive({
   search: '',
@@ -139,30 +144,7 @@ const columns = [
   { key: 'actions', label: '' }
 ]
 
-const contacts = ref([
-  {
-    id: 1,
-    firstName: 'Carlos',
-    lastName: 'Rodríguez',
-    phone: '+57 300 123 4567',
-    email: 'carlos@example.com',
-    company: 'Tech Solutions',
-    status: 'new',
-    statusLabel: 'Nuevo',
-    lastContact: null
-  },
-  {
-    id: 2,
-    firstName: 'Ana',
-    lastName: 'Martínez',
-    phone: '+57 301 987 6543',
-    email: 'ana@example.com',
-    company: 'Marketing Plus',
-    status: 'contacted',
-    statusLabel: 'Contactado',
-    lastContact: 'Hace 2 días'
-  }
-])
+const contacts = ref<any[]>([])
 
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
@@ -193,7 +175,7 @@ const getActions = (row: any) => [
   [{
     label: 'Eliminar',
     icon: 'i-heroicons-trash',
-    click: () => console.log('Delete', row.id)
+    click: () => deleteContact(row.id)
   }]
 ]
 
@@ -202,8 +184,40 @@ const clearFilters = () => {
   filters.status = null
 }
 
-// TODO: Cargar contactos desde la API
+const { apiFetch } = useApi()
+
+const loadContacts = async () => {
+  loading.value = true
+  error.value = null
+  const { data, error: fetchError } = await apiFetch<any[]>('/contacts/')
+  if (fetchError.value) {
+    error.value = 'Error al cargar contactos'
+    contacts.value = []
+  } else {
+    contacts.value = (data.value || []).map(contact => ({
+      id: contact.id,
+      firstName: contact.first_name,
+      lastName: contact.last_name,
+      phone: contact.phone,
+      email: contact.email,
+      company: contact.company,
+      status: contact.status,
+      statusLabel: contact.status,
+      lastContact: null
+    }))
+  }
+  loading.value = false
+}
+
+const deleteContact = async (id: number) => {
+  if (!confirm('¿Estás seguro de eliminar este contacto?')) return
+  const { error: deleteError } = await apiFetch(`/contacts/${id}/`, { method: 'DELETE' })
+  if (!deleteError.value) {
+    await loadContacts()
+  }
+}
+
 onMounted(() => {
-  // fetchContacts()
+  loadContacts()
 })
 </script>

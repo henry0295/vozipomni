@@ -183,6 +183,8 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
+const { apiFetch } = useApi()
+
 const form = ref({
   mailbox: '',
   name: '',
@@ -218,15 +220,14 @@ const editVoicemail = (voicemail: Voicemail) => {
 const loadVoicemails = async () => {
   loading.value = true
   error.value = null
-  try {
-    const data = await $fetch('/api/telephony/voicemail/')
-    voicemails.value = data
-  } catch (err) {
+  const { data, error: fetchError } = await apiFetch<Voicemail[]>('/telephony/voicemail/')
+  if (fetchError.value) {
     error.value = 'Error al cargar los buzones de voz'
-    console.error('Error loading voicemails:', err)
-  } finally {
-    loading.value = false
+    console.error('Error loading voicemails:', fetchError.value)
+  } else {
+    voicemails.value = data.value || []
   }
+  loading.value = false
 }
 
 const saveVoicemail = async () => {
@@ -234,15 +235,17 @@ const saveVoicemail = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/telephony/voicemail/${editingId.value}/`, {
+      const { error: saveError } = await apiFetch(`/telephony/voicemail/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar el buzón')
     } else {
-      await $fetch('/api/telephony/voicemail/', {
+      const { error: saveError } = await apiFetch('/telephony/voicemail/', {
         method: 'POST',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar el buzón')
     }
     await loadVoicemails()
     isModalOpen.value = false
@@ -257,7 +260,8 @@ const saveVoicemail = async () => {
 const deleteVoicemail = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar este buzón de voz?')) {
     try {
-      await $fetch(`/api/telephony/voicemail/${id}/`, { method: 'DELETE' })
+      const { error: delError } = await apiFetch(`/telephony/voicemail/${id}/`, { method: 'DELETE' })
+      if (delError.value) throw new Error('Error al eliminar el buzón')
       await loadVoicemails()
     } catch (err) {
       error.value = 'Error al eliminar el buzón'
@@ -279,4 +283,6 @@ const resetForm = () => {
   }
   editingId.value = null
 }
+
+onMounted(() => loadVoicemails())
 </script>

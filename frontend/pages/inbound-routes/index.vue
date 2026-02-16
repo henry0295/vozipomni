@@ -186,6 +186,8 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
+const { apiFetch } = useApi()
+
 const form = ref({
   did: '',
   description: '',
@@ -222,15 +224,17 @@ const saveRoute = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/telephony/inbound-routes/${editingId.value}/`, {
+      const { error: saveError } = await apiFetch(`/telephony/inbound-routes/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la ruta')
     } else {
-      await $fetch('/api/telephony/inbound-routes/', {
+      const { error: saveError } = await apiFetch('/telephony/inbound-routes/', {
         method: 'POST',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la ruta')
     }
     await loadRoutes()
     isModalOpen.value = false
@@ -245,7 +249,8 @@ const saveRoute = async () => {
 const deleteRoute = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta ruta?')) {
     try {
-      await $fetch(`/api/telephony/inbound-routes/${id}/`, { method: 'DELETE' })
+      const { error: delError } = await apiFetch(`/telephony/inbound-routes/${id}/`, { method: 'DELETE' })
+      if (delError.value) throw new Error('Error al eliminar la ruta')
       await loadRoutes()
     } catch (err) {
       error.value = 'Error al eliminar la ruta'
@@ -257,15 +262,14 @@ const deleteRoute = async (id: number) => {
 const loadRoutes = async () => {
   loading.value = true
   error.value = null
-  try {
-    const data = await $fetch('/api/telephony/inbound-routes/')
-    routes.value = data
-  } catch (err) {
+  const { data, error: fetchError } = await apiFetch<InboundRoute[]>('/telephony/inbound-routes/')
+  if (fetchError.value) {
     error.value = 'Error al cargar las rutas entrantes'
-    console.error('Error loading inbound routes:', err)
-  } finally {
-    loading.value = false
+    console.error('Error loading inbound routes:', fetchError.value)
+  } else {
+    routes.value = data.value || []
   }
+  loading.value = false
 }
 
 const resetForm = () => {

@@ -14,6 +14,10 @@
       </UButton>
     </div>
 
+    <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" class="mb-6">
+      {{ error }}
+    </UAlert>
+
     <!-- Filtros -->
     <UCard class="mb-6">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -86,6 +90,7 @@ definePageMeta({
 
 const showCreateModal = ref(false)
 const loading = ref(false)
+const error = ref<string | null>(null)
 
 const filters = reactive({
   search: '',
@@ -100,11 +105,7 @@ const statusOptions = [
   { label: 'Desconectado', value: 'offline' }
 ]
 
-const queueOptions = [
-  { label: 'Ventas', value: 'sales' },
-  { label: 'Soporte', value: 'support' },
-  { label: 'Servicio', value: 'service' }
-]
+const queueOptions = []
 
 const columns = [
   { key: 'name', label: 'Agente' },
@@ -116,30 +117,7 @@ const columns = [
   { key: 'actions', label: '' }
 ]
 
-const agents = ref([
-  {
-    id: 1,
-    name: 'Juan Pérez',
-    email: 'juan@example.com',
-    extension: '1001',
-    queue: 'Ventas',
-    status: 'available',
-    statusLabel: 'Disponible',
-    callsToday: 12,
-    avgTime: '4:32'
-  },
-  {
-    id: 2,
-    name: 'María García',
-    email: 'maria@example.com',
-    extension: '1002',
-    queue: 'Soporte',
-    status: 'busy',
-    statusLabel: 'En llamada',
-    callsToday: 8,
-    avgTime: '6:15'
-  }
-])
+const agents = ref<any[]>([])
 
 const getStatusColor = (status: string) => {
   const colors: Record<string, string> = {
@@ -165,7 +143,7 @@ const getActions = (row: any) => [
   [{
     label: 'Eliminar',
     icon: 'i-heroicons-trash',
-    click: () => console.log('Delete', row.id)
+    click: () => deleteAgent(row.id)
   }]
 ]
 
@@ -175,8 +153,46 @@ const clearFilters = () => {
   filters.queue = null
 }
 
-// TODO: Cargar agentes desde la API
+const formatAvgTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+const loadAgents = async () => {
+  loading.value = true
+  error.value = null
+  const { getAgents } = useAgents()
+  const result = await getAgents({ page_size: 200 })
+  if (result.error) {
+    error.value = 'Error al cargar agentes'
+    agents.value = []
+  } else {
+    agents.value = (result.data || []).map(agent => ({
+      id: agent.id,
+      name: agent.user_details?.name || agent.agent_id,
+      email: agent.user_details?.email || '-',
+      extension: agent.sip_extension,
+      queue: '-',
+      status: agent.status,
+      statusLabel: agent.status,
+      callsToday: agent.calls_today || 0,
+      avgTime: formatAvgTime(agent.talk_time_today || 0)
+    }))
+  }
+  loading.value = false
+}
+
+const deleteAgent = async (id: number) => {
+  if (!confirm('¿Estás seguro de eliminar este agente?')) return
+  const { deleteAgent: deleteAgentApi } = useAgents()
+  const result = await deleteAgentApi(id)
+  if (!result.error) {
+    await loadAgents()
+  }
+}
+
 onMounted(() => {
-  // fetchAgents()
+  loadAgents()
 })
 </script>

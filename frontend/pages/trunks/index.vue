@@ -61,21 +61,21 @@
         <template #name-data="{ row }">
           <div>
             <div class="font-medium">{{ row.name }}</div>
-            <div class="text-sm text-gray-500">{{ row.provider }}</div>
+            <div class="text-sm text-gray-500">{{ row.description || '-' }}</div>
           </div>
         </template>
 
         <template #status-data="{ row }">
           <UBadge 
-            :color="getStatusColor(row.status)"
-            :label="row.status"
+            :color="getStatusColor(getStatusLabel(row))"
+            :label="getStatusLabel(row)"
           />
         </template>
 
         <template #type-data="{ row }">
           <UBadge 
-            :color="row.type === 'Entrante' ? 'blue' : 'purple'"
-            :label="row.type"
+            :color="row.trunk_type === 'pbx_lan' ? 'blue' : 'purple'"
+            :label="trunkTypeLabels[row.trunk_type] || row.trunk_type"
             variant="subtle"
           />
         </template>
@@ -96,13 +96,6 @@
 
         <template #actions-data="{ row }">
           <div class="flex items-center space-x-2">
-            <UButton
-              icon="i-heroicons-eye"
-              size="xs"
-              color="gray"
-              variant="ghost"
-              @click="viewTrunk(row)"
-            />
             <UButton
               icon="i-heroicons-pencil"
               size="xs"
@@ -134,7 +127,7 @@
       <UCard>
         <template #header>
           <h3 class="text-lg font-semibold">
-            {{ editingTrunk ? 'Editar Troncal' : 'Nuevo Troncal' }}
+            {{ editingTrunkId ? 'Editar Troncal' : 'Nuevo Troncal' }}
           </h3>
         </template>
 
@@ -150,7 +143,7 @@
             
             <UFormGroup label="Tipo" required>
               <USelect 
-                v-model="trunkForm.type"
+                v-model="trunkForm.trunk_type"
                 :options="typeOptions"
               />
             </UFormGroup>
@@ -203,11 +196,13 @@
             >
               Cancelar
             </UButton>
-            <UButton 
+            <UButton
+              icon="i-heroicons-check"
               @click="saveTrunk"
+              color="primary"
               :loading="saving"
             >
-              {{ editingTrunk ? 'Actualizar' : 'Crear' }}
+              {{ editingTrunkId ? 'Actualizar' : 'Crear' }}
             </UButton>
           </div>
         </template>
@@ -226,54 +221,18 @@ definePageMeta({
 const loading = ref(false)
 const saving = ref(false)
 const showCreateModal = ref(false)
-const editingTrunk = ref(false)
+const editingTrunkId = ref<number | null>(null)
 const searchQuery = ref('')
 
-// Datos demo
-const trunks = ref([
-  {
-    id: 1,
-    name: 'Tigo-Principal',
-    provider: 'Tigo Colombia',
-    type: 'Bidireccional',
-    status: 'Activo',
-    host: '200.21.225.82',
-    port: 5060,
-    max_channels: 30,
-    concurrent_calls: 8,
-    context: 'from-trunk-tigo'
-  },
-  {
-    id: 2,
-    name: 'Claro-Backup',
-    provider: 'Claro Colombia',
-    type: 'Saliente',
-    status: 'Activo',
-    host: '190.85.45.120',
-    port: 5060,
-    max_channels: 15,
-    concurrent_calls: 3,
-    context: 'from-trunk-claro'
-  },
-  {
-    id: 3,
-    name: 'ETB-Local',
-    provider: 'ETB',
-    type: 'Entrante',
-    status: 'Mantenimiento',
-    host: '181.49.35.77',
-    port: 5060,
-    max_channels: 10,
-    concurrent_calls: 0,
-    context: 'from-trunk-etb'
-  }
-])
+const { getTrunks, createTrunk, updateTrunk, deleteTrunk: deleteTrunkApi, toggleTrunkStatus } = useTrunks()
+
+const trunks = ref<SipTrunk[]>([])
 
 // Formulario
 const trunkForm = reactive({
   name: '',
   provider: '',
-  type: 'Saliente',
+  trunk_type: 'nat_provider',
   host: '',
   port: 5060,
   username: '',
@@ -284,9 +243,11 @@ const trunkForm = reactive({
 
 // Opciones
 const typeOptions = [
-  { label: 'Entrante', value: 'Entrante' },
-  { label: 'Saliente', value: 'Saliente' },
-  { label: 'Bidireccional', value: 'Bidireccional' }
+  { label: 'Proveedor con NAT', value: 'nat_provider' },
+  { label: 'Proveedor sin NAT', value: 'no_nat_provider' },
+  { label: 'PBX en LAN', value: 'pbx_lan' },
+  { label: 'Corporativa', value: 'corporate' },
+  { label: 'Personalizado', value: 'custom' }
 ]
 
 // Columnas de la tabla
@@ -300,93 +261,124 @@ const columns = [
 ]
 
 // Computadas
-const activeTrunks = computed(() => 
-  trunks.value.filter(t => t.status === 'Activo').length
+const activeTrunks = computed(() =>
+  trunks.value.filter(t => t.is_active).length
 )
 
-const inactiveTrunks = computed(() => 
-  trunks.value.filter(t => t.status === 'Inactivo').length  
+const inactiveTrunks = computed(() =>
+  trunks.value.filter(t => !t.is_active).length
 )
 
-const maintenanceTrunks = computed(() => 
-  trunks.value.filter(t => t.status === 'Mantenimiento').length
-)
+const maintenanceTrunks = computed(() => 0)
 
 const filteredTrunks = computed(() => {
   if (!searchQuery.value) return trunks.value
-  
-  return trunks.value.filter(trunk => 
+
+  return trunks.value.filter(trunk =>
     trunk.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-    trunk.provider.toLowerCase().includes(searchQuery.value.toLowerCase())
+    (trunk.description || '').toLowerCase().includes(searchQuery.value.toLowerCase())
   )
 })
 
 // Funciones utilitarias
+const trunkTypeLabels: Record<string, string> = {
+  nat_provider: 'Proveedor con NAT',
+  no_nat_provider: 'Proveedor sin NAT',
+  pbx_lan: 'PBX en LAN',
+  corporate: 'Corporativa',
+  custom: 'Personalizado'
+}
+
 const getStatusColor = (status: string) => {
   switch (status) {
     case 'Activo': return 'green'
     case 'Inactivo': return 'red'
-    case 'Mantenimiento': return 'yellow'
     default: return 'gray'
   }
 }
 
-// Acciones
-const viewTrunk = (trunk: any) => {
-  console.log('Ver detalles:', trunk)
+const getStatusLabel = (trunk: SipTrunk) => {
+  if (trunk.status) return trunk.status
+  return trunk.is_active ? 'Activo' : 'Inactivo'
 }
 
+// Acciones
 const editTrunk = (trunk: any) => {
-  Object.assign(trunkForm, trunk)
-  editingTrunk.value = true
+  trunkForm.name = trunk.name
+  trunkForm.provider = trunk.description || ''
+  trunkForm.trunk_type = trunk.trunk_type || 'nat_provider'
+  trunkForm.host = trunk.host
+  trunkForm.port = trunk.port
+  trunkForm.username = trunk.outbound_auth_username || ''
+  trunkForm.password = ''
+  trunkForm.max_channels = trunk.max_channels || 10
+  trunkForm.context = trunk.context || 'from-trunk'
+  editingTrunkId.value = trunk.id
   showCreateModal.value = true
 }
 
-const toggleTrunk = (trunk: any) => {
-  trunk.status = trunk.status === 'Activo' ? 'Inactivo' : 'Activo'
+const toggleTrunk = async (trunk: SipTrunk) => {
+  const result = await toggleTrunkStatus(trunk.id)
+  if (!result.error) {
+    await loadTrunks()
+  }
 }
 
-const deleteTrunk = (trunk: any) => {
-  const index = trunks.value.findIndex(t => t.id === trunk.id)
-  if (index > -1) {
-    trunks.value.splice(index, 1)
+const deleteTrunk = async (trunk: SipTrunk) => {
+  if (!confirm('¿Estás seguro de eliminar esta troncal?')) return
+  const result = await deleteTrunkApi(trunk.id)
+  if (!result.error) {
+    await loadTrunks()
   }
 }
 
 const saveTrunk = async () => {
   saving.value = true
-  
-  // Simular guardado
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  
-  if (editingTrunk.value) {
-    const index = trunks.value.findIndex(t => t.id === trunkForm.id)
-    if (index > -1) {
-      trunks.value[index] = { ...trunkForm }
-    }
-  } else {
-    trunks.value.push({
-      ...trunkForm,
-      id: trunks.value.length + 1,
-      status: 'Activo',
-      concurrent_calls: 0
-    })
+  const payload = {
+    name: trunkForm.name,
+    description: trunkForm.provider,
+    trunk_type: trunkForm.trunk_type,
+    host: trunkForm.host,
+    port: trunkForm.port,
+    outbound_auth_username: trunkForm.username,
+    outbound_auth_password: trunkForm.password,
+    context: trunkForm.context,
+    max_channels: trunkForm.max_channels,
+    protocol: 'udp'
   }
-  
+
+  if (editingTrunkId.value) {
+    await updateTrunk(editingTrunkId.value, payload)
+  } else {
+    await createTrunk(payload)
+  }
+
+  await loadTrunks()
   saving.value = false
   closeModal()
 }
 
 const closeModal = () => {
   showCreateModal.value = false
-  editingTrunk.value = false
+  editingTrunkId.value = null
   Object.keys(trunkForm).forEach(key => {
     trunkForm[key] = typeof trunkForm[key] === 'number' ? 0 : ''
   })
   trunkForm.port = 5060
   trunkForm.max_channels = 10
-  trunkForm.type = 'Saliente'
+  trunkForm.trunk_type = 'nat_provider'
 }
+
+const loadTrunks = async () => {
+  loading.value = true
+  const result = await getTrunks()
+  trunks.value = result.data || []
+  loading.value = false
+}
+
+onMounted(() => {
+  loadTrunks()
+})
 
 // Metadata de la página  
 useHead({

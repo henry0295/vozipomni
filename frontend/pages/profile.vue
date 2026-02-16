@@ -304,25 +304,25 @@ const showPasswordModal = ref(false)
 const profile = reactive({
   name: user.value?.name || '',
   email: user.value?.email || '',
-  phone: '+57 300 123 4567',
-  position: 'Agente de Contact Center',
-  department: 'operaciones',
-  timezone: 'America/Bogota'
+  phone: '',
+  position: '',
+  department: '',
+  timezone: ''
 })
 
 // Configuración de agente
 const agentConfig = reactive({
-  extension: '1001',
+  extension: '',
   default_status: 'available',
-  auto_login: true,
-  webrtc_enabled: true
+  auto_login: false,
+  webrtc_enabled: false
 })
 
 // Notificaciones
 const notifications = reactive({
-  email: true,
-  browser: true,
-  sounds: true,
+  email: false,
+  browser: false,
+  sounds: false,
   weekly_reports: false
 })
 
@@ -335,10 +335,10 @@ const passwordForm = reactive({
 
 // Estadísticas
 const stats = reactive({
-  last_login: '2026-02-11T09:00:00Z',
-  active_days: 45,
-  calls_today: 23,
-  total_time: '6h 42m'
+  last_login: '',
+  active_days: 0,
+  calls_today: 0,
+  total_time: '0h 0m'
 })
 
 // Opciones
@@ -362,6 +362,7 @@ const statusOptions = [
 
 // Funciones
 const formatDate = (dateString: string) => {
+  if (!dateString) return '-'
   return new Date(dateString).toLocaleDateString('es-CO', {
     year: 'numeric',
     month: 'long',

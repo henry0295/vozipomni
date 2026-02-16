@@ -74,7 +74,7 @@
             <tr v-for="route in filteredRoutes" :key="route.id" class="hover:bg-gray-50 dark:hover:bg-gray-800">
               <td class="px-4 py-3 font-semibold">{{ route.name }}</td>
               <td class="px-4 py-3 font-mono">{{ route.pattern }}</td>
-              <td class="px-4 py-3">{{ route.trunk }}</td>
+              <td class="px-4 py-3">{{ getTrunkLabel(route.trunk) }}</td>
               <td class="px-4 py-3">{{ route.prepend || '-' }}</td>
               <td class="px-4 py-3">
                 <UBadge :color="route.is_active ? 'green' : 'gray'" variant="subtle">
@@ -116,7 +116,7 @@
         <UFormGroup label="Troncal">
           <USelect
             v-model="form.trunk"
-            :options="['Claro', 'Movistar', 'DigiTel', 'Voz IP']"
+            :options="trunkOptions"
             placeholder="Seleccione una troncal"
           />
         </UFormGroup>
@@ -172,6 +172,9 @@ const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const trunkOptions = ref<{ label: string; value: string }[]>([])
+
+const { apiFetch } = useApi()
 
 const form = ref({
   name: '',
@@ -207,15 +210,14 @@ const editRoute = (route: OutboundRoute) => {
 const loadRoutes = async () => {
   loading.value = true
   error.value = null
-  try {
-    const data = await $fetch('/api/telephony/outbound-routes/')
-    routes.value = data
-  } catch (err) {
+  const { data, error: fetchError } = await apiFetch<OutboundRoute[]>('/telephony/outbound-routes/')
+  if (fetchError.value) {
     error.value = 'Error al cargar las rutas salientes'
-    console.error('Error loading outbound routes:', err)
-  } finally {
-    loading.value = false
+    console.error('Error loading outbound routes:', fetchError.value)
+  } else {
+    routes.value = data.value || []
   }
+  loading.value = false
 }
 
 const saveRoute = async () => {
@@ -223,15 +225,17 @@ const saveRoute = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/telephony/outbound-routes/${editingId.value}/`, {
+      const { error: saveError } = await apiFetch(`/telephony/outbound-routes/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la ruta')
     } else {
-      await $fetch('/api/telephony/outbound-routes/', {
+      const { error: saveError } = await apiFetch('/telephony/outbound-routes/', {
         method: 'POST',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar la ruta')
     }
     await loadRoutes()
     isModalOpen.value = false
@@ -246,7 +250,8 @@ const saveRoute = async () => {
 const deleteRoute = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta ruta?')) {
     try {
-      await $fetch(`/api/telephony/outbound-routes/${id}/`, { method: 'DELETE' })
+      const { error: delError } = await apiFetch(`/telephony/outbound-routes/${id}/`, { method: 'DELETE' })
+      if (delError.value) throw new Error('Error al eliminar la ruta')
       await loadRoutes()
     } catch (err) {
       error.value = 'Error al eliminar la ruta'
@@ -267,4 +272,26 @@ const resetForm = () => {
   }
   editingId.value = null
 }
+
+const getTrunkLabel = (trunkValue: string | number) => {
+  const match = trunkOptions.value.find(option => String(option.value) === String(trunkValue))
+  return match?.label || String(trunkValue || '-')
+}
+
+const loadTrunks = async () => {
+  const { data, error: fetchError } = await apiFetch<any[]>('/telephony/trunks/')
+  if (!fetchError.value) {
+    trunkOptions.value = (data.value || []).map(trunk => ({
+      label: trunk.name,
+      value: trunk.id
+    }))
+  } else {
+    trunkOptions.value = []
+  }
+}
+
+onMounted(() => {
+  loadRoutes()
+  loadTrunks()
+})
 </script>

@@ -212,6 +212,8 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
+const { apiFetch } = useApi()
+
 const form = ref({
   name: '',
   extension: '',
@@ -248,15 +250,14 @@ const editIVR = (ivr: IVR) => {
 const loadIVRs = async () => {
   loading.value = true
   error.value = null
-  try {
-    const data = await $fetch('/api/telephony/ivr/')
-    ivrs.value = data
-  } catch (err) {
+  const { data, error: fetchError } = await apiFetch<IVR[]>('/telephony/ivr/')
+  if (fetchError.value) {
     error.value = 'Error al cargar los IVR'
-    console.error('Error loading IVRs:', err)
-  } finally {
-    loading.value = false
+    console.error('Error loading IVRs:', fetchError.value)
+  } else {
+    ivrs.value = data.value || []
   }
+  loading.value = false
 }
 
 const saveIVR = async () => {
@@ -264,15 +265,17 @@ const saveIVR = async () => {
   error.value = null
   try {
     if (editingId.value) {
-      await $fetch(`/api/telephony/ivr/${editingId.value}/`, {
+      const { error: saveError } = await apiFetch(`/telephony/ivr/${editingId.value}/`, {
         method: 'PUT',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar el IVR')
     } else {
-      await $fetch('/api/telephony/ivr/', {
+      const { error: saveError } = await apiFetch('/telephony/ivr/', {
         method: 'POST',
         body: form.value
       })
+      if (saveError.value) throw new Error('Error al guardar el IVR')
     }
     await loadIVRs()
     isModalOpen.value = false
@@ -287,7 +290,8 @@ const saveIVR = async () => {
 const deleteIVR = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar este IVR?')) {
     try {
-      await $fetch(`/api/telephony/ivr/${id}/`, { method: 'DELETE' })
+      const { error: delError } = await apiFetch(`/telephony/ivr/${id}/`, { method: 'DELETE' })
+      if (delError.value) throw new Error('Error al eliminar el IVR')
       await loadIVRs()
     } catch (err) {
       error.value = 'Error al eliminar el IVR'
@@ -319,4 +323,6 @@ const addMenuOption = () => {
 const deleteMenuOption = (key: string) => {
   delete form.value.menu_options[key]
 }
+
+onMounted(() => loadIVRs())
 </script>

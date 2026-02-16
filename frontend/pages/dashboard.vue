@@ -15,9 +15,6 @@
           </div>
           <UIcon name="i-heroicons-user-group" class="h-12 w-12 text-green-500" />
         </div>
-        <div class="mt-4">
-          <span class="text-sm text-green-600">↑ 12% vs ayer</span>
-        </div>
       </UCard>
 
       <UCard>
@@ -27,9 +24,6 @@
             <p class="text-3xl font-bold text-gray-900 mt-1">{{ stats.queuedCalls }}</p>
           </div>
           <UIcon name="i-heroicons-phone" class="h-12 w-12 text-sky-500" />
-        </div>
-        <div class="mt-4">
-          <span class="text-sm text-gray-600">En tiempo real</span>
         </div>
       </UCard>
 
@@ -41,9 +35,6 @@
           </div>
           <UIcon name="i-heroicons-phone-arrow-up-right" class="h-12 w-12 text-blue-500" />
         </div>
-        <div class="mt-4">
-          <span class="text-sm text-green-600">↑ 8% vs ayer</span>
-        </div>
       </UCard>
 
       <UCard>
@@ -53,9 +44,6 @@
             <p class="text-3xl font-bold text-gray-900 mt-1">{{ stats.avgTime }}</p>
           </div>
           <UIcon name="i-heroicons-clock" class="h-12 w-12 text-purple-500" />
-        </div>
-        <div class="mt-4">
-          <span class="text-sm text-red-600">↓ 5% vs ayer</span>
         </div>
       </UCard>
     </div>
@@ -67,7 +55,7 @@
           <h2 class="text-xl font-semibold text-gray-900">Agentes en Línea</h2>
         </template>
         
-        <div class="space-y-3">
+        <div v-if="recentAgents.length" class="space-y-3">
           <div v-for="agent in recentAgents" :key="agent.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div class="flex items-center space-x-3">
               <UAvatar :alt="agent.name" size="sm" />
@@ -81,6 +69,7 @@
             </UBadge>
           </div>
         </div>
+        <div v-else class="text-sm text-gray-500">No hay agentes en linea</div>
       </UCard>
 
       <UCard>
@@ -88,7 +77,7 @@
           <h2 class="text-xl font-semibold text-gray-900">Llamadas Recientes</h2>
         </template>
         
-        <div class="space-y-3">
+        <div v-if="recentCalls.length" class="space-y-3">
           <div v-for="call in recentCalls" :key="call.id" class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <div class="flex items-center space-x-3">
               <UIcon name="i-heroicons-phone" class="h-8 w-8 text-sky-500" />
@@ -102,6 +91,7 @@
             </UBadge>
           </div>
         </div>
+        <div v-else class="text-sm text-gray-500">No hay llamadas recientes</div>
       </UCard>
     </div>
   </div>
@@ -113,28 +103,69 @@ definePageMeta({
 })
 
 const stats = reactive({
-  activeAgents: 24,
-  queuedCalls: 5,
-  callsToday: 342,
-  avgTime: '4:32'
+  activeAgents: 0,
+  queuedCalls: 0,
+  callsToday: 0,
+  avgTime: '0:00'
 })
 
-const recentAgents = ref([
-  { id: 1, name: 'Juan Pérez', extension: '1001', status: 'available', statusLabel: 'Disponible' },
-  { id: 2, name: 'María García', extension: '1002', status: 'busy', statusLabel: 'En llamada' },
-  { id: 3, name: 'Carlos Rodríguez', extension: '1003', status: 'available', statusLabel: 'Disponible' },
-  { id: 4, name: 'Ana Martínez', extension: '1004', status: 'available', statusLabel: 'Disponible' }
-])
+const recentAgents = ref<{ id: number; name: string; extension: string; status: string; statusLabel: string }[]>([])
+const recentCalls = ref<{ id: number; number: string; duration: string; type: string; typeLabel: string }[]>([])
 
-const recentCalls = ref([
-  { id: 1, number: '+57 300 123 4567', duration: '5:23', type: 'inbound', typeLabel: 'Entrante' },
-  { id: 2, number: '+57 301 987 6543', duration: '3:45', type: 'outbound', typeLabel: 'Saliente' },
-  { id: 3, number: '+57 302 555 7890', duration: '7:12', type: 'inbound', typeLabel: 'Entrante' },
-  { id: 4, number: '+57 303 444 3210', duration: '2:30', type: 'inbound', typeLabel: 'Entrante' }
-])
+const statusLabels: Record<string, string> = {
+  available: 'Disponible',
+  busy: 'En llamada',
+  oncall: 'En llamada',
+  break: 'En pausa',
+  wrapup: 'Post-llamada',
+  offline: 'Desconectado'
+}
 
-// TODO: Cargar datos reales desde la API
+const formatDuration = (seconds: number) => {
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+const loadDashboard = async () => {
+  const { getDashboardStats, getCalls } = useCalls()
+  const { getAgents } = useAgents()
+
+  const [statsResult, callsResult, agentsResult] = await Promise.all([
+    getDashboardStats(),
+    getCalls({ page_size: 5, ordering: '-start_time' }),
+    getAgents({ page_size: 5 })
+  ])
+
+  if (statsResult.data) {
+    stats.activeAgents = statsResult.data.activeAgents || 0
+    stats.queuedCalls = statsResult.data.queueCalls || 0
+    stats.callsToday = statsResult.data.callsToday || 0
+    stats.avgTime = formatDuration((statsResult.data.avgTalkTime || 0) * 60)
+  }
+
+  if (agentsResult.data) {
+    recentAgents.value = agentsResult.data.map(agent => ({
+      id: agent.id,
+      name: agent.user_details?.name || agent.agent_id || agent.sip_extension,
+      extension: agent.sip_extension,
+      status: agent.status,
+      statusLabel: statusLabels[agent.status] || agent.status
+    }))
+  }
+
+  if (callsResult.data) {
+    recentCalls.value = callsResult.data.map(call => ({
+      id: call.id,
+      number: call.caller_id || call.called_number,
+      duration: formatDuration(call.talk_time || call.duration || 0),
+      type: call.direction,
+      typeLabel: call.direction === 'inbound' ? 'Entrante' : 'Saliente'
+    }))
+  }
+}
+
 onMounted(() => {
-  // fetchDashboardStats()
+  loadDashboard()
 })
 </script>
