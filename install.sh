@@ -106,6 +106,25 @@ check_system_requirements() {
     fi
 }
 
+install_system_dependencies() {
+    log_info "Instalando dependencias del sistema (git, curl, openssl)..."
+
+    case $OS in
+        ubuntu|debian)
+            apt-get update
+            apt-get install -y git curl openssl ca-certificates
+            ;;
+        centos|rhel|rocky|almalinux)
+            yum install -y git curl openssl ca-certificates
+            ;;
+        *)
+            log_warning "No se instalaron dependencias: sistema no soportado"
+            ;;
+    esac
+
+    log_success "Dependencias del sistema instaladas"
+}
+
 check_docker() {
     if command -v docker &> /dev/null; then
         log_success "Docker ya está instalado: $(docker --version)"
@@ -488,6 +507,7 @@ install_vozipomni() {
     
     detect_os
     check_system_requirements
+    install_system_dependencies
     echo ""
     
     # Check and install Docker
