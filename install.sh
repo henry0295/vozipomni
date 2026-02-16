@@ -392,13 +392,10 @@ EOF
 }
 
 update_docker_compose() {
-    log_info "Actualizando configuración de Docker Compose..."
-    
-    # Update postgres password in docker-compose.yml
-    sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$DB_PASSWORD/" $INSTALL_DIR/docker-compose.yml
-    sed -i "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=$REDIS_PASSWORD/" $INSTALL_DIR/docker-compose.yml
-    
-    log_success "Docker Compose actualizado"
+    log_info "Configuración de Docker Compose (producción)..."
+    # Las credenciales se inyectan via .env raíz (create_root_env_file)
+    # No es necesario sed sobre docker-compose.prod.yml
+    log_success "Docker Compose configurado (usando docker-compose.prod.yml)"
 }
 
 start_services() {
@@ -408,13 +405,14 @@ start_services() {
     
     # Detener servicios y eliminar volúmenes para instalación limpia
     log_info "Limpiando instalación anterior (si existe)..."
-    docker compose down -v 2>/dev/null || true
+    docker compose -f docker-compose.prod.yml down -v 2>/dev/null || true
     
-    # Iniciar servicios
-    docker compose up -d
+    # Iniciar servicios (producción)
+    log_info "Construyendo e iniciando servicios (esto puede tardar unos minutos)..."
+    docker compose -f docker-compose.prod.yml up -d --build
     
     log_info "Esperando a que los servicios estén listos..."
-    sleep 20
+    sleep 30
     
     log_success "Servicios iniciados"
 }
@@ -427,7 +425,7 @@ run_migrations() {
     # Esperar a que PostgreSQL esté listo
     log_info "Esperando a que PostgreSQL esté disponible..."
     for i in {1..30}; do
-        if docker compose exec -T postgres pg_isready -U vozipomni_user -d vozipomni_db > /dev/null 2>&1; then
+        if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U ${POSTGRES_USER:-vozipomni_user} -d ${POSTGRES_DB:-vozipomni} > /dev/null 2>&1; then
             log_success "PostgreSQL está listo"
             break
         fi
@@ -437,7 +435,7 @@ run_migrations() {
     echo ""
     
     # Ejecutar migraciones usando run en lugar de exec
-    docker compose run --rm backend python manage.py migrate --noinput
+    docker compose -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
     
     log_success "Migraciones completadas"
 }
@@ -446,7 +444,7 @@ create_superuser() {
     log_info "Creando usuario administrador..."
     
     cd $INSTALL_DIR
-    docker compose run --rm backend python manage.py shell <<EOF
+    docker compose -f docker-compose.prod.yml run --rm backend python manage.py shell <<EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
@@ -533,10 +531,10 @@ show_final_message() {
     echo -e "  ${GREEN}$INSTALL_DIR/credentials.txt${NC}"
     echo ""
     echo -e "${BLUE}Comandos útiles:${NC}"
-    echo -e "  Ver logs:        ${GREEN}cd $INSTALL_DIR && docker compose logs -f${NC}"
-    echo -e "  Reiniciar:       ${GREEN}cd $INSTALL_DIR && docker compose restart${NC}"
-    echo -e "  Detener:         ${GREEN}cd $INSTALL_DIR && docker compose down${NC}"
-    echo -e "  Iniciar:         ${GREEN}cd $INSTALL_DIR && docker compose up -d${NC}"
+    echo -e "  Ver logs:        ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml logs -f${NC}"
+    echo -e "  Reiniciar:       ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml restart${NC}"
+    echo -e "  Detener:         ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml down${NC}"
+    echo -e "  Iniciar:         ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml up -d${NC}"
     echo ""
     echo -e "${BLUE}Próximos pasos:${NC}"
     echo -e "  1. Configurar SSL/TLS con certbot para HTTPS"
@@ -623,7 +621,7 @@ uninstall_vozipomni() {
     fi
     
     log_info "Deteniendo servicios..."
-    cd $INSTALL_DIR 2>/dev/null && docker compose down -v
+    cd $INSTALL_DIR 2>/dev/null && docker compose -f docker-compose.prod.yml down -v
     
     log_info "Eliminando archivos..."
     rm -rf $INSTALL_DIR
@@ -656,6 +654,7 @@ show_menu() {
             start_services
             run_migrations
             log_success "Actualización completada"
+            show_final_message
             ;;
         3)
             uninstall_vozipomni
@@ -668,10 +667,10 @@ show_menu() {
             fi
             ;;
         5)
-            cd $INSTALL_DIR && docker compose logs -f
+            cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml logs -f
             ;;
         6)
-            cd $INSTALL_DIR && docker compose restart
+            cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml restart
             log_success "Servicios reiniciados"
             ;;
         7)
