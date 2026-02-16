@@ -67,8 +67,7 @@ export default defineNuxtConfig({
   // Mejorar build performance y SSR
   nitro: {
     prerender: {
-      crawlLinks: false,
-      routes: ['/sitemap.xml', '/rss.xml']
+      crawlLinks: false
     }
   },
 
