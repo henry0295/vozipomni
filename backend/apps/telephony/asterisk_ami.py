@@ -75,11 +75,11 @@ class AsteriskAMI:
             self.sock.sendall(command.encode('utf-8'))
     
     def _read_response(self):
-        """Leer respuesta del AMI"""
+        """Leer UNA respuesta AMI (hasta el primer doble CRLF)"""
         response = b''
         while True:
             try:
-                chunk = self.sock.recv(1024)
+                chunk = self.sock.recv(4096)
                 if not chunk:
                     break
                 response += chunk
@@ -87,6 +87,33 @@ class AsteriskAMI:
                     break
             except socket.timeout:
                 break
+        return response.decode('utf-8', errors='ignore')
+
+    def _read_command_response(self, timeout=5):
+        """
+        Leer respuesta completa de Action: Command.
+        Lee hasta encontrar '--END COMMAND--' o hasta timeout.
+        """
+        import time
+        response = b''
+        old_timeout = self.sock.gettimeout()
+        self.sock.settimeout(1)  # 1s entre chunks
+        deadline = time.time() + timeout
+        try:
+            while time.time() < deadline:
+                try:
+                    chunk = self.sock.recv(8192)
+                    if not chunk:
+                        break
+                    response += chunk
+                    if b'--END COMMAND--' in response:
+                        break
+                except socket.timeout:
+                    # Si ya tenemos algo y no llega más, aceptar lo que hay
+                    if response:
+                        break
+        finally:
+            self.sock.settimeout(old_timeout)
         return response.decode('utf-8', errors='ignore')
     
     def reload_module(self, module_name):
@@ -132,64 +159,128 @@ class AsteriskAMI:
             return []
     
     def pjsip_show_endpoints(self):
-        """Obtener lista de endpoints PJSIP con sus contactos"""
+        """
+        Obtener endpoints PJSIP parseando la salida CLI de 'pjsip show endpoints'.
+        Retorna dict: { 'NombreEndpoint': { 'state': '...', 'contacts': [...] } }
+        """
         if not self.connected:
             return {}
-        
+
         try:
-            self._send_command("Action: PJSIPShowEndpoints\r\n\r\n")
-            response = self._read_response()
-            
-            # Parsear respuesta para obtener endpoints y sus contactos
+            self._send_command("Action: Command\r\nCommand: pjsip show endpoints\r\n\r\n")
+            response = self._read_command_response(timeout=8)
+
             endpoints = {}
-            lines = response.split('\r\n')
-            current_endpoint = None
-            
-            for line in lines:
-                if 'ObjectName:' in line:
-                    current_endpoint = line.split(':', 1)[1].strip()
-                    endpoints[current_endpoint] = {
-                        'name': current_endpoint,
-                        'state': 'Unknown',
-                        'contacts': []
-                    }
-                elif 'DeviceState:' in line and current_endpoint:
-                    state = line.split(':', 1)[1].strip()
-                    endpoints[current_endpoint]['state'] = state
-                elif 'Contacts:' in line and current_endpoint:
-                    # El formato es generalmente "Contacts: endpoint/uri"
-                    contacts = line.split(':', 1)[1].strip()
-                    if contacts and contacts != '<none>':
-                        endpoints[current_endpoint]['contacts'].append(contacts)
-            
+            current_ep = None
+
+            for line in response.split('\n'):
+                line = line.rstrip('\r')
+
+                # Línea de Endpoint: " Endpoint:  Vozip_Trunk       Not in use    0 of inf"
+                if line.strip().startswith('Endpoint:'):
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        ep_name = parts[1]
+                        # Ignorar la cabecera con <...>
+                        if '<' in ep_name:
+                            continue
+                        state = ' '.join(parts[2:]) if len(parts) > 2 else 'Unknown'
+                        current_ep = ep_name
+                        endpoints[current_ep] = {
+                            'name': current_ep,
+                            'state': state,
+                            'contacts': []
+                        }
+
+                # Línea de Contact: "  Contact:  Vozip_Trunk/sip:host 958a7 Avail  277.794"
+                elif line.strip().startswith('Contact:') and current_ep:
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        contact_uri = parts[1]
+                        # Determinar disponibilidad
+                        avail = any(
+                            kw in line for kw in ('Avail', 'Available', 'Reachable')
+                        )
+                        endpoints[current_ep]['contacts'].append({
+                            'uri': contact_uri,
+                            'available': avail,
+                            'raw': line.strip()
+                        })
+
+                # Línea de Transport: " Transport:  trunk-transport  udp ..."
+                elif line.strip().startswith('Transport:') and current_ep:
+                    parts = line.strip().split()
+                    if len(parts) >= 2 and '<' not in parts[1]:
+                        endpoints[current_ep]['transport'] = parts[1]
+
+            logger.debug(f"PJSIP endpoints encontrados: {list(endpoints.keys())}")
             return endpoints
+
         except Exception as e:
             logger.error(f"Error obteniendo endpoints PJSIP: {e}")
             return {}
-    
+
     def pjsip_show_registrations(self):
-        """Obtener estado de registros PJSIP (troncales)"""
+        """
+        Obtener registros PJSIP parseando la salida CLI de 'pjsip show registrations'.
+        Retorna dict: { 'NombreRegistro': { 'status': '...', 'server_uri': '...' } }
+        """
         if not self.connected:
-            return []
-        
+            return {}
+
         try:
-            self._send_command("Action: PJSIPShowRegistrations\r\n\r\n")
-            response = self._read_response()
-            
-            # Parsear respuesta para obtener estado de cada registro
+            self._send_command("Action: Command\r\nCommand: pjsip show registrations\r\n\r\n")
+            response = self._read_command_response(timeout=8)
+
             registrations = {}
-            lines = response.split('\r\n')
-            current_reg = None
-            
-            for line in lines:
-                if 'ObjectName:' in line:
-                    current_reg = line.split(':', 1)[1].strip()
-                    registrations[current_reg] = {'status': 'Unknown', 'name': current_reg}
-                elif 'Status:' in line and current_reg:
-                    status = line.split(':', 1)[1].strip()
-                    registrations[current_reg]['status'] = status
-            
+
+            for line in response.split('\n'):
+                line = line.rstrip('\r')
+                # Formato típico:
+                #  <Registration/ServerURI......>  <Auth..>  <Status.....>
+                #  Vozip_Trunk-reg/sip:provider    Vozip..   Registered
+                # o:
+                #  Vozip_Trunk                     Vozip..   Registered
+
+                # Ignorar cabeceras y separadores
+                if '<' in line or '====' in line or not line.strip():
+                    continue
+                if 'Registration' in line and '/' in line and '<' not in line:
+                    # No es cabecera, es dato
+                    pass
+                elif line.strip().startswith('Registration:'):
+                    continue
+
+                parts = line.strip().split()
+                if len(parts) >= 2:
+                    reg_id = parts[0]
+                    # Determinar status: buscar palabras clave conocidas
+                    status = 'Unknown'
+                    for p in parts:
+                        p_lower = p.lower()
+                        if p_lower in ('registered', 'unregistered', 'rejected',
+                                       'failed', 'stopped', 'attempting'):
+                            status = p.capitalize()
+                            break
+                    if status != 'Unknown' or '/' in reg_id:
+                        # Extraer nombre base (sin -reg y sin /uri)
+                        base_name = reg_id.split('/')[0]
+                        if base_name.endswith('-reg'):
+                            base_name_no_suffix = base_name[:-4]
+                        else:
+                            base_name_no_suffix = base_name
+                        registrations[base_name] = {
+                            'status': status,
+                            'name': base_name,
+                            'base_name': base_name_no_suffix
+                        }
+                        # También registrar sin sufijo para lookup más fácil
+                        if base_name != base_name_no_suffix:
+                            registrations[base_name_no_suffix] = registrations[base_name]
+
+            logger.debug(f"PJSIP registrations encontradas: {list(registrations.keys())}")
             return registrations
+
         except Exception as e:
             logger.error(f"Error obteniendo registros PJSIP: {e}")
             return {}
@@ -197,25 +288,30 @@ class AsteriskAMI:
     def get_trunk_registration_status(self, trunk_name):
         """Obtener estado de registro de una troncal específica"""
         try:
+            # Primero intentar registros (troncales que se registran)
             registrations = self.pjsip_show_registrations()
-            
-            # Buscar por nombre de troncal o nombre con sufijo -reg
-            trunk_key = trunk_name
-            if trunk_key not in registrations:
-                trunk_key = f"{trunk_name}-reg"
-            
-            if trunk_key in registrations:
-                status = registrations[trunk_key].get('status', 'Unknown')
-                # Normalizar estados
-                if 'Registered' in status:
+            reg = registrations.get(trunk_name) or registrations.get(f"{trunk_name}-reg")
+            if reg:
+                status = reg.get('status', 'Unknown')
+                if status == 'Registered':
                     return 'Registered'
-                elif 'Rejected' in status or 'Failed' in status:
+                elif status in ('Rejected', 'Failed'):
                     return 'Failed'
-                elif 'Unregistered' in status:
+                elif status == 'Unregistered':
                     return 'Unregistered'
-                else:
-                    return 'Unknown'
-            
+                elif status == 'Attempting':
+                    return 'Attempting'
+                return status
+
+            # Fallback: buscar en endpoints (troncales sin registro, IP-based)
+            endpoints = self.pjsip_show_endpoints()
+            ep = endpoints.get(trunk_name)
+            if ep:
+                contacts = ep.get('contacts', [])
+                if any(c.get('available') for c in contacts):
+                    return 'Available'
+                return 'No Contacts'
+
             return 'Not Configured'
         except Exception as e:
             logger.error(f"Error verificando estado de troncal {trunk_name}: {e}")

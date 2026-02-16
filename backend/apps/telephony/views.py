@@ -97,34 +97,48 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
             endpoints = ami.pjsip_show_endpoints() or {}
             registrations = ami.pjsip_show_registrations() if hasattr(ami, 'pjsip_show_registrations') else {}
             ami.disconnect()
-            
+
+            import logging
+            _logger = logging.getLogger(__name__)
+            _logger.info(f"AMI endpoints: {list(endpoints.keys())}")
+            _logger.info(f"AMI registrations: {list(registrations.keys())}")
+
             for t in trunks:
+                ep_found = t.name in endpoints
+                ep = endpoints.get(t.name, {})
+                contacts = ep.get('contacts', [])
+                has_avail_contact = any(c.get('available') for c in contacts) if contacts else False
+
                 if t.sends_registration:
                     # Troncales con registro: verificar estado de registro
-                    if t.name in registrations:
-                        reg = registrations[t.name]
+                    reg = registrations.get(t.name) or registrations.get(f"{t.name}-reg")
+                    if reg:
                         reg_state = reg.get('status', 'Unknown')
-                        if reg_state in ('Registered', 'registered'):
+                        if reg_state in ('Registered',):
                             result[str(t.id)] = {'status': 'Registrado', 'class': 'success'}
-                        elif reg_state in ('Unregistered', 'unregistered'):
+                        elif reg_state in ('Unregistered',):
                             result[str(t.id)] = {'status': 'No Registrado', 'class': 'warning'}
-                        elif reg_state in ('Rejected', 'rejected'):
+                        elif reg_state in ('Rejected', 'Failed'):
                             result[str(t.id)] = {'status': 'Rechazado', 'class': 'error'}
+                        elif reg_state in ('Attempting',):
+                            result[str(t.id)] = {'status': 'Conectando...', 'class': 'warning'}
                         else:
                             result[str(t.id)] = {'status': reg_state, 'class': 'warning'}
-                    else:
-                        # Buscar en endpoints como fallback
-                        if t.name in endpoints:
-                            result[str(t.id)] = {'status': 'No Registrado', 'class': 'warning'}
-                        else:
-                            result[str(t.id)] = {'status': 'No Configurado', 'class': 'gray'}
-                else:
-                    # Troncales sin registro: verificar disponibilidad del endpoint
-                    if t.name in endpoints:
-                        ep = endpoints[t.name]
-                        contacts = ep.get('contacts', [])
-                        if contacts:
+                    elif ep_found:
+                        # Endpoint existe pero sin registro — posiblemente IP-based
+                        if has_avail_contact:
                             result[str(t.id)] = {'status': 'Disponible', 'class': 'success'}
+                        else:
+                            result[str(t.id)] = {'status': 'Sin Registro', 'class': 'warning'}
+                    else:
+                        result[str(t.id)] = {'status': 'No Configurado', 'class': 'gray'}
+                else:
+                    # Troncales sin registro: verificar endpoint y contactos
+                    if ep_found:
+                        if has_avail_contact:
+                            result[str(t.id)] = {'status': 'Disponible', 'class': 'success'}
+                        elif contacts:
+                            result[str(t.id)] = {'status': 'Inalcanzable', 'class': 'warning'}
                         else:
                             result[str(t.id)] = {'status': 'Sin Contacto', 'class': 'warning'}
                     else:
