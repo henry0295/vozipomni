@@ -69,8 +69,12 @@ RUN useradd -m asterisk && \
 # Copiar configuraciones personalizadas
 COPY --chown=asterisk:asterisk configs/*.conf /etc/asterisk/
 
+# Copiar entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # Exponer puertos
-EXPOSE 5060/udp 5060/tcp 5061/tcp 8088 8089 10000-10100/udp
+EXPOSE 5060/udp 5060/tcp 5061/tcp 5161/udp 5162/udp 8088 8089 10000-10100/udp
 
 # Volúmenes
 VOLUME ["/etc/asterisk", "/var/lib/asterisk", "/var/spool/asterisk/monitor", "/var/run/asterisk"]
@@ -79,8 +83,5 @@ VOLUME ["/etc/asterisk", "/var/lib/asterisk", "/var/spool/asterisk/monitor", "/v
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD su asterisk -c "/usr/sbin/asterisk -rx 'core show version'" || exit 1
 
-# Cambiar a usuario asterisk
-USER asterisk
-
-# Comando de inicio (sin -c para permitir conexiones remotas)
-CMD ["/usr/sbin/asterisk", "-f", "-vvvg"]
+# Entrypoint maneja permisos, placeholders, IP inyección y arranca asterisk
+ENTRYPOINT ["/entrypoint.sh"]

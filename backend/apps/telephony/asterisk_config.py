@@ -24,8 +24,9 @@ class AsteriskConfigGenerator:
     Las troncales van en pjsip_wizard.conf (manejado por PJSIPConfigGenerator).
     """
     
-    def __init__(self, config_dir='/etc/asterisk'):
-        self.config_dir = Path(config_dir)
+    def __init__(self, config_dir=None):
+        from django.conf import settings
+        self.config_dir = Path(config_dir or getattr(settings, 'ASTERISK_CONFIG_DIR', '/etc/asterisk'))
     
     def generate_pjsip_extensions_conf(self):
         """

@@ -128,6 +128,8 @@ services:
       dockerfile: Dockerfile
     container_name: vozipomni_asterisk
     hostname: asterisk
+    environment:
+      - VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4:-}
     volumes:
       - ./docker/asterisk/configs:/etc/asterisk
       - asterisk_recordings:/var/spool/asterisk/monitor

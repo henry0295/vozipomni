@@ -46,6 +46,11 @@ services:
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/1
       - CORS_ORIGINS=${CORS_ORIGINS:-https://localhost}
+      - ASTERISK_HOST=asterisk
+      - ASTERISK_AMI_PORT=5038
+      - ASTERISK_AMI_USER=${ASTERISK_AMI_USER:-admin}
+      - ASTERISK_AMI_PASSWORD=${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
+      - ASTERISK_CONFIG_DIR=/etc/asterisk
       - EMAIL_HOST=${EMAIL_HOST:-}
       - EMAIL_PORT=${EMAIL_PORT:-587}
       - EMAIL_USE_TLS=${EMAIL_USE_TLS:-True}
@@ -55,6 +60,7 @@ services:
       - media_files:/app/media
       - static_files:/app/static
       - ./logs:/app/logs
+      - ./docker/asterisk/configs:/etc/asterisk
     depends_on:
       - postgres
       - redis
@@ -127,6 +133,7 @@ services:
     environment:
       - ASTERISK_UID=1000
       - ASTERISK_GID=1000
+      - VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4:-}
     volumes:
       - asterisk_logs:/var/log/asterisk
       - asterisk_spool:/var/spool/asterisk
@@ -283,9 +290,15 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/1
+      - ASTERISK_HOST=asterisk
+      - ASTERISK_AMI_PORT=5038
+      - ASTERISK_AMI_USER=${ASTERISK_AMI_USER:-admin}
+      - ASTERISK_AMI_PASSWORD=${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
+      - ASTERISK_CONFIG_DIR=/etc/asterisk
     volumes:
       - media_files:/app/media
       - ./logs:/app/logs
+      - ./docker/asterisk/configs:/etc/asterisk
     depends_on:
       - postgres
       - redis
