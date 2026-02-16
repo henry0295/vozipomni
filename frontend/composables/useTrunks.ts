@@ -55,7 +55,29 @@ export const useTrunks = () => {
 
   // Probar conexión del troncal
   const testTrunkConnection = async (id: number) => {
-    const { data, error } = await apiFetch(`/trunks/${id}/test_connection/`)
+    const { data, error } = await apiFetch(`/trunks/${id}/test_connection/`, {
+      method: 'POST'
+    })
+    return { data: data.value, error: error.value }
+  }
+
+  // Obtener estados de registro de todas las troncales (bulk)
+  const getTrunkStatuses = async () => {
+    const { data, error } = await apiFetch<Record<string, { status: string; class: string; detail?: string }>>('/trunks/statuses/')
+    return { data: data.value, error: error.value }
+  }
+
+  // Forzar re-registro
+  const forceRegister = async (id: number) => {
+    const { data, error } = await apiFetch(`/trunks/${id}/force_register/`, {
+      method: 'POST'
+    })
+    return { data: data.value, error: error.value }
+  }
+
+  // Preview configuración PJSIP
+  const previewConfig = async (id: number) => {
+    const { data, error } = await apiFetch(`/trunks/${id}/preview_config/`)
     return { data: data.value, error: error.value }
   }
 
@@ -66,6 +88,9 @@ export const useTrunks = () => {
     updateTrunk,
     deleteTrunk,
     toggleTrunkStatus,
-    testTrunkConnection
+    testTrunkConnection,
+    getTrunkStatuses,
+    forceRegister,
+    previewConfig
   }
 }

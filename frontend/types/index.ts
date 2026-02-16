@@ -112,37 +112,71 @@ export interface SipTrunk {
   host: string
   port: number
   protocol: string
+  // Autenticación saliente
   outbound_auth_username?: string
   outbound_auth_password?: string
   from_user?: string
   from_domain?: string
+  // Autenticación entrante
   inbound_auth_username?: string
   inbound_auth_password?: string
+  // Registro
   sends_registration: boolean
   registration_server_uri?: string
   registration_client_uri?: string
+  registration_retry_interval?: number
+  registration_expiration?: number
+  // Comportamiento SIP
   sends_auth: boolean
   accepts_auth: boolean
   accepts_registrations: boolean
+  // RTP/Media
   rtp_symmetric: boolean
   force_rport: boolean
   rewrite_contact: boolean
   direct_media: boolean
+  // Codecs y DTMF
   codec: string
   dtmf_mode: string
+  // Context y Timers
   context: string
   custom_context?: string
+  timers: boolean
+  timers_min_se?: number
+  timers_sess_expires?: number
+  // Qualify
+  qualify_enabled: boolean
+  qualify_frequency?: number
+  qualify_timeout?: number
+  // Canales y Caller ID
   max_channels: number
   caller_id?: string
   caller_id_name?: string
+  // NAT y Red
+  local_net?: string
+  external_media_address?: string
+  external_signaling_address?: string
+  // Opciones avanzadas
+  language?: string
+  trust_id_inbound: boolean
+  trust_id_outbound: boolean
+  send_pai: boolean
+  send_rpid: boolean
+  // Estado
   is_active: boolean
   is_registered: boolean
   last_registration_time?: string
+  // Estadísticas
   calls_total: number
   calls_active: number
   calls_successful: number
   calls_failed: number
   concurrent_calls?: number
+  // Custom
+  pjsip_config_custom?: string
+  // Computed/API
+  registration_status?: string
+  registration_detail?: { text: string; class: string; icon: string }
   status?: string
   username?: string
   password?: string

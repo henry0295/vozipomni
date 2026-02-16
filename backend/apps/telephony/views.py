@@ -70,6 +70,75 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
             logger = logging.getLogger(__name__)
             logger.error(f"Error regenerando configuración PJSIP: {str(e)}")
     
+    @action(detail=False, methods=['get'])
+    def statuses(self, request):
+        """
+        Obtener estado de registro de TODAS las troncales activas en una sola consulta AMI.
+        Optimizado para el listado — una sola conexión AMI.
+        
+        GET /api/telephony/trunks/statuses/
+        """
+        trunks = SIPTrunk.objects.filter(is_active=True)
+        result = {}
+        
+        try:
+            ami = AsteriskAMI()
+            if not ami.connect():
+                # Asterisk no disponible
+                for t in trunks:
+                    result[str(t.id)] = {
+                        'status': 'Desconectado',
+                        'class': 'error',
+                        'detail': 'No se pudo conectar a Asterisk'
+                    }
+                return Response(result)
+            
+            # Obtener endpoints y registros en una sola sesión
+            endpoints = ami.pjsip_show_endpoints() or {}
+            registrations = ami.pjsip_show_registrations() if hasattr(ami, 'pjsip_show_registrations') else {}
+            ami.disconnect()
+            
+            for t in trunks:
+                if t.sends_registration:
+                    # Troncales con registro: verificar estado de registro
+                    if t.name in registrations:
+                        reg = registrations[t.name]
+                        reg_state = reg.get('status', 'Unknown')
+                        if reg_state in ('Registered', 'registered'):
+                            result[str(t.id)] = {'status': 'Registrado', 'class': 'success'}
+                        elif reg_state in ('Unregistered', 'unregistered'):
+                            result[str(t.id)] = {'status': 'No Registrado', 'class': 'warning'}
+                        elif reg_state in ('Rejected', 'rejected'):
+                            result[str(t.id)] = {'status': 'Rechazado', 'class': 'error'}
+                        else:
+                            result[str(t.id)] = {'status': reg_state, 'class': 'warning'}
+                    else:
+                        # Buscar en endpoints como fallback
+                        if t.name in endpoints:
+                            result[str(t.id)] = {'status': 'No Registrado', 'class': 'warning'}
+                        else:
+                            result[str(t.id)] = {'status': 'No Configurado', 'class': 'gray'}
+                else:
+                    # Troncales sin registro: verificar disponibilidad del endpoint
+                    if t.name in endpoints:
+                        ep = endpoints[t.name]
+                        contacts = ep.get('contacts', [])
+                        if contacts:
+                            result[str(t.id)] = {'status': 'Disponible', 'class': 'success'}
+                        else:
+                            result[str(t.id)] = {'status': 'Sin Contacto', 'class': 'warning'}
+                    else:
+                        result[str(t.id)] = {'status': 'No Encontrado', 'class': 'gray'}
+        except Exception as e:
+            for t in trunks:
+                result[str(t.id)] = {
+                    'status': 'Error',
+                    'class': 'error',
+                    'detail': str(e)
+                }
+        
+        return Response(result)
+
     @action(detail=False, methods=['post'])
     def regenerate_config(self, request):
         """
