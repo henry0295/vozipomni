@@ -247,6 +247,11 @@ configure_firewall() {
                 ufw allow 5060/tcp
                 ufw allow 5060/udp
                 ufw allow 5061/tcp
+                # Allow SIP Trunks
+                ufw allow 5161/udp
+                ufw allow 5162/udp
+                # Allow AMI (solo red interna)
+                ufw allow 5038/tcp
                 # Allow RTP media
                 ufw allow 10000:20000/udp
                 # Allow WebSocket
@@ -270,6 +275,11 @@ configure_firewall() {
                 firewall-cmd --permanent --add-port=5060/tcp
                 firewall-cmd --permanent --add-port=5060/udp
                 firewall-cmd --permanent --add-port=5061/tcp
+                # Allow SIP Trunks
+                firewall-cmd --permanent --add-port=5161/udp
+                firewall-cmd --permanent --add-port=5162/udp
+                # Allow AMI
+                firewall-cmd --permanent --add-port=5038/tcp
                 # Allow RTP
                 firewall-cmd --permanent --add-port=10000-20000/udp
                 # Allow WebSocket
@@ -325,7 +335,8 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 # Asterisk
 ASTERISK_HOST=asterisk
 ASTERISK_AMI_USER=admin
-ASTERISK_AMI_PASSWORD=VoziPOmni2026!
+ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
+ASTERISK_CONFIG_DIR=/etc/asterisk
 ASTERISK_PUBLIC_IP=$SERVER_IP
 
 # Celery
@@ -342,6 +353,42 @@ EMAIL_HOST_PASSWORD=
 EOF
 
     log_success "Archivo de configuración creado"
+}
+
+create_root_env_file() {
+    log_info "Creando archivo .env raíz para Docker Compose..."
+
+    cat > $INSTALL_DIR/.env <<EOF
+# Docker Compose environment variables
+# Generado por install.sh - $(date)
+
+# IP pública del servidor (usada por trunk-nat-transport)
+VOZIPOMNI_IPV4=$SERVER_IP
+
+# Credenciales base de datos
+POSTGRES_DB=vozipomni_db
+POSTGRES_USER=vozipomni_user
+POSTGRES_PASSWORD=$DB_PASSWORD
+
+# Redis
+REDIS_PASSWORD=$REDIS_PASSWORD
+
+# Django
+SECRET_KEY=$SECRET_KEY
+ALLOWED_HOSTS=$SERVER_IP,localhost,127.0.0.1
+CORS_ORIGINS=http://$SERVER_IP,https://$SERVER_IP
+
+# Asterisk AMI
+ASTERISK_AMI_USER=admin
+ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
+
+# Frontend
+NUXT_PUBLIC_API_BASE=/api
+NUXT_PUBLIC_WS_BASE=/ws
+EOF
+
+    chmod 600 $INSTALL_DIR/.env
+    log_success "Archivo .env raíz creado"
 }
 
 update_docker_compose() {
@@ -534,6 +581,10 @@ install_vozipomni() {
     
     # Create environment file
     create_env_file
+    echo ""
+
+    # Create root .env for Docker Compose
+    create_root_env_file
     echo ""
     
     # Update docker-compose
