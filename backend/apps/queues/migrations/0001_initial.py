@@ -63,4 +63,21 @@ class Migration(migrations.Migration):
                 'db_table': 'queue_stats',
             },
         ),
+        migrations.CreateModel(
+            name='QueueMember',
+            fields=[
+                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('penalty', models.IntegerField(default=0, verbose_name='Penalización')),
+                ('paused', models.BooleanField(default=False, verbose_name='Pausado')),
+                ('calls_taken', models.IntegerField(default=0, verbose_name='Llamadas atendidas')),
+                ('last_call', models.DateTimeField(blank=True, null=True, verbose_name='Última llamada')),
+                ('added_at', models.DateTimeField(auto_now_add=True)),
+                ('queue', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='members', to='queues.queue')),
+            ],
+            options={
+                'verbose_name': 'Miembro de Cola',
+                'verbose_name_plural': 'Miembros de Colas',
+                'db_table': 'queue_members',
+            },
+        ),
     ]

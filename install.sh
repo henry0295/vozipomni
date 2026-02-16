@@ -339,7 +339,12 @@ start_services() {
     log_info "Iniciando servicios Docker..."
     
     cd $INSTALL_DIR
-    docker compose down 2>/dev/null || true
+    
+    # Detener servicios y eliminar volúmenes para instalación limpia
+    log_info "Limpiando instalación anterior (si existe)..."
+    docker compose down -v 2>/dev/null || true
+    
+    # Iniciar servicios
     docker compose up -d
     
     log_info "Esperando a que los servicios estén listos..."

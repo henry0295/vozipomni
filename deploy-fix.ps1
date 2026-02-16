@@ -26,7 +26,11 @@ Write-Host "  - backend/apps/queues/migrations/0001_initial.py" -ForegroundColor
 Write-Host "  - backend/apps/queues/migrations/0002_queuemember.py" -ForegroundColor White
 Write-Host "  - backend/apps/telephony/migrations/0001_initial.py" -ForegroundColor White
 Write-Host "  - frontend/nuxt.config.ts" -ForegroundColor White
+Write-Host "  - install.sh (ahora limpia DB en instalaciones nuevas)" -ForegroundColor White
+Write-Host "  - LEEME_PRIMERO.md (resumen de acción inmediata)" -ForegroundColor White
 Write-Host "  - DEPLOY_MIGRATIONS_FIX.md" -ForegroundColor White
+Write-Host "  - deploy-fix.ps1" -ForegroundColor White
+Write-Host "  - update-production.sh" -ForegroundColor White
 Write-Host ""
 
 # Pedir confirmación
@@ -48,7 +52,11 @@ git add backend/apps/queues/migrations/0001_initial.py
 git add backend/apps/queues/migrations/0002_queuemember.py
 git add backend/apps/telephony/migrations/0001_initial.py
 git add frontend/nuxt.config.ts
+git add install.sh
+git add LEEME_PRIMERO.md
 git add DEPLOY_MIGRATIONS_FIX.md
+git add deploy-fix.ps1
+git add update-production.sh
 
 Write-Host "Archivos agregados correctamente" -ForegroundColor Green
 Write-Host ""
@@ -56,13 +64,16 @@ Write-Host ""
 # Hacer commit
 Write-Host "Creando commit..." -ForegroundColor Yellow
 $commitMessage = @"
-Fix: Add all missing initial migrations and fix Nuxt build
-
-- Created initial migrations for: agents, campaigns, contacts, queues, telephony
-- Added QueueMember migration (0002) for circular dependency resolution
+FiReorganized QueueMember migrations to resolve circular dependencies
 - Fixed Nuxt prerender error by removing non-existent routes
-- Added comprehensive deployment documentation
+- Updated install.sh to clean database volumes on fresh installations (docker compose down -v)
+- Added comprehensive deployment documentation and automated scripts
 - Resolves: NodeNotFoundError in production deployments
+- Resolves: Nuxt build failure due to missing sitemap/rss routes
+- Resolves: DuplicateTable error on queue_members
+
+Critical fix for install.sh to work correctly on fresh installations.
+The install script now properly cleans volumes before migr
 - Resolves: Nuxt build failure due to missing sitemap/rss routes
 
 This fix is critical for install.sh to work correctly on fresh installations.
