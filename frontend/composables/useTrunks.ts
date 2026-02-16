@@ -63,13 +63,13 @@ export const useTrunks = () => {
 
   // Obtener estados de registro de todas las troncales (bulk)
   const getTrunkStatuses = async () => {
-    const { data, error } = await apiFetch<Record<string, { status: string; class: string; detail?: string }>>('/trunks/statuses/')
+    const { data, error } = await apiFetch<Record<string, { status: string; class: string; detail?: string }>>('/telephony/trunks/statuses/')
     return { data: data.value, error: error.value }
   }
 
   // Forzar re-registro
   const forceRegister = async (id: number) => {
-    const { data, error } = await apiFetch(`/trunks/${id}/force_register/`, {
+    const { data, error } = await apiFetch(`/telephony/trunks/${id}/force_register/`, {
       method: 'POST'
     })
     return { data: data.value, error: error.value }
@@ -77,7 +77,7 @@ export const useTrunks = () => {
 
   // Preview configuración PJSIP
   const previewConfig = async (id: number) => {
-    const { data, error } = await apiFetch(`/trunks/${id}/preview_config/`)
+    const { data, error } = await apiFetch(`/telephony/trunks/${id}/preview_config/`)
     return { data: data.value, error: error.value }
   }
 
