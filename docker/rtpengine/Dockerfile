@@ -25,7 +25,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
             libjson-glib-dev libpcre3-dev libiptc-dev libmosquitto-dev \
             libwebsockets-dev libspandsp-dev libopus-dev \
             libxmlrpc-core-c3-dev markdown gperf libavfilter-dev \
-            libmariadb-dev pkg-config git \
+            libmariadb-dev libmariadb-dev-compat \
+            libnftnl-dev libmnl-dev \
+            default-libmysqlclient-dev \
+            pkg-config git \
         && cd /tmp && git clone --depth 1 --branch mr12.0 https://github.com/sipwise/rtpengine.git \
         && cd /tmp/rtpengine/daemon && make && cp rtpengine /usr/local/bin/ \
         && cd / && rm -rf /tmp/rtpengine \
