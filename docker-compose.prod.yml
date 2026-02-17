@@ -195,6 +195,7 @@ services:
       - "22222:22222/udp"
       - "23000-23100:23000-23100/udp"
     environment:
+      - VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD:-vozipomni_redis_2026}

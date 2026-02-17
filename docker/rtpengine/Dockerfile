@@ -41,7 +41,11 @@ RUN mkdir -p /var/run/rtpengine
 # Copiar configuración
 COPY rtpengine.conf /etc/rtpengine/rtpengine.conf
 
+# Copiar entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 EXPOSE 22222/udp 23000-23100/udp
 
-# rtpengine puede estar en /usr/sbin o /usr/local/bin
-CMD ["sh", "-c", "exec $(which rtpengine) --config-file=/etc/rtpengine/rtpengine.conf --foreground"]
+# Usar entrypoint
+ENTRYPOINT ["/entrypoint.sh"]
