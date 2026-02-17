@@ -155,7 +155,7 @@ ASTERISK_HOST = config('ASTERISK_HOST', default='asterisk')
 ASTERISK_AMI_PORT = config('ASTERISK_AMI_PORT', default=5038, cast=int)
 ASTERISK_AMI_USER = config('ASTERISK_AMI_USER', default='admin')
 ASTERISK_AMI_PASSWORD = config('ASTERISK_AMI_PASSWORD', default='')
-ASTERISK_CONFIG_DIR = config('ASTERISK_CONFIG_DIR', default='/etc/asterisk')
+ASTERISK_CONFIG_DIR = config('ASTERISK_CONFIG_DIR', default='/var/lib/asterisk/dynamic')
 
 # Celery Configuration
 CELERY_BROKER_URL = REDIS_URL
