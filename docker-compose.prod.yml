@@ -57,6 +57,7 @@ services:
     volumes:
       - media_files:/app/media
       - static_files:/app/static
+      - asterisk_configs:/etc/asterisk/dynamic
       - ./logs:/app/logs
       - ./docker/asterisk/configs:/etc/asterisk
     depends_on:
@@ -136,6 +137,7 @@ services:
       - asterisk_logs:/var/log/asterisk
       - asterisk_spool:/var/spool/asterisk
       - asterisk_lib:/var/lib/asterisk
+      - asterisk_configs:/etc/asterisk/dynamic
       - ./docker/asterisk/configs:/etc/asterisk
     ports:
       # NO exponer 5060 en Asterisk - Kamailio es el proxy SIP externo
@@ -354,6 +356,8 @@ volumes:
   asterisk_spool:
     driver: local
   asterisk_lib:
+    driver: local
+  asterisk_configs:
     driver: local
 
 networks:

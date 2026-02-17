@@ -18,11 +18,11 @@ class PJSIPConfigGenerator:
     """
     
     def __init__(self):
-        # Ruta del archivo de configuración PJSIP
+        # Ruta del archivo de configuración PJSIP (volumen compartido con Asterisk)
         self.config_path = getattr(
             settings, 
             'PJSIP_CONFIG_PATH',
-            '/etc/asterisk/pjsip_wizard.conf'
+            '/etc/asterisk/dynamic/pjsip_wizard.conf'
         )
         
     def generate_trunk_config(self, trunk):

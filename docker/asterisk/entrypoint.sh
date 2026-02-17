@@ -12,17 +12,24 @@
 set -e
 
 CONFIG_DIR="/etc/asterisk"
+DYNAMIC_DIR="${CONFIG_DIR}/dynamic"
 KEYS_DIR="${CONFIG_DIR}/keys"
 
 echo "=== VoziPOmni Asterisk Entrypoint ==="
 
 # -------------------------------------------------------
+# 0. Crear directorio para configuraciones dinámicas
+# -------------------------------------------------------
+mkdir -p "${DYNAMIC_DIR}"
+echo "  [entrypoint] Directorio de configs dinámicas: ${DYNAMIC_DIR}"
+
+# -------------------------------------------------------
 # 1. Archivos de inclusión dinámica (placeholders vacíos)
 # -------------------------------------------------------
 for conf in pjsip_extensions.conf pjsip_wizard.conf extensions_dynamic.conf; do
-    if [ ! -f "${CONFIG_DIR}/${conf}" ]; then
-        echo "; Auto-generated placeholder — managed by VoziPOmni backend" > "${CONFIG_DIR}/${conf}"
-        echo "  [entrypoint] Creado ${conf} (placeholder)"
+    if [ ! -f "${DYNAMIC_DIR}/${conf}" ]; then
+        echo "; Auto-generated placeholder — managed by VoziPOmni backend" > "${DYNAMIC_DIR}/${conf}"
+        echo "  [entrypoint] Creado ${DYNAMIC_DIR}/${conf} (placeholder)"
     fi
 done
 
@@ -72,6 +79,7 @@ fi
 # 4. Permisos
 # -------------------------------------------------------
 chown -R asterisk:asterisk "${CONFIG_DIR}" 2>/dev/null || true
+chown -R asterisk:asterisk "${DYNAMIC_DIR}" 2>/dev/null || true
 chown -R asterisk:asterisk /var/log/asterisk 2>/dev/null || true
 chown -R asterisk:asterisk /var/run/asterisk 2>/dev/null || true
 chown -R asterisk:asterisk /var/spool/asterisk 2>/dev/null || true
