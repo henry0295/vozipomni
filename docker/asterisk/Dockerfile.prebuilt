@@ -1,25 +1,90 @@
-# Dockerfile basado en paquetes de Asterisk (Debian)
-# Más rápido y confiable que compilar desde fuente
-
-FROM debian:bookworm-slim
+# Dockerfile de producción - Asterisk 21 compilado desde fuente
+FROM debian:bookworm-slim AS builder
 
 LABEL maintainer="VoziPOmni Team"
-LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center (Pre-compilado)"
+LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center"
 
-# Instalar Asterisk y dependencias desde paquetes Debian
+# Dependencias de compilación
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    asterisk \
-    asterisk-modules \
-    asterisk-core-sounds-en \
-    asterisk-core-sounds-es \
-    asterisk-moh-opsound-wav \
+    build-essential \
+    git \
+    wget \
+    ca-certificates \
+    libssl-dev \
+    libncurses5-dev \
+    libnewt-dev \
+    libxml2-dev \
+    libsqlite3-dev \
+    uuid-dev \
+    libjansson-dev \
+    libedit-dev \
+    libsrtp2-dev \
+    libopus-dev \
+    libspeex-dev \
+    libspeexdsp-dev \
+    libvorbis-dev \
+    libogg-dev \
+    libgsm1-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Compilar Asterisk 21 desde Git
+WORKDIR /tmp
+RUN git clone --depth 1 --branch 21 https://github.com/asterisk/asterisk.git asterisk-src && \
+    cd asterisk-src && \
+    ./configure --with-jansson-bundled --with-pjproject-bundled --with-crypto --with-ssl --with-srtp && \
+    make menuselect.makeopts && \
+    menuselect/menuselect \
+        --enable app_confbridge \
+        --enable app_queue \
+        --enable app_voicemail \
+        --enable res_http_websocket \
+        --enable res_ari \
+        --enable res_pjsip \
+        --enable res_pjsip_session \
+        --enable chan_pjsip \
+        --enable res_rtp_asterisk \
+        --disable format_mp3 \
+        menuselect.makeopts && \
+    make -j$(nproc) && \
+    make install && \
+    make samples && \
+    cd / && rm -rf /tmp/asterisk-src
+
+# ------- Runtime Stage -------
+FROM debian:bookworm-slim
+
+# Runtime libs (solo las compartidas, sin headers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libssl3 \
+    libncurses6 \
+    libnewt0.52 \
+    libxml2 \
+    libsqlite3-0 \
+    libuuid1 \
+    libjansson4 \
+    libedit2 \
+    libsrtp2-1 \
+    libopus0 \
+    libspeex1 \
+    libspeexdsp1 \
+    libvorbis0a \
+    libogg0 \
+    libgsm1 \
     tzdata \
     curl \
-    wget \
     openssl \
     procps \
     net-tools \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# Copiar Asterisk compilado desde builder
+COPY --from=builder /usr/sbin/asterisk /usr/sbin/asterisk
+COPY --from=builder /usr/lib/asterisk/ /usr/lib/asterisk/
+COPY --from=builder /var/lib/asterisk/ /var/lib/asterisk/
+COPY --from=builder /var/spool/asterisk/ /var/spool/asterisk/
+COPY --from=builder /etc/asterisk/ /etc/asterisk/
 
 # Crear directorios necesarios
 RUN mkdir -p /var/log/asterisk \
@@ -28,15 +93,15 @@ RUN mkdir -p /var/log/asterisk \
              /var/run/asterisk \
              /etc/asterisk/keys
 
-# Copiar configuraciones personalizadas
+# Copiar configuraciones personalizadas (sobreescribe las samples)
 COPY configs/*.conf /etc/asterisk/
 
 # Copiar entrypoint
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# Crear usuario asterisk si no existe
-RUN id asterisk 2>/dev/null || useradd -r -s /bin/false asterisk
+# Crear usuario asterisk
+RUN useradd -r -s /bin/false asterisk
 
 # Asignar permisos
 RUN chown -R asterisk:asterisk /var/lib/asterisk \
@@ -45,11 +110,11 @@ RUN chown -R asterisk:asterisk /var/lib/asterisk \
                                 /var/run/asterisk \
                                 /etc/asterisk 2>/dev/null || true
 
-# Configurar zona horaria (Colombia)
+# Zona horaria Colombia
 ENV TZ=America/Bogota
 RUN ln -sf /usr/share/zoneinfo/America/Bogota /etc/localtime
 
-# Exponer puertos
+# Puertos
 EXPOSE 5060/udp 5060/tcp 5061/tcp 5161/udp 5162/udp 8088 8089 10000-20000/udp
 
 # Healthcheck
@@ -59,5 +124,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Volúmenes
 VOLUME ["/var/lib/asterisk", "/var/spool/asterisk", "/var/log/asterisk"]
 
-# Entrypoint maneja permisos, placeholders, IP inyección y arranca asterisk
+# Entrypoint
 ENTRYPOINT ["/entrypoint.sh"]
