@@ -25,14 +25,10 @@ RUN mkdir -p /etc/kamailio /var/run/kamailio
 COPY kamailio.cfg /etc/kamailio/kamailio.cfg
 COPY kamailio-local.cfg /etc/kamailio/kamailio-local.cfg
 
-# Crear certificados auto-firmados si no existen
-RUN if [ ! -f /etc/kamailio/kamailio-selfsigned.pem ]; then \
-    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout /etc/kamailio/kamailio-selfsigned.key \
-    -out /etc/kamailio/kamailio-selfsigned.pem \
-    -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipOmni/CN=kamailio"; \
-    fi
+# Copiar entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 5060/udp 5060/tcp 5061/tcp 8080/tcp
 
-CMD ["kamailio", "-DD", "-E"]
+ENTRYPOINT ["/entrypoint.sh"]
