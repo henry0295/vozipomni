@@ -22,7 +22,7 @@ class PJSIPConfigGenerator:
         self.config_path = getattr(
             settings, 
             'PJSIP_CONFIG_PATH',
-            '/etc/asterisk/dynamic/pjsip_wizard.conf'
+            '/var/lib/asterisk/dynamic/pjsip_wizard.conf'
         )
         
     def generate_trunk_config(self, trunk):

@@ -27,7 +27,7 @@ class AsteriskConfigGenerator:
     def __init__(self, config_dir=None):
         from django.conf import settings
         # Usar directorio dinámico en volumen compartido con Asterisk
-        self.config_dir = Path(config_dir or getattr(settings, 'ASTERISK_CONFIG_DIR', '/etc/asterisk/dynamic'))
+        self.config_dir = Path(config_dir or getattr(settings, 'ASTERISK_CONFIG_DIR', '/var/lib/asterisk/dynamic'))
     
     def generate_pjsip_extensions_conf(self):
         """

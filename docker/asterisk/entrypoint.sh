@@ -12,7 +12,7 @@
 set -e
 
 CONFIG_DIR="/etc/asterisk"
-DYNAMIC_DIR="${CONFIG_DIR}/dynamic"
+DYNAMIC_DIR="/var/lib/asterisk/dynamic"
 KEYS_DIR="${CONFIG_DIR}/keys"
 
 echo "=== VoziPOmni Asterisk Entrypoint ==="
