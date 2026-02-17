@@ -30,7 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
             default-libmysqlclient-dev \
             pkg-config git \
         && cd /tmp && git clone --depth 1 --branch mr12.0 https://github.com/sipwise/rtpengine.git \
-        && cd /tmp/rtpengine/daemon && make && cp rtpengine /usr/local/bin/ \
+        && cd /tmp/rtpengine/daemon && make rtpengine && cp rtpengine /usr/local/bin/ \
         && cd / && rm -rf /tmp/rtpengine \
     ) \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/keyring.deb
