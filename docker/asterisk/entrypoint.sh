@@ -80,6 +80,7 @@ fi
 # -------------------------------------------------------
 chown -R asterisk:asterisk "${CONFIG_DIR}" 2>/dev/null || true
 chown -R asterisk:asterisk "${DYNAMIC_DIR}" 2>/dev/null || true
+chmod -R 777 "${DYNAMIC_DIR}" 2>/dev/null || true  # Permitir escritura desde backend
 chown -R asterisk:asterisk /var/log/asterisk 2>/dev/null || true
 chown -R asterisk:asterisk /var/run/asterisk 2>/dev/null || true
 chown -R asterisk:asterisk /var/spool/asterisk 2>/dev/null || true
