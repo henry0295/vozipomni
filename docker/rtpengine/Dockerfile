@@ -1,23 +1,36 @@
 # Dockerfile para RTPEngine - WebRTC to VoIP Media Bridge
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instalar dependencias
-RUN apt-get update && apt-get install -y \
+# Instalar dependencias y RTPEngine desde paquetes Debian/Sipwise
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg2 \
     wget \
+    ca-certificates \
     lsb-release \
-    && wget -qO- https://deb.sipwise.com/spce/mr10.5/pool/main/s/sipwise-keyring/sipwise-keyring_3.0_all.deb > /tmp/keyring.deb \
-    && dpkg -i /tmp/keyring.deb \
-    && echo "deb https://deb.sipwise.com/spce/mr10.5/ bullseye main" > /etc/apt/sources.list.d/sipwise.list \
+    iptables \
+    && wget -qO /tmp/keyring.deb https://deb.sipwise.com/spce/mr12.0/pool/main/s/sipwise-keyring/sipwise-keyring_3.0_all.deb \
+    && dpkg -i /tmp/keyring.deb || true \
+    && echo "deb http://deb.sipwise.com/spce/mr12.0/ bookworm main" > /etc/apt/sources.list.d/sipwise.list \
     && apt-get update \
-    && apt-get install -y \
-        ngcp-rtpengine-daemon \
-        ngcp-rtpengine-kernel-dkms \
-        iptables \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/keyring.deb
+    && apt-get install -y --no-install-recommends ngcp-rtpengine-daemon \
+    || ( \
+        echo "Sipwise repo failed, building rtpengine from source..." \
+        && apt-get install -y --no-install-recommends \
+            build-essential dpkg-dev debhelper \
+            libcurl4-openssl-dev libglib2.0-dev libavcodec-dev \
+            libavformat-dev libavutil-dev libswresample-dev \
+            libpcap-dev libssl-dev libevent-dev libhiredis-dev \
+            libjson-glib-dev libpcre3-dev libiptc-dev libmosquitto-dev \
+            libwebsockets-dev libspandsp-dev libopus-dev \
+            libxmlrpc-core-c3-dev markdown gperf libavfilter-dev \
+            libmariadb-dev pkg-config git \
+        && cd /tmp && git clone --depth 1 --branch mr12.0 https://github.com/sipwise/rtpengine.git \
+        && cd /tmp/rtpengine/daemon && make && cp rtpengine /usr/local/bin/ \
+        && cd / && rm -rf /tmp/rtpengine \
+    ) \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/keyring.deb
 
 # Crear directorios
 RUN mkdir -p /var/run/rtpengine
@@ -27,4 +40,5 @@ COPY rtpengine.conf /etc/rtpengine/rtpengine.conf
 
 EXPOSE 22222/udp 23000-23100/udp
 
-CMD ["rtpengine", "--config-file=/etc/rtpengine/rtpengine.conf", "--foreground"]
+# rtpengine puede estar en /usr/sbin o /usr/local/bin
+CMD ["sh", "-c", "exec $(which rtpengine) --config-file=/etc/rtpengine/rtpengine.conf --foreground"]

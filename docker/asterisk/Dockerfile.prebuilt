@@ -1,30 +1,32 @@
-# Dockerfile basado en imagen oficial de Asterisk
+# Dockerfile basado en paquetes de Asterisk (Debian)
 # Más rápido y confiable que compilar desde fuente
 
-FROM andrius/asterisk:21-alpine
+FROM debian:bookworm-slim
 
 LABEL maintainer="VoziPOmni Team"
 LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center (Pre-compilado)"
 
-# Cambiar a root para instalación
-USER root
-
-# Instalar dependencias adicionales si es necesario
-RUN apk add --no-cache \
+# Instalar Asterisk y dependencias desde paquetes Debian
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    asterisk \
+    asterisk-modules \
+    asterisk-core-sounds-en \
+    asterisk-core-sounds-es \
+    asterisk-moh-opsound-wav \
     tzdata \
     curl \
     wget \
     openssl \
-    bash
+    procps \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
 
 # Crear directorios necesarios
 RUN mkdir -p /var/log/asterisk \
              /var/spool/asterisk/monitor \
              /var/spool/asterisk/recording \
-             /etc/asterisk
-
-# Backup de configuraciones por defecto
-RUN cp -r /etc/asterisk /etc/asterisk.backup || true
+             /var/run/asterisk \
+             /etc/asterisk/keys
 
 # Copiar configuraciones personalizadas
 COPY configs/*.conf /etc/asterisk/
@@ -34,7 +36,7 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Crear usuario asterisk si no existe
-RUN adduser -D -H asterisk 2>/dev/null || true
+RUN id asterisk 2>/dev/null || useradd -r -s /bin/false asterisk
 
 # Asignar permisos
 RUN chown -R asterisk:asterisk /var/lib/asterisk \
@@ -44,6 +46,7 @@ RUN chown -R asterisk:asterisk /var/lib/asterisk \
                                 /etc/asterisk 2>/dev/null || true
 
 # Configurar zona horaria (Colombia)
+ENV TZ=America/Bogota
 RUN ln -sf /usr/share/zoneinfo/America/Bogota /etc/localtime
 
 # Exponer puertos
