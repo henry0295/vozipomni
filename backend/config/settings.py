@@ -81,14 +81,34 @@ WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
 # Database
+# Use DATABASE_URL if provided (from docker-compose env), otherwise individual vars
+_db_url = os.environ.get('DATABASE_URL', '')
+if _db_url:
+    import re as _re
+    _m = _re.match(r'postgresql://([^:]+):([^@]+)@([^:]+):([^/]+)/(.+)', _db_url)
+    if _m:
+        _DB_USER, _DB_PASS, _DB_HOST, _DB_PORT, _DB_NAME = _m.groups()
+    else:
+        _DB_NAME = config('DB_NAME', default='vozipomni')
+        _DB_USER = config('DB_USER', default='vozipomni_user')
+        _DB_PASS = config('DB_PASSWORD', default='vozipomni_db_2026')
+        _DB_HOST = config('DB_HOST', default='postgres')
+        _DB_PORT = config('DB_PORT', default='5432')
+else:
+    _DB_NAME = config('DB_NAME', default='vozipomni')
+    _DB_USER = config('DB_USER', default='vozipomni_user')
+    _DB_PASS = config('DB_PASSWORD', default='vozipomni_db_2026')
+    _DB_HOST = config('DB_HOST', default='postgres')
+    _DB_PORT = config('DB_PORT', default='5432')
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='vozipomni_db'),
-        'USER': config('DB_USER', default='vozipomni_user'),
-        'PASSWORD': config('DB_PASSWORD', default='vozipomni_pass_2026'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+        'NAME': _DB_NAME,
+        'USER': _DB_USER,
+        'PASSWORD': _DB_PASS,
+        'HOST': _DB_HOST,
+        'PORT': _DB_PORT,
         'CONN_MAX_AGE': 600,
         'OPTIONS': {
             'connect_timeout': 10,

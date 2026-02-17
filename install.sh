@@ -320,9 +320,9 @@ DEBUG=False
 ALLOWED_HOSTS=$SERVER_IP,localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://$SERVER_IP,https://$SERVER_IP
 
-# Database
+# Database (must match POSTGRES_* in root .env / docker-compose)
 DB_NAME=vozipomni
-DB_USER=vozipomni
+DB_USER=vozipomni_user
 DB_PASSWORD=$DB_PASSWORD
 DB_HOST=postgres
 DB_PORT=5432
@@ -365,8 +365,8 @@ create_root_env_file() {
 # IP pública del servidor (usada por trunk-nat-transport)
 VOZIPOMNI_IPV4=$SERVER_IP
 
-# Credenciales base de datos
-POSTGRES_DB=vozipomni_db
+# Credenciales base de datos (must match DB_* in backend/.env)
+POSTGRES_DB=vozipomni
 POSTGRES_USER=vozipomni_user
 POSTGRES_PASSWORD=$DB_PASSWORD
 
