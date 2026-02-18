@@ -26,8 +26,12 @@ class AsteriskConfigGenerator:
     
     def __init__(self, config_dir=None):
         from django.conf import settings
-        # Usar directorio dinámico en volumen compartido con Asterisk
+        # Directorio dinámico en volumen compartido con Asterisk
+        # Para archivos parciales incluidos via #include desde pjsip.conf/extensions.conf
         self.config_dir = Path(config_dir or getattr(settings, 'ASTERISK_CONFIG_DIR', '/var/lib/asterisk/dynamic'))
+        # Directorio estático de Asterisk para archivos de configuración completos
+        # (voicemail.conf, musiconhold.conf) que Asterisk carga directamente
+        self.static_config_dir = Path('/etc/asterisk')
     
     def generate_pjsip_extensions_conf(self):
         """
@@ -366,21 +370,42 @@ class AsteriskConfigGenerator:
         IMPORTANTE: NO sobrescribe pjsip.conf (contiene transports y templates WebRTC).
         Las extensiones PJSIP van en pjsip_extensions.conf (incluido desde pjsip.conf).
         Las troncales van en pjsip_wizard.conf (manejado por PJSIPConfigGenerator).
+        
+        Archivos parciales (#include) → /var/lib/asterisk/dynamic/ (volumen compartido)
+        Archivos completos (Asterisk los busca en /etc/asterisk/) → /etc/asterisk/
         """
-        configs = {
+        # Archivos parciales que se incluyen via #include desde pjsip.conf/extensions.conf
+        dynamic_configs = {
             'pjsip_extensions.conf': self.generate_pjsip_extensions_conf(),
             'extensions_dynamic.conf': self.generate_extensions_conf(),
+        }
+        
+        # Archivos completos que Asterisk carga directamente desde /etc/asterisk/
+        static_configs = {
             'voicemail.conf': self.generate_voicemail_conf(),
             'musiconhold.conf': self.generate_musiconhold_conf(),
         }
         
-        for filename, content in configs.items():
+        # Escribir archivos dinámicos (parciales)
+        for filename, content in dynamic_configs.items():
             filepath = self.config_dir / filename
             try:
+                filepath.parent.mkdir(parents=True, exist_ok=True)
                 with open(filepath, 'w') as f:
                     f.write(content)
-                logger.info(f"✓ {filename} generado exitosamente")
+                logger.info(f"✓ {filename} generado en {self.config_dir}")
             except Exception as e:
                 logger.error(f"✗ Error generando {filename}: {e}")
         
-        return configs
+        # Escribir archivos estáticos (completos)
+        for filename, content in static_configs.items():
+            filepath = self.static_config_dir / filename
+            try:
+                with open(filepath, 'w') as f:
+                    f.write(content)
+                logger.info(f"✓ {filename} generado en {self.static_config_dir}")
+            except Exception as e:
+                logger.error(f"✗ Error generando {filename}: {e}")
+        
+        all_configs = {**dynamic_configs, **static_configs}
+        return all_configs

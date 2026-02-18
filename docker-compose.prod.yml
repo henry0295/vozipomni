@@ -300,6 +300,7 @@ services:
       - media_files:/app/media
       - ./logs:/app/logs
       - ./docker/asterisk/configs:/etc/asterisk
+      - asterisk_configs:/var/lib/asterisk/dynamic
     depends_on:
       - postgres
       - redis
