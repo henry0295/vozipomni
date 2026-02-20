@@ -1,0 +1,17 @@
+# Forzar LF en scripts de shell (necesarios para contenedores Linux)
+*.sh text eol=lf
+docker/**/*.sh text eol=lf
+docker/**/*.cfg text eol=lf
+docker/**/*.conf text eol=lf
+
+# Archivos de configuración Docker
+Dockerfile* text eol=lf
+docker-compose*.yml text eol=lf
+
+# Python
+*.py text eol=lf
+
+# Mantener CRLF en scripts Windows
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -74,9 +74,20 @@ logs/
 *.md
 !README.md
 
-# Scripts - solo mantener install.sh
-*.sh
+# Scripts raíz - ignorar (se mantienen solo los esenciales)
+/*.sh
 !install.sh
+!init.sh
+!quickstart.sh
+!quick-deploy.sh
+!deploy-server.sh
+!deploy-frontend.sh
+!deploy-frontend-production.sh
+!update-production.sh
+!verify-production.sh
+
+# Scripts Docker - NUNCA ignorar (necesarios para build)
+!docker/**/*.sh
 
 # ps1 ignore
 *.ps1
