@@ -81,6 +81,14 @@ export const useTrunks = () => {
     return { data: data.value, error: error.value }
   }
 
+  // Regenerar configuración PJSIP de todas las troncales
+  const regenerateConfig = async () => {
+    const { data, error } = await apiFetch('/telephony/trunks/regenerate_config/', {
+      method: 'POST'
+    })
+    return { data: data.value, error: error.value }
+  }
+
   return {
     getTrunks,
     getTrunk,
@@ -91,6 +99,7 @@ export const useTrunks = () => {
     testTrunkConnection,
     getTrunkStatuses,
     forceRegister,
-    previewConfig
+    previewConfig,
+    regenerateConfig
   }
 }

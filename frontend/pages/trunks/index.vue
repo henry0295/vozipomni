@@ -103,9 +103,21 @@
               class="inline-block w-2.5 h-2.5 rounded-full"
               :class="statusDotClass(row)"
             ></span>
-            <span class="text-sm" :class="statusTextClass(row)">
-              {{ getAsteriskStatus(row) }}
-            </span>
+            <UTooltip :text="getStatusDetail(row)" :prevent="!getStatusDetail(row)">
+              <span class="text-sm" :class="statusTextClass(row)">
+                {{ getAsteriskStatus(row) }}
+              </span>
+            </UTooltip>
+            <UButton
+              v-if="shouldShowRegenerate(row)"
+              icon="i-heroicons-arrow-path"
+              size="2xs"
+              color="sky"
+              variant="ghost"
+              title="Regenerar configuración PJSIP"
+              :loading="regenerating"
+              @click="regenerateAndRefresh"
+            />
           </div>
         </template>
 
@@ -577,6 +589,7 @@ definePageMeta({
 // ===== ESTADOS =====
 const loading = ref(false)
 const saving = ref(false)
+const regenerating = ref(false)
 const showCreateModal = ref(false)
 const showConfigModal = ref(false)
 const showDeleteModal = ref(false)
@@ -592,7 +605,7 @@ const deletingTrunk = ref<SipTrunk | null>(null)
 const { 
   getTrunks, createTrunk, updateTrunk, deleteTrunk: deleteTrunkApi, 
   toggleTrunkStatus, testTrunkConnection, getTrunkStatuses,
-  forceRegister, previewConfig 
+  forceRegister, previewConfig, regenerateConfig 
 } = useTrunks()
 
 const trunks = ref<SipTrunk[]>([])
@@ -773,6 +786,19 @@ const getAsteriskStatus = (trunk: SipTrunk): string => {
   if (!trunk.is_active) return 'Inactivo'
   const s = trunkStatuses.value[String(trunk.id)]
   return s?.status || 'Consultando...'
+}
+
+const getStatusDetail = (trunk: SipTrunk): string => {
+  if (!trunk.is_active) return ''
+  const s = trunkStatuses.value[String(trunk.id)]
+  return s?.detail || ''
+}
+
+const shouldShowRegenerate = (trunk: SipTrunk): boolean => {
+  if (!trunk.is_active) return false
+  const s = trunkStatuses.value[String(trunk.id)]
+  if (!s) return false
+  return ['No Encontrado', 'No Configurado', 'EP sin Registro'].includes(s.status)
 }
 
 const statusDotClass = (trunk: SipTrunk): string => {
@@ -1013,6 +1039,20 @@ const refreshStatuses = async () => {
     console.error('Error cargando estados:', e)
   } finally {
     loadingStatuses.value = false
+  }
+}
+
+const regenerateAndRefresh = async () => {
+  regenerating.value = true
+  try {
+    await regenerateConfig()
+    // Esperar 3 segundos para que Asterisk aplique la configuración
+    await new Promise(resolve => setTimeout(resolve, 3000))
+    await refreshStatuses()
+  } catch (e) {
+    console.error('Error regenerando configuración:', e)
+  } finally {
+    regenerating.value = false
   }
 }
 

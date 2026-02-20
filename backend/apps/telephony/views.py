@@ -78,6 +78,9 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
         
         GET /api/telephony/trunks/statuses/
         """
+        import logging
+        _logger = logging.getLogger(__name__)
+        
         trunks = SIPTrunk.objects.filter(is_active=True)
         result = {}
         
@@ -89,31 +92,71 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                     result[str(t.id)] = {
                         'status': 'Desconectado',
                         'class': 'error',
-                        'detail': 'No se pudo conectar a Asterisk'
+                        'detail': 'No se pudo conectar a Asterisk AMI'
                     }
                 return Response(result)
             
             # Obtener endpoints y registros en una sola sesión
             endpoints = ami.pjsip_show_endpoints() or {}
-            registrations = ami.pjsip_show_registrations() if hasattr(ami, 'pjsip_show_registrations') else {}
-            ami.disconnect()
+            registrations = ami.pjsip_show_registrations() or {}
 
-            import logging
-            _logger = logging.getLogger(__name__)
-            _logger.info(f"AMI endpoints: {list(endpoints.keys())}")
-            _logger.info(f"AMI registrations: {list(registrations.keys())}")
+            _logger.info(f"AMI endpoints encontrados: {list(endpoints.keys())}")
+            _logger.info(f"AMI registrations encontradas: {list(registrations.keys())}")
+            _logger.info(f"Troncales activas en BD: {[t.name for t in trunks]}")
+
+            # Crear mapas case-insensitive para búsqueda flexible
+            ep_lower_map = {k.lower(): v for k, v in endpoints.items()}
+            reg_lower_map = {k.lower(): v for k, v in registrations.items()}
+
+            def find_endpoint(name):
+                """Buscar endpoint por nombre con variantes"""
+                # 1. Búsqueda exacta
+                if name in endpoints:
+                    return endpoints[name]
+                # 2. Case-insensitive
+                if name.lower() in ep_lower_map:
+                    return ep_lower_map[name.lower()]
+                # 3. Reemplazar guiones por underscores y viceversa
+                alt_name = name.replace('-', '_')
+                if alt_name in endpoints:
+                    return endpoints[alt_name]
+                if alt_name.lower() in ep_lower_map:
+                    return ep_lower_map[alt_name.lower()]
+                alt_name2 = name.replace('_', '-')
+                if alt_name2 in endpoints:
+                    return endpoints[alt_name2]
+                if alt_name2.lower() in ep_lower_map:
+                    return ep_lower_map[alt_name2.lower()]
+                return None
+
+            def find_registration(name):
+                """Buscar registration por nombre con variantes"""
+                variants = [
+                    name, f"{name}-reg",
+                    name.replace('-', '_'), f"{name.replace('-', '_')}-reg",
+                    name.replace('_', '-'), f"{name.replace('_', '-')}-reg",
+                ]
+                for v in variants:
+                    if v in registrations:
+                        return registrations[v]
+                    if v.lower() in reg_lower_map:
+                        return reg_lower_map[v.lower()]
+                return None
 
             for t in trunks:
-                ep_found = t.name in endpoints
-                ep = endpoints.get(t.name, {})
-                contacts = ep.get('contacts', [])
+                ep = find_endpoint(t.name)
+                ep_found = ep is not None
+                contacts = ep.get('contacts', []) if ep else []
                 has_avail_contact = any(c.get('available') for c in contacts) if contacts else False
+
+                _logger.info(f"Troncal '{t.name}': ep_found={ep_found}, sends_reg={t.sends_registration}, contacts={len(contacts)}")
 
                 if t.sends_registration:
                     # Troncales con registro: verificar estado de registro
-                    reg = registrations.get(t.name) or registrations.get(f"{t.name}-reg")
+                    reg = find_registration(t.name)
                     if reg:
                         reg_state = reg.get('status', 'Unknown')
+                        _logger.info(f"  Registration '{t.name}': state={reg_state}")
                         if reg_state in ('Registered',):
                             result[str(t.id)] = {'status': 'Registrado', 'class': 'success'}
                         elif reg_state in ('Unregistered',):
@@ -131,7 +174,28 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                         else:
                             result[str(t.id)] = {'status': 'Sin Registro', 'class': 'warning'}
                     else:
-                        result[str(t.id)] = {'status': 'No Configurado', 'class': 'gray'}
+                        # Fallback: verificación individual
+                        _logger.info(f"  Fallback individual para '{t.name}' (registration)")
+                        reg_check = ami.pjsip_check_registration(t.name)
+                        if reg_check:
+                            reg_state = reg_check.get('status', 'Unknown')
+                            if reg_state == 'Registered':
+                                result[str(t.id)] = {'status': 'Registrado', 'class': 'success'}
+                            elif reg_state == 'Attempting':
+                                result[str(t.id)] = {'status': 'Conectando...', 'class': 'warning'}
+                            elif reg_state in ('Rejected', 'Failed'):
+                                result[str(t.id)] = {'status': 'Rechazado', 'class': 'error'}
+                            else:
+                                result[str(t.id)] = {'status': 'No Registrado', 'class': 'warning'}
+                        else:
+                            # Verificar si al menos el endpoint existe
+                            ep_check = ami.pjsip_check_endpoint(t.name)
+                            if ep_check:
+                                result[str(t.id)] = {'status': 'EP sin Registro', 'class': 'warning',
+                                                     'detail': 'Endpoint existe pero no hay registro activo'}
+                            else:
+                                result[str(t.id)] = {'status': 'No Configurado', 'class': 'gray',
+                                                     'detail': 'Endpoint no encontrado en Asterisk. Regenere la configuración.'}
                 else:
                     # Troncales sin registro: verificar endpoint y contactos
                     if ep_found:
@@ -142,14 +206,32 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                         else:
                             result[str(t.id)] = {'status': 'Sin Contacto', 'class': 'warning'}
                     else:
-                        result[str(t.id)] = {'status': 'No Encontrado', 'class': 'gray'}
+                        # Fallback: verificación individual
+                        _logger.info(f"  Fallback individual para '{t.name}' (endpoint)")
+                        ep_check = ami.pjsip_check_endpoint(t.name)
+                        if ep_check:
+                            ep_contacts = ep_check.get('contacts', [])
+                            if any(c.get('available') for c in ep_contacts):
+                                result[str(t.id)] = {'status': 'Disponible', 'class': 'success'}
+                            elif ep_contacts:
+                                result[str(t.id)] = {'status': 'Inalcanzable', 'class': 'warning'}
+                            else:
+                                result[str(t.id)] = {'status': 'Sin Contacto', 'class': 'warning'}
+                        else:
+                            result[str(t.id)] = {'status': 'No Encontrado', 'class': 'gray',
+                                                 'detail': 'Endpoint no encontrado en Asterisk. Regenere la configuración.'}
+            
+            ami.disconnect()
+            
         except Exception as e:
+            _logger.error(f"Error general consultando estados AMI: {e}", exc_info=True)
             for t in trunks:
-                result[str(t.id)] = {
-                    'status': 'Error',
-                    'class': 'error',
-                    'detail': str(e)
-                }
+                if str(t.id) not in result:
+                    result[str(t.id)] = {
+                        'status': 'Error',
+                        'class': 'error',
+                        'detail': str(e)
+                    }
         
         return Response(result)
 
