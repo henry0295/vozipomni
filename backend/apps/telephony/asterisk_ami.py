@@ -89,6 +89,28 @@ class AsteriskAMI:
                 break
         return response.decode('utf-8', errors='ignore')
 
+    @staticmethod
+    def _strip_ami_output_prefix(response: str) -> str:
+        """
+        Preprocesa la respuesta de AMI 'Action: Command'.
+        Asterisk AMI envuelve cada línea de salida CLI con el prefijo 'Output: '.
+        Este método lo elimina para que el parser trabaje con la salida CLI pura.
+        También elimina las líneas de cabecera AMI (Response:, Privilege:, etc.).
+        """
+        cleaned_lines = []
+        for line in response.split('\n'):
+            line = line.rstrip('\r')
+            # Eliminar prefijo 'Output: ' o 'Output:'
+            if line.startswith('Output: '):
+                line = line[8:]
+            elif line.startswith('Output:'):
+                line = line[7:]
+            # Omitir cabeceras AMI internas
+            elif line.startswith(('Response:', 'Privilege:', 'ActionID:')):
+                continue
+            cleaned_lines.append(line)
+        return '\n'.join(cleaned_lines)
+
     def _read_command_response(self, timeout=5):
         """
         Leer respuesta completa de Action: Command.
@@ -169,10 +191,13 @@ class AsteriskAMI:
 
         try:
             self._send_command("Action: Command\r\nCommand: pjsip show endpoints\r\n\r\n")
-            response = self._read_command_response(timeout=10)
+            raw_response = self._read_command_response(timeout=10)
 
-            logger.info(f"AMI pjsip show endpoints respuesta ({len(response)} bytes)")
-            logger.debug(f"AMI pjsip show endpoints RAW:\n{response[:2000]}")
+            logger.info(f"AMI pjsip show endpoints respuesta ({len(raw_response)} bytes)")
+            logger.debug(f"AMI pjsip show endpoints RAW:\n{raw_response[:2000]}")
+
+            # Limpiar prefijo 'Output:' que AMI agrega a cada línea
+            response = self._strip_ami_output_prefix(raw_response)
 
             endpoints = {}
             current_ep = None
@@ -248,10 +273,13 @@ class AsteriskAMI:
 
         try:
             self._send_command("Action: Command\r\nCommand: pjsip show registrations\r\n\r\n")
-            response = self._read_command_response(timeout=10)
+            raw_response = self._read_command_response(timeout=10)
 
-            logger.info(f"AMI pjsip show registrations respuesta ({len(response)} bytes)")
-            logger.debug(f"AMI pjsip show registrations RAW:\n{response[:2000]}")
+            logger.info(f"AMI pjsip show registrations respuesta ({len(raw_response)} bytes)")
+            logger.debug(f"AMI pjsip show registrations RAW:\n{raw_response[:2000]}")
+
+            # Limpiar prefijo 'Output:' que AMI agrega a cada línea
+            response = self._strip_ami_output_prefix(raw_response)
 
             registrations = {}
 
@@ -325,9 +353,12 @@ class AsteriskAMI:
 
         try:
             self._send_command(f"Action: Command\r\nCommand: pjsip show endpoint {endpoint_name}\r\n\r\n")
-            response = self._read_command_response(timeout=8)
+            raw_response = self._read_command_response(timeout=8)
 
-            logger.debug(f"pjsip show endpoint {endpoint_name}: {len(response)} bytes")
+            logger.debug(f"pjsip show endpoint {endpoint_name}: {len(raw_response)} bytes")
+
+            # Limpiar prefijo 'Output:' que AMI agrega a cada línea
+            response = self._strip_ami_output_prefix(raw_response)
 
             # Si la respuesta contiene "Unable to retrieve" o "not found", no existe
             if 'Unable to retrieve' in response or 'not found' in response.lower():
@@ -387,9 +418,12 @@ class AsteriskAMI:
             
             for name in names_to_try:
                 self._send_command(f"Action: Command\r\nCommand: pjsip show registration {name}\r\n\r\n")
-                response = self._read_command_response(timeout=8)
+                raw_response = self._read_command_response(timeout=8)
 
-                logger.debug(f"pjsip show registration {name}: {len(response)} bytes")
+                logger.debug(f"pjsip show registration {name}: {len(raw_response)} bytes")
+
+                # Limpiar prefijo 'Output:' que AMI agrega a cada línea
+                response = self._strip_ami_output_prefix(raw_response)
 
                 if 'Unable to retrieve' in response or 'not found' in response.lower():
                     continue
