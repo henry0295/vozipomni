@@ -146,8 +146,10 @@ class AsteriskAMI:
         try:
             self._send_command(f"Action: ModuleLoad\r\nLoadType: reload\r\nModule: {module_name}\r\n\r\n")
             response = self._read_response()
-            logger.info(f"Módulo {module_name} recargado")
-            return 'Success' in response
+            # AMI puede responder 'Success' o no contener 'Error'
+            success = 'Success' in response or ('Error' not in response and 'Response:' in response)
+            logger.info(f"Módulo {module_name} recargado (success={success}, resp={response[:200].strip()})")
+            return success
         except Exception as e:
             logger.error(f"Error recargando módulo {module_name}: {e}")
             return False

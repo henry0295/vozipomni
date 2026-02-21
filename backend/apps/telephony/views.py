@@ -223,22 +223,29 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
             
             ami.disconnect()
 
-            # Auto-regenerar config si hay troncales sin endpoint
+            # Auto-regenerar config si hay troncales sin endpoint (con cooldown de 120s)
             not_found_ids = [tid for tid, info in result.items() if info.get('status') in ('No Encontrado', 'No Configurado')]
             if not_found_ids:
-                _logger.info(f"Troncales sin endpoint ({len(not_found_ids)}), intentando auto-regenerar config PJSIP...")
-                try:
-                    from .pjsip_config_generator import PJSIPConfigGenerator
-                    gen = PJSIPConfigGenerator()
-                    success, msg = gen.save_and_reload()
-                    if success:
-                        _logger.info(f"✓ Config PJSIP auto-regenerada: {msg}")
-                        for tid in not_found_ids:
-                            result[tid]['detail'] = 'Configuración regenerada. Actualice en unos segundos.'
-                    else:
-                        _logger.warning(f"✗ Error auto-regenerando config: {msg}")
-                except Exception as regen_err:
-                    _logger.warning(f"Error en auto-regeneración: {regen_err}")
+                import time as _time
+                _now = _time.time()
+                _last_regen = getattr(SIPTrunkViewSet, '_last_auto_regen', 0)
+                if _now - _last_regen > 120:  # Cooldown: máximo una vez cada 2 minutos
+                    SIPTrunkViewSet._last_auto_regen = _now
+                    _logger.info(f"Troncales sin endpoint ({len(not_found_ids)}), intentando auto-regenerar config PJSIP...")
+                    try:
+                        from .pjsip_config_generator import PJSIPConfigGenerator
+                        gen = PJSIPConfigGenerator()
+                        success, msg = gen.save_and_reload()
+                        if success:
+                            _logger.info(f"✓ Config PJSIP auto-regenerada: {msg}")
+                            for tid in not_found_ids:
+                                result[tid]['detail'] = 'Configuración regenerada. Actualice en unos segundos.'
+                        else:
+                            _logger.warning(f"✗ Error auto-regenerando config: {msg}")
+                    except Exception as regen_err:
+                        _logger.warning(f"Error en auto-regeneración: {regen_err}")
+                else:
+                    _logger.debug(f"Auto-regeneración omitida (cooldown, faltan {120 - (_now - _last_regen):.0f}s)")
         
         except Exception as e:
             _logger.error(f"Error general consultando estados AMI: {e}", exc_info=True)

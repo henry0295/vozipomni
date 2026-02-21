@@ -529,20 +529,28 @@ class PJSIPConfigGenerator:
         """
         try:
             from .asterisk_ami import AsteriskAMI
+            import time
             
             ami = AsteriskAMI()
             if not ami.connect():
                 return False, "No se pudo conectar a Asterisk AMI"
             
-            # Recargar módulo PJSIP
-            success = ami.reload_module('res_pjsip.so')
+            # 1. Recargar el módulo wizard primero para que re-lea la config
+            ami.reload_module('res_pjsip_config_wizard.so')
+            time.sleep(1)
+            
+            # 2. Recargar res_pjsip.so para aplicar los cambios
+            ami.reload_module('res_pjsip.so')
+            time.sleep(1)
+            
+            # 3. Ejecutar 'pjsip reload' como fallback final vía CLI
+            ami._send_command("Action: Command\r\nCommand: pjsip reload\r\n\r\n")
+            ami._read_command_response(timeout=5)
+            
             ami.disconnect()
             
-            if success:
-                logger.info("✓ PJSIP recargado exitosamente")
-                return True, "PJSIP recargado exitosamente"
-            else:
-                return False, "Error recargando PJSIP"
+            logger.info("✓ PJSIP recargado exitosamente (wizard + pjsip reload)")
+            return True, "PJSIP recargado exitosamente"
                 
         except Exception as e:
             error_msg = f"Error recargando PJSIP: {str(e)}"
