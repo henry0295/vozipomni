@@ -240,6 +240,23 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                 except Exception as regen_err:
                     _logger.warning(f"Error en auto-regeneración: {regen_err}")
         
+        except Exception as e:
+            _logger.error(f"Error general consultando estados AMI: {e}", exc_info=True)
+            for t in trunks:
+                if str(t.id) not in result:
+                    result[str(t.id)] = {
+                        'status': 'Error',
+                        'class': 'error',
+                        'detail': str(e)
+                    }
+        
+        return Response(result)
+    
+    @action(detail=False, methods=['post'])
+    def regenerate_config(self, request):
+        """
+        Regenerar configuración PJSIP y recargar Asterisk
+        
         POST /api/telephony/trunks/regenerate_config/
         """
         try:
