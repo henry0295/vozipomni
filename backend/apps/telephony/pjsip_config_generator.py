@@ -24,6 +24,45 @@ class PJSIPConfigGenerator:
             'PJSIP_CONFIG_PATH',
             '/var/lib/asterisk/dynamic/pjsip_wizard.conf'
         )
+    
+    @staticmethod
+    def _format_callerid(trunk):
+        """
+        Formatea el Caller ID en el formato PJSIP: "Nombre" <número>
+        Si no hay nombre, usa el número como nombre.
+        """
+        if not trunk.caller_id:
+            return None
+        name = trunk.caller_id_name if trunk.caller_id_name else trunk.caller_id
+        return f'"{name}" <{trunk.caller_id}>'
+    
+    def _apply_callerid_config(self, trunk, config_lines):
+        """
+        Aplica configuración de Caller ID al endpoint:
+        - Formatea callerid correctamente
+        - Auto-configura from_user si está vacío
+        - Habilita send_pai/send_rpid para transmitir la identidad
+        """
+        callerid = self._format_callerid(trunk)
+        if callerid:
+            config_lines.append(f"endpoint/callerid={callerid}")
+            # Si from_user no está configurado, usar caller_id como from_user
+            # para que aparezca en el header SIP From:
+            if not trunk.from_user:
+                config_lines.append(f"endpoint/from_user={trunk.caller_id}")
+        
+        # Identidad avanzada
+        if trunk.trust_id_inbound:
+            config_lines.append("endpoint/trust_id_inbound=yes")
+        # trust_id_outbound: habilitar si hay caller_id o si está explícitamente activado
+        if trunk.trust_id_outbound or trunk.caller_id:
+            config_lines.append("endpoint/trust_id_outbound=yes")
+        # send_pai: enviar P-Asserted-Identity si hay caller_id o está activado
+        if trunk.send_pai or trunk.caller_id:
+            config_lines.append("endpoint/send_pai=yes")
+        # send_rpid: enviar Remote-Party-ID si hay caller_id o está activado
+        if trunk.send_rpid or trunk.caller_id:
+            config_lines.append("endpoint/send_rpid=yes")
         
     def generate_trunk_config(self, trunk):
         """
@@ -127,19 +166,8 @@ class PJSIPConfigGenerator:
         if trunk.from_domain:
             config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
         
-        # Caller ID
-        if trunk.caller_id:
-            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
-        
-        # Identidad y caller ID avanzado
-        if trunk.trust_id_inbound:
-            config_lines.append("endpoint/trust_id_inbound=yes")
-        if trunk.trust_id_outbound:
-            config_lines.append("endpoint/trust_id_outbound=yes")
-        if trunk.send_pai:
-            config_lines.append("endpoint/send_pai=yes")
-        if trunk.send_rpid:
-            config_lines.append("endpoint/send_rpid=yes")
+        # Caller ID e identidad
+        self._apply_callerid_config(trunk, config_lines)
         
         # Registro (si está habilitado)
         if trunk.sends_registration and trunk.registration_server_uri:
@@ -222,19 +250,8 @@ class PJSIPConfigGenerator:
         if trunk.from_domain:
             config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
         
-        # Caller ID
-        if trunk.caller_id:
-            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
-        
-        # Identidad avanzada
-        if trunk.trust_id_inbound:
-            config_lines.append("endpoint/trust_id_inbound=yes")
-        if trunk.trust_id_outbound:
-            config_lines.append("endpoint/trust_id_outbound=yes")
-        if trunk.send_pai:
-            config_lines.append("endpoint/send_pai=yes")
-        if trunk.send_rpid:
-            config_lines.append("endpoint/send_rpid=yes")
+        # Caller ID e identidad
+        self._apply_callerid_config(trunk, config_lines)
         
         # Registro
         if trunk.sends_registration and trunk.registration_server_uri:
@@ -308,21 +325,13 @@ class PJSIPConfigGenerator:
         if trunk.outbound_auth_username:
             config_lines.append(f"outbound_auth/username={trunk.outbound_auth_username}")
             config_lines.append(f"outbound_auth/password={trunk.outbound_auth_password}")
-            config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
+            if trunk.from_user:
+                config_lines.append(f"endpoint/from_user={trunk.from_user}")
+            else:
+                config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
         
-        # Caller ID
-        if trunk.caller_id:
-            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
-        
-        # Identidad avanzada
-        if trunk.trust_id_inbound:
-            config_lines.append("endpoint/trust_id_inbound=yes")
-        if trunk.trust_id_outbound:
-            config_lines.append("endpoint/trust_id_outbound=yes")
-        if trunk.send_pai:
-            config_lines.append("endpoint/send_pai=yes")
-        if trunk.send_rpid:
-            config_lines.append("endpoint/send_rpid=yes")
+        # Caller ID e identidad
+        self._apply_callerid_config(trunk, config_lines)
         
         config_lines.append("")
         return "\n".join(config_lines)
@@ -373,6 +382,15 @@ class PJSIPConfigGenerator:
         # Remote host
         remote_host = f"{trunk.host}:{trunk.port}" if trunk.port != 5060 else trunk.host
         config_lines.append(f"remote_hosts={remote_host}")
+        
+        # From User/Domain
+        if trunk.from_user:
+            config_lines.append(f"endpoint/from_user={trunk.from_user}")
+        if trunk.from_domain:
+            config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
+        
+        # Caller ID e identidad
+        self._apply_callerid_config(trunk, config_lines)
         
         config_lines.append("")
         return "\n".join(config_lines)
@@ -432,19 +450,8 @@ class PJSIPConfigGenerator:
         if trunk.from_domain:
             config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
         
-        # Caller ID
-        if trunk.caller_id:
-            config_lines.append(f"endpoint/callerid={trunk.caller_id}")
-        
-        # Identidad avanzada
-        if trunk.trust_id_inbound:
-            config_lines.append("endpoint/trust_id_inbound=yes")
-        if trunk.trust_id_outbound:
-            config_lines.append("endpoint/trust_id_outbound=yes")
-        if trunk.send_pai:
-            config_lines.append("endpoint/send_pai=yes")
-        if trunk.send_rpid:
-            config_lines.append("endpoint/send_rpid=yes")
+        # Caller ID e identidad
+        self._apply_callerid_config(trunk, config_lines)
         
         if trunk.sends_registration and trunk.registration_server_uri:
             config_lines.append(f"registration/server_uri={trunk.registration_server_uri}")
