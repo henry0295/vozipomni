@@ -97,10 +97,36 @@ class AsteriskConfigGenerator:
         
         return '\n'.join(config)
     
+    @staticmethod
+    def _ensure_pattern_prefix(pattern):
+        """
+        Asegurar que los patrones de Asterisk tengan el prefijo '_'.
+        En Asterisk 21, los patrones (X, Z, N, ., !) DEBEN empezar con '_'
+        para ser tratados como patrones y no como extensiones literales.
+        Ref: https://docs.asterisk.org/Asterisk_21_Documentation/
+        """
+        if not pattern:
+            return pattern
+        # Si ya tiene _, dejarlo
+        if pattern.startswith('_'):
+            return pattern
+        # Si contiene caracteres de patrón Asterisk, agregar _
+        pattern_chars = set('XZNxzn.![]')
+        if any(c in pattern_chars for c in pattern):
+            return f'_{pattern}'
+        return pattern
+    
     def generate_extensions_conf(self):
         """
         Genera extensions_dynamic.conf con el dialplan dinámico.
-        Complementa el extensions.conf estático que tiene los contextos base.
+        
+        IMPORTANTE: Usa [from-internal] como nombre de contexto para que
+        Asterisk lo fusione (merge) con el [from-internal] del extensions.conf
+        estático. Así las extensiones dinámicas y rutas salientes quedan
+        accesibles desde el mismo contexto que usan los endpoints PJSIP.
+        
+        Ref: https://docs.asterisk.org/Asterisk_21_Documentation/
+        "Contexts can be defined more than once; entries are merged."
         """
         config = [
             "; ==========================================================================",
@@ -109,8 +135,8 @@ class AsteriskConfigGenerator:
             "; NO EDITAR MANUALMENTE - Los cambios se perderán",
             "; ==========================================================================",
             "",
-            "; ====== EXTENSIONES INTERNAS DINÁMICAS ======",
-            "[from-internal-dynamic]",
+            "; ====== EXTENSIONES INTERNAS + RUTAS SALIENTES (merge con from-internal) ======",
+            "[from-internal]",
         ]
         
         # Agregar extensiones internas
@@ -151,13 +177,13 @@ class AsteriskConfigGenerator:
         except Exception as e:
             logger.warning(f"No se pudieron generar extensiones de colas: {e}")
         
-        # Rutas entrantes (DIDs) para contexto from-pstn
+        # Rutas entrantes (DIDs) - merge con [from-pstn] estático
         inbound_routes = InboundRoute.objects.filter(is_active=True).order_by('priority')
         if inbound_routes.exists():
             config.extend([
                 "",
                 "; ====== RUTAS ENTRANTES (DIDs) DINÁMICAS ======",
-                "[from-pstn-dynamic]",
+                "[from-pstn]",
             ])
             
             for route in inbound_routes:
@@ -185,18 +211,19 @@ class AsteriskConfigGenerator:
                     "",
                 ])
         
-        # Rutas salientes (ordenadas por prioridad)
+        # Rutas salientes - dentro del MISMO contexto [from-internal]
+        # para que sean alcanzables cuando un endpoint marca un número externo
         outbound_routes = OutboundRoute.objects.filter(is_active=True).select_related('trunk').order_by('priority', 'name')
         if outbound_routes.exists():
             config.extend([
                 "",
                 "; ====== RUTAS SALIENTES DINÁMICAS ======",
-                "[from-internal-outbound]",
+                "; (en from-internal para que los endpoints las alcancen)",
             ])
             
             for route in outbound_routes:
-                # Usar pattern de Asterisk directamente (soporta _X., _NXXNXXXXXX, etc.)
-                pattern = route.pattern
+                # Asegurar prefijo _ en patrones (requerido por Asterisk)
+                pattern = self._ensure_pattern_prefix(route.pattern)
                 ring_time = route.ring_time or 60
                 dial_options = route.dial_options or 'trg'
                 
