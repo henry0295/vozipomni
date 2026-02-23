@@ -211,14 +211,15 @@ class AsteriskConfigGenerator:
                     "",
                 ])
         
-        # Rutas salientes - dentro del MISMO contexto [from-internal]
-        # para que sean alcanzables cuando un endpoint marca un número externo
+        # Rutas salientes - RE-ABRIR contexto [from-internal]
+        # Es necesario porque si hay rutas entrantes, el contexto activo es [from-pstn]
         outbound_routes = OutboundRoute.objects.filter(is_active=True).select_related('trunk').order_by('priority', 'name')
         if outbound_routes.exists():
             config.extend([
                 "",
                 "; ====== RUTAS SALIENTES DINÁMICAS ======",
-                "; (en from-internal para que los endpoints las alcancen)",
+                "; Re-abrir [from-internal] para que los endpoints las alcancen",
+                "[from-internal]",
             ])
             
             for route in outbound_routes:
@@ -438,20 +439,18 @@ class AsteriskConfigGenerator:
         Archivos parciales (#include) → /var/lib/asterisk/dynamic/ (volumen compartido)
         Archivos completos (Asterisk los busca en /etc/asterisk/) → /etc/asterisk/
         """
-        # Archivos parciales que se incluyen via #include desde pjsip.conf/extensions.conf
+        # TODOS los archivos van al directorio dinámico (volumen compartido)
+        # /etc/asterisk/ es un bind mount de solo lectura desde el host
+        # Los archivos estáticos (voicemail.conf, etc.) se incluyen via #include
         dynamic_configs = {
             'pjsip_extensions.conf': self.generate_pjsip_extensions_conf(),
             'extensions_dynamic.conf': self.generate_extensions_conf(),
             'queues_dynamic.conf': self.generate_queues_dynamic_conf(),
+            'voicemail_dynamic.conf': self.generate_voicemail_conf(),
+            'musiconhold_dynamic.conf': self.generate_musiconhold_conf(),
         }
         
-        # Archivos completos que Asterisk carga directamente desde /etc/asterisk/
-        static_configs = {
-            'voicemail.conf': self.generate_voicemail_conf(),
-            'musiconhold.conf': self.generate_musiconhold_conf(),
-        }
-        
-        # Escribir archivos dinámicos (parciales)
+        # Escribir todos los archivos al directorio dinámico
         for filename, content in dynamic_configs.items():
             filepath = self.config_dir / filename
             try:
@@ -462,15 +461,4 @@ class AsteriskConfigGenerator:
             except Exception as e:
                 logger.error(f"✗ Error generando {filename}: {e}")
         
-        # Escribir archivos estáticos (completos)
-        for filename, content in static_configs.items():
-            filepath = self.static_config_dir / filename
-            try:
-                with open(filepath, 'w') as f:
-                    f.write(content)
-                logger.info(f"✓ {filename} generado en {self.static_config_dir}")
-            except Exception as e:
-                logger.error(f"✗ Error generando {filename}: {e}")
-        
-        all_configs = {**dynamic_configs, **static_configs}
-        return all_configs
+        return dynamic_configs
