@@ -154,7 +154,7 @@ REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 ASTERISK_HOST = config('ASTERISK_HOST', default='asterisk')
 ASTERISK_AMI_PORT = config('ASTERISK_AMI_PORT', default=5038, cast=int)
 ASTERISK_AMI_USER = config('ASTERISK_AMI_USER', default='admin')
-ASTERISK_AMI_PASSWORD = config('ASTERISK_AMI_PASSWORD', default='')
+ASTERISK_AMI_PASSWORD = config('ASTERISK_AMI_PASSWORD', default='vozipomni_ami_2026')
 ASTERISK_CONFIG_DIR = config('ASTERISK_CONFIG_DIR', default='/var/lib/asterisk/dynamic')
 
 # Celery Configuration
@@ -246,12 +246,12 @@ CORS_ALLOW_HEADERS = [
 # Configuración adicional para depuración
 CORS_PREFLIGHT_MAX_AGE = 86400  # 24 horas
 
-# Asterisk Configuration
+# Asterisk Configuration (dict para acceso unificado)
 ASTERISK_CONFIG = {
-    'HOST': config('ASTERISK_HOST', default='localhost'),
-    'AMI_PORT': config('ASTERISK_AMI_PORT', default=5038, cast=int),
-    'AMI_USERNAME': config('ASTERISK_AMI_USER', default='admin'),
-    'AMI_PASSWORD': config('ASTERISK_AMI_PASSWORD', default='vozipomni_ami_2026'),
+    'HOST': ASTERISK_HOST,
+    'AMI_PORT': ASTERISK_AMI_PORT,
+    'AMI_USERNAME': ASTERISK_AMI_USER,
+    'AMI_PASSWORD': ASTERISK_AMI_PASSWORD,
     'SIP_PORT': 5060,
     'WEBRTC_PORT': 8088,
     'RTP_START': 10000,

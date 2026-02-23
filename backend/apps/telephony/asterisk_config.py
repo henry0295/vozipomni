@@ -129,6 +129,28 @@ class AsteriskConfigGenerator:
                 "",
             ])
         
+        # Extensiones de colas (marcar extensión de la cola → Queue())
+        try:
+            from apps.queues.models import Queue
+            queues = Queue.objects.filter(is_active=True)
+            if queues.exists():
+                config.extend([
+                    "",
+                    "; ====== EXTENSIONES DE COLAS ======",
+                ])
+                for queue in queues:
+                    max_wait = queue.max_wait_time or 300
+                    config.extend([
+                        f"exten => {queue.extension},1,NoOp(Cola: {queue.name})",
+                        f" same => n,Answer()",
+                        f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_{queue.extension}_${{CALLERID(num)}}.wav,ab)",
+                        f" same => n,Queue({queue.name},tT,,,{max_wait})",
+                        " same => n,Hangup()",
+                        "",
+                    ])
+        except Exception as e:
+            logger.warning(f"No se pudieron generar extensiones de colas: {e}")
+        
         # Rutas entrantes (DIDs) para contexto from-pstn
         inbound_routes = InboundRoute.objects.filter(is_active=True).order_by('priority')
         if inbound_routes.exists():
@@ -336,28 +358,43 @@ class AsteriskConfigGenerator:
         try:
             queues = Queue.objects.filter(is_active=True)
             for queue in queues:
-                strategy = getattr(queue, 'strategy', 'ringall')
-                timeout = getattr(queue, 'timeout', 30)
-                wrapup = getattr(queue, 'wrapup_time', 5)
-                maxlen = getattr(queue, 'max_wait', 0)
-                servicelevel = getattr(queue, 'service_level', 60)
+                strategy = queue.strategy or 'ringall'
+                timeout = queue.timeout or 30
+                retry = queue.retry or 5
+                wrapup = queue.wrap_up_time or 0
+                maxlen = queue.max_callers or 0
+                max_wait = queue.max_wait_time or 300
+                servicelevel = queue.service_level or 60
+                announce_freq = queue.announce_frequency or 30
+                announce_hold = 'yes' if queue.announce_holdtime else 'no'
+                periodic_freq = queue.periodic_announce_frequency or 60
+                moh = queue.music_on_hold or 'default'
                 
                 config.extend([
                     f"[{queue.name}]",
                     f"strategy = {strategy}",
                     f"timeout = {timeout}",
-                    "retry = 5",
+                    f"retry = {retry}",
                     f"maxlen = {maxlen}",
                     f"wrapuptime = {wrapup}",
-                    "announce-frequency = 30",
-                    "announce-holdtime = yes",
-                    "periodic-announce-frequency = 60",
+                    f"announce-frequency = {announce_freq}",
+                    f"announce-holdtime = {announce_hold}",
+                    f"periodic-announce-frequency = {periodic_freq}",
                     "ringinuse = no",
                     f"servicelevel = {servicelevel}",
+                    f"musicclass = {moh}",
                     "weight = 0",
                     "monitor-type = MixMonitor",
-                    "",
                 ])
+                
+                # Agregar miembros de la cola
+                for member in queue.members.select_related('agent').filter(agent__is_active=True):
+                    ext = getattr(member.agent, 'sip_extension', None)
+                    if ext:
+                        penalty = member.penalty or 0
+                        config.append(f"member => PJSIP/{ext},{penalty}")
+                
+                config.append("")
         except Exception as e:
             logger.warning(f"No se pudieron cargar colas dinámicas: {e}")
         
@@ -378,6 +415,7 @@ class AsteriskConfigGenerator:
         dynamic_configs = {
             'pjsip_extensions.conf': self.generate_pjsip_extensions_conf(),
             'extensions_dynamic.conf': self.generate_extensions_conf(),
+            'queues_dynamic.conf': self.generate_queues_dynamic_conf(),
         }
         
         # Archivos completos que Asterisk carga directamente desde /etc/asterisk/

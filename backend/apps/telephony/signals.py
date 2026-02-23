@@ -8,6 +8,7 @@ from .models import (
     SIPTrunk, InboundRoute, OutboundRoute, Extension, IVR,
     Voicemail, TimeCondition, Call
 )
+from apps.queues.models import Queue, QueueMember
 import logging
 import threading
 
@@ -42,13 +43,17 @@ def _sync_asterisk_config():
         config_gen = AsteriskConfigGenerator()
         config_gen.write_all_configs()
 
-        # 3. Recargar dialplan
+        # 3. Recargar módulos de Asterisk
         from .asterisk_ami import AsteriskAMI
         ami = AsteriskAMI()
         if ami.connect():
+            ami.reload_module('res_pjsip.so')
+            ami.reload_module('chan_pjsip.so')
             ami.reload_dialplan()
+            ami.reload_module('app_voicemail.so')
+            ami.reload_module('app_queue.so')
             ami.disconnect()
-            logger.info("✓ Dialplan recargado")
+            logger.info("✓ Asterisk recargado (PJSIP, dialplan, voicemail, queues)")
 
     except Exception as e:
         logger.error(f"✗ Error sincronizando config Asterisk: {e}")
@@ -178,6 +183,38 @@ def on_time_condition_save(sender, instance, created, **kwargs):
 @receiver(post_delete, sender=TimeCondition)
 def on_time_condition_delete(sender, instance, **kwargs):
     logger.info(f"🗑️  Condición de horario eliminada: {instance.name}")
+    sync_asterisk_now()
+
+
+# ============= SEÑALES PARA COLAS =============
+
+@receiver(post_save, sender=Queue)
+def on_queue_save(sender, instance, created, **kwargs):
+    if created:
+        logger.info(f"✨ Nueva cola creada: {instance.name}")
+    else:
+        logger.info(f"🔄 Cola actualizada: {instance.name}")
+    sync_asterisk_now()
+
+
+@receiver(post_delete, sender=Queue)
+def on_queue_delete(sender, instance, **kwargs):
+    logger.info(f"🗑️  Cola eliminada: {instance.name}")
+    sync_asterisk_now()
+
+
+@receiver(post_save, sender=QueueMember)
+def on_queue_member_save(sender, instance, created, **kwargs):
+    if created:
+        logger.info(f"✨ Miembro agregado a cola {instance.queue.name}: agente {instance.agent}")
+    else:
+        logger.info(f"🔄 Miembro actualizado en cola {instance.queue.name}")
+    sync_asterisk_now()
+
+
+@receiver(post_delete, sender=QueueMember)
+def on_queue_member_delete(sender, instance, **kwargs):
+    logger.info(f"🗑️  Miembro eliminado de cola {instance.queue.name}")
     sync_asterisk_now()
 
 

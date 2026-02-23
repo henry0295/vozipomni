@@ -447,7 +447,8 @@ class IVRViewSet(viewsets.ModelViewSet):
 
 class ExtensionViewSet(viewsets.ModelViewSet):
     """
-    API endpoint para gestión de extensiones
+    API endpoint para gestión de extensiones.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
     """
     queryset = Extension.objects.all()
     serializer_class = ExtensionSerializer
@@ -456,31 +457,11 @@ class ExtensionViewSet(viewsets.ModelViewSet):
     filterset_fields = ['extension_type', 'is_active']
     ordering = ['extension']
     
-    def perform_create(self, serializer):
-        """Crear extensión y regenerar configuración de Asterisk"""
-        extension = serializer.save()
-        self._reload_asterisk_config()
-        return extension
-    
-    def perform_update(self, serializer):
-        """Actualizar extensión y regenerar configuración de Asterisk"""
-        extension = serializer.save()
-        self._reload_asterisk_config()
-        return extension
-    
-    def perform_destroy(self, instance):
-        """Eliminar extensión y regenerar configuración de Asterisk"""
-        instance.delete()
-        self._reload_asterisk_config()
-    
     def _reload_asterisk_config(self):
-        """Regenerar archivos de configuración y recargar Asterisk"""
+        """Forzar regeneración manual de configuración Asterisk"""
         try:
-            # Generar archivos de configuración
             generator = AsteriskConfigGenerator()
             generator.write_all_configs()
-            
-            # Recargar Asterisk vía AMI
             ami = AsteriskAMI()
             if ami.connect():
                 ami.reload_module('res_pjsip.so')
@@ -493,7 +474,7 @@ class ExtensionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reload_config(self, request, pk=None):
         """
-        Recargar configuración de la extensión en Asterisk
+        Recargar configuración de la extensión en Asterisk (forzado manual)
         """
         extension = self.get_object()
         try:
@@ -511,103 +492,40 @@ class ExtensionViewSet(viewsets.ModelViewSet):
 
 class InboundRouteViewSet(viewsets.ModelViewSet):
     """
-    API endpoint para gestión de rutas entrantes
+    API endpoint para gestión de rutas entrantes.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
     """
     queryset = InboundRoute.objects.all()
     serializer_class = InboundRouteSerializer
     permission_classes = [IsAuthenticated]
     search_fields = ['did', 'description']
     filterset_fields = ['destination_type', 'is_active']
-    ordering = ['priority', 'did']    
-    def perform_create(self, serializer):
-        serializer.save()
-        self._reload_asterisk_config()
-    
-    def perform_update(self, serializer):
-        serializer.save()
-        self._reload_asterisk_config()
-    
-    def perform_destroy(self, instance):
-        instance.delete()
-        self._reload_asterisk_config()
-    
-    def _reload_asterisk_config(self):
-        try:
-            generator = AsteriskConfigGenerator()
-            generator.write_all_configs()
-            ami = AsteriskAMI()
-            if ami.connect():
-                ami.reload_dialplan()
-                ami.disconnect()
-        except Exception as e:
-            print(f"Error recargando configuración: {e}")
+    ordering = ['priority', 'did']
 
 class OutboundRouteViewSet(viewsets.ModelViewSet):
     """
-    API endpoint para gestión de rutas salientes
+    API endpoint para gestión de rutas salientes.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
     """
     queryset = OutboundRoute.objects.all()
     serializer_class = OutboundRouteSerializer
     permission_classes = [IsAuthenticated]
     search_fields = ['name', 'pattern']
     filterset_fields = ['trunk', 'is_active']
-    
-    def perform_create(self, serializer):
-        serializer.save()
-        self._reload_asterisk_config()
-    
-    def perform_update(self, serializer):
-        serializer.save()
-        self._reload_asterisk_config()
-    
-    def perform_destroy(self, instance):
-        instance.delete()
-        self._reload_asterisk_config()
-    
-    def _reload_asterisk_config(self):
-        try:
-            generator = AsteriskConfigGenerator()
-            generator.write_all_configs()
-            ami = AsteriskAMI()
-            if ami.connect():
-                ami.reload_dialplan()
-                ami.disconnect()
-        except Exception as e:
-            print(f"Error recargando configuración: {e}")
 
 
 class VoicemailViewSet(viewsets.ModelViewSet):
     """
-    API endpoint para gestión de buzones de voz
+    API endpoint para gestión de buzones de voz.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
     """
     queryset = Voicemail.objects.all()
     serializer_class = VoicemailSerializer
     permission_classes = [IsAuthenticated]
     search_fields = ['mailbox', 'name', 'email']
     filterset_fields = ['is_active']
-    ordering = ['mailbox']    
-    def perform_create(self, serializer):
-        serializer.save()
-        self._reload_asterisk_config()
+    ordering = ['mailbox']
     
-    def perform_update(self, serializer):
-        serializer.save()
-        self._reload_asterisk_config()
-    
-    def perform_destroy(self, instance):
-        instance.delete()
-        self._reload_asterisk_config()
-    
-    def _reload_asterisk_config(self):
-        try:
-            generator = AsteriskConfigGenerator()
-            generator.write_all_configs()
-            ami = AsteriskAMI()
-            if ami.connect():
-                ami.reload_module('app_voicemail.so')
-                ami.disconnect()
-        except Exception as e:
-            print(f"Error recargando configuración: {e}")    
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         """
@@ -624,7 +542,8 @@ class VoicemailViewSet(viewsets.ModelViewSet):
 
 class MusicOnHoldViewSet(viewsets.ModelViewSet):
     """
-    API endpoint para gestión de música en espera
+    API endpoint para gestión de música en espera.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
     """
     queryset = MusicOnHold.objects.all()
     serializer_class = MusicOnHoldSerializer
@@ -637,18 +556,29 @@ class MusicOnHoldViewSet(viewsets.ModelViewSet):
         """
         Listar archivos de audio de la clase MOH
         """
+        import os
         moh = self.get_object()
-        # TODO: Listar archivos reales del directorio
+        files = []
+        if moh.directory and os.path.isdir(moh.directory):
+            for f in sorted(os.listdir(moh.directory)):
+                if f.lower().endswith(('.wav', '.mp3', '.gsm', '.ulaw', '.alaw', '.sln')):
+                    filepath = os.path.join(moh.directory, f)
+                    files.append({
+                        'name': f,
+                        'size': os.path.getsize(filepath),
+                    })
         return Response({
             'name': moh.name,
             'directory': moh.directory,
-            'files': []
+            'files': files,
+            'count': len(files),
         })
 
 
 class TimeConditionViewSet(viewsets.ModelViewSet):
     """
-    API endpoint para gestión de condiciones de horario
+    API endpoint para gestión de condiciones de horario.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
     """
     queryset = TimeCondition.objects.all()
     serializer_class = TimeConditionSerializer
@@ -659,12 +589,59 @@ class TimeConditionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def evaluate(self, request, pk=None):
         """
-        Evaluar si la condición se cumple en el momento actual
+        Evaluar si la condición se cumple en el momento actual.
+        
+        Cada time_group es un dict con:
+        - days: string como 'mon-fri', 'mon-sat', 'sun', 'mon,wed,fri' etc.
+        - start_time: 'HH:MM'
+        - end_time: 'HH:MM'
         """
+        from datetime import datetime
         condition = self.get_object()
-        # TODO: Implementar lógica de evaluación real
+        now = datetime.now()
+        current_day = now.strftime('%a').lower()  # mon, tue, wed, etc.
+        current_time = now.strftime('%H:%M')
+        
+        DAY_RANGES = {
+            'mon-fri': ['mon', 'tue', 'wed', 'thu', 'fri'],
+            'mon-sat': ['mon', 'tue', 'wed', 'thu', 'fri', 'sat'],
+            'sat-sun': ['sat', 'sun'],
+        }
+        
+        matches = False
+        matched_group = None
+        
+        for group in (condition.time_groups or []):
+            days_spec = group.get('days', '')
+            start = group.get('start_time', '00:00')
+            end = group.get('end_time', '23:59')
+            
+            # Expandir rango de días
+            if days_spec in DAY_RANGES:
+                allowed_days = DAY_RANGES[days_spec]
+            elif ',' in days_spec:
+                allowed_days = [d.strip().lower() for d in days_spec.split(',')]
+            else:
+                allowed_days = [days_spec.lower()]
+            
+            if current_day in allowed_days and start <= current_time <= end:
+                matches = True
+                matched_group = group.get('name', days_spec)
+                break
+        
+        if matches:
+            dest_type = condition.true_destination_type
+            dest = condition.true_destination
+        else:
+            dest_type = condition.false_destination_type
+            dest = condition.false_destination
+        
         return Response({
             'name': condition.name,
-            'matches': False,
-            'current_destination': condition.false_destination
+            'matches': matches,
+            'matched_group': matched_group,
+            'current_day': current_day,
+            'current_time': current_time,
+            'current_destination_type': dest_type,
+            'current_destination': dest,
         })

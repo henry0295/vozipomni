@@ -10,7 +10,7 @@ from apps.campaigns.models import Campaign
 from apps.agents.models import Agent
 from apps.contacts.models import Contact, ContactList
 from apps.queues.models import Queue
-from apps.telephony.models import Call, SIPTrunk
+from apps.telephony.models import Call
 from apps.recordings.models import Recording
 from apps.reports.models import Report
 
@@ -114,12 +114,93 @@ class ContactListViewSet(viewsets.ModelViewSet):
 
 
 class QueueViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint para gestión de colas.
+    La sincronización con Asterisk se maneja automáticamente via signals.py
+    (Queue post_save/post_delete → regenera queues_dynamic.conf + recarga app_queue.so)
+    """
     queryset = Queue.objects.all()
     serializer_class = serializers.QueueSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['name', 'extension']
     filterset_fields = ['is_active', 'strategy']
+    
+    @action(detail=True, methods=['post'])
+    def reload_config(self, request, pk=None):
+        """Forzar recarga manual de la configuración de colas en Asterisk"""
+        queue = self.get_object()
+        try:
+            from apps.telephony.asterisk_config import AsteriskConfigGenerator
+            from apps.telephony.asterisk_ami import AsteriskAMI
+            
+            generator = AsteriskConfigGenerator()
+            generator.write_all_configs()
+            
+            ami = AsteriskAMI()
+            if ami.connect():
+                ami.reload_module('app_queue.so')
+                ami.reload_dialplan()
+                ami.disconnect()
+            
+            return Response({
+                'success': True,
+                'message': f'Configuración de cola {queue.name} recargada en Asterisk'
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def stats(self, request, pk=None):
+        """Obtener estadísticas de la cola"""
+        queue = self.get_object()
+        try:
+            stats = getattr(queue, 'stats', None)
+            if stats:
+                return Response({
+                    'queue': queue.name,
+                    'calls_waiting': stats.calls_waiting,
+                    'calls_completed': stats.calls_completed,
+                    'calls_abandoned': stats.calls_abandoned,
+                    'avg_wait_time': stats.avg_wait_time,
+                    'avg_talk_time': stats.avg_talk_time,
+                    'agents_available': stats.agents_available,
+                    'agents_busy': stats.agents_busy,
+                    'service_level_percentage': stats.service_level_percentage,
+                })
+            return Response({
+                'queue': queue.name,
+                'message': 'Sin estadísticas disponibles',
+            })
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Error: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['get'])
+    def members(self, request, pk=None):
+        """Obtener miembros de la cola"""
+        queue = self.get_object()
+        members_data = []
+        for m in queue.members.select_related('agent__user').all():
+            members_data.append({
+                'id': m.id,
+                'agent_id': m.agent.id,
+                'agent_name': str(m.agent),
+                'penalty': m.penalty,
+                'paused': m.paused,
+                'calls_taken': m.calls_taken,
+                'last_call': m.last_call,
+            })
+        return Response({
+            'queue': queue.name,
+            'members': members_data,
+            'count': len(members_data),
+        })
 
 
 class CallViewSet(viewsets.ReadOnlyModelViewSet):
@@ -158,49 +239,10 @@ class ReportViewSet(viewsets.ModelViewSet):
         return Response({'status': 'generating report'})
 
 
-class TrunkViewSet(viewsets.ModelViewSet):
-    queryset = SIPTrunk.objects.all()
-    serializer_class = serializers.SIPTrunkSerializer
-    permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    search_fields = ['name', 'description', 'host']
-    filterset_fields = ['trunk_type', 'protocol', 'is_active']
-    ordering_fields = ['name', 'created_at']
-    
-    @action(detail=True, methods=['post'])
-    def toggle_status(self, request, pk=None):
-        """Activar/desactivar troncal"""
-        trunk = self.get_object()
-        trunk.is_active = not trunk.is_active
-        trunk.save()
-        
-        # Aquí se integraría con Asterisk para recargar la configuración
-        from apps.telephony.tasks import reload_asterisk_trunk
-        reload_asterisk_trunk.delay(trunk.id)
-        
-        return Response({
-            'status': 'success',
-            'is_active': trunk.is_active,
-            'message': f"Troncal {'activado' if trunk.is_active else 'desactivado'}"
-        })
-    
-    @action(detail=True, methods=['get'])
-    def test_connection(self, request, pk=None):
-        """Probar conexión del troncal"""
-        trunk = self.get_object()
-        
-        # Aquí se implementaría la prueba real con Asterisk
-        # Por ahora simulamos
-        import random
-        success = random.choice([True, False])
-        
-        return Response({
-            'success': success,
-            'message': 'Conexión exitosa' if success else 'Error de conexión',
-            'details': {
-                'host': trunk.host,
-                'port': trunk.port,
-                'protocol': trunk.protocol,
-                'last_test': timezone.now()
-            }
-        })
+# =====================================================================
+# NOTA: TrunkViewSet REAL está en apps.telephony.views.SIPTrunkViewSet
+# con integración completa de Asterisk AMI (test_connection real,
+# force_register, preview_config, etc.)
+# Si necesitas registrar rutas de troncales en urls.py de api/,
+# importa desde telephony: from apps.telephony.views import SIPTrunkViewSet
+# =====================================================================

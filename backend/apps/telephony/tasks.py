@@ -1,13 +1,13 @@
 ﻿"""
-Stubs de compatibilidad para tareas Celery.
+Tareas Celery para sincronización con Asterisk.
 
-Toda la sincronización real con Asterisk ahora se ejecuta
-desde signals.py usando threads directos (sin Celery).
-
-Estas funciones se mantienen únicamente para que las importaciones
-existentes (p.ej. viewsets.py → reload_asterisk_trunk) no rompan.
+La sincronización principal se ejecuta desde signals.py usando threads directos.
+Estas tareas Celery se usan para:
+- Tareas periódicas programadas en beat_schedule (sync cada 5 min, health check)
+- Stubs de compatibilidad para llamadas legacy (reload_asterisk_trunk.delay())
 """
 import logging
+from celery import shared_task
 
 logger = logging.getLogger(__name__)
 
@@ -89,11 +89,14 @@ def _reload_asterisk_trunk(trunk_id=None):
 reload_asterisk_trunk = _FakeDelay(_reload_asterisk_trunk)
 
 
+@shared_task(name='apps.telephony.tasks.sync_all_telephony_config_to_redis')
 def sync_all_telephony_config_to_redis():
-    logger.info("[stub] sync_all_telephony_config_to_redis → delegando a signals")
+    """Tarea periódica: re-sincronizar toda la configuración con Asterisk"""
+    logger.info("[celery] sync_all_telephony_config_to_redis")
     _sync_via_signals()
 
 
+@shared_task(name='apps.telephony.tasks.check_asterisk_health')
 def check_asterisk_health():
     from apps.telephony.asterisk_ami import AsteriskAMI
     from django.core.cache import cache
