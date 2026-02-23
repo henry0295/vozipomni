@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { useApi } from './useApi'
 
 interface InboundRoute {
   id: number
@@ -13,7 +12,7 @@ interface InboundRoute {
 }
 
 export const useInboundRoutes = () => {
-  const { get, post, put, delete: del } = useApi()
+  const { apiFetch } = useApi()
   const routes = ref<InboundRoute[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -21,8 +20,10 @@ export const useInboundRoutes = () => {
   const getInboundRoutes = async () => {
     loading.value = true
     try {
-      const data = await get('/api/inbound-routes/')
-      routes.value = data
+      const { data, error: fetchError } = await apiFetch<any>('/telephony/inbound-routes/')
+      if (fetchError.value) throw new Error('Error al obtener rutas entrantes')
+      const raw = data.value
+      routes.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
     } catch (err: any) {
       error.value = err.message || 'Error al obtener rutas entrantes'
@@ -32,35 +33,34 @@ export const useInboundRoutes = () => {
   }
 
   const createInboundRoute = async (route: Omit<InboundRoute, 'id'>) => {
-    try {
-      const data = await post('/api/inbound-routes/', route)
-      routes.value.push(data)
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al crear ruta')
-    }
+    const { data, error: fetchError } = await apiFetch<any>('/telephony/inbound-routes/', {
+      method: 'POST',
+      body: route
+    })
+    if (fetchError.value) throw new Error('Error al crear ruta')
+    const created = data.value
+    routes.value.push(created)
+    return created
   }
 
   const updateInboundRoute = async (id: number, route: Partial<InboundRoute>) => {
-    try {
-      const data = await put(`/api/inbound-routes/${id}/`, route)
-      const index = routes.value.findIndex(r => r.id === id)
-      if (index > -1) {
-        routes.value[index] = data
-      }
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al actualizar ruta')
-    }
+    const { data, error: fetchError } = await apiFetch<any>(`/telephony/inbound-routes/${id}/`, {
+      method: 'PUT',
+      body: route
+    })
+    if (fetchError.value) throw new Error('Error al actualizar ruta')
+    const updated = data.value
+    const index = routes.value.findIndex(r => r.id === id)
+    if (index > -1) routes.value[index] = updated
+    return updated
   }
 
   const deleteInboundRoute = async (id: number) => {
-    try {
-      await del(`/api/inbound-routes/${id}/`)
-      routes.value = routes.value.filter(r => r.id !== id)
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al eliminar ruta')
-    }
+    const { error: fetchError } = await apiFetch(`/telephony/inbound-routes/${id}/`, {
+      method: 'DELETE'
+    })
+    if (fetchError.value) throw new Error('Error al eliminar ruta')
+    routes.value = routes.value.filter(r => r.id !== id)
   }
 
   return {

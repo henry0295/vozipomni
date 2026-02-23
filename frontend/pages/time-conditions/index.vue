@@ -161,14 +161,21 @@
         </div>
 
         <div class="border-t pt-4">
-          <h3 class="font-semibold mb-3">Grupos de Horarios</h3>
+          <div class="flex justify-between items-center mb-3">
+            <h3 class="font-semibold">Grupos de Horarios</h3>
+            <UButton
+              icon="i-heroicons-plus"
+              size="xs"
+              variant="outline"
+              @click="addTimeGroup"
+            >
+              Agregar Grupo
+            </UButton>
+          </div>
           <div class="space-y-3 max-h-60 overflow-y-auto">
             <div v-for="(group, index) in form.time_groups" :key="index" class="border rounded p-3 bg-gray-50 dark:bg-gray-800">
               <div class="flex justify-between items-start mb-2">
-                <div>
-                  <p class="font-semibold text-sm">{{ group.name || `Grupo ${index + 1}` }}</p>
-                  <p class="text-xs text-gray-500">{{ group.days }} - {{ group.start_time }} a {{ group.end_time }}</p>
-                </div>
+                <span class="font-semibold text-sm">Grupo {{ index + 1 }}</span>
                 <UButton
                   variant="ghost"
                   icon="i-heroicons-trash"
@@ -177,15 +184,32 @@
                   @click="deleteTimeGroup(index)"
                 />
               </div>
+              <div class="space-y-2">
+                <UFormGroup label="Nombre" :ui="{ label: { base: 'text-xs' } }">
+                  <UInput v-model="group.name" placeholder="Ej: Lunes a Viernes" size="sm" />
+                </UFormGroup>
+                <UFormGroup label="Días" :ui="{ label: { base: 'text-xs' } }">
+                  <USelect
+                    v-model="group.days"
+                    :options="dayOptions"
+                    option-attribute="label"
+                    value-attribute="value"
+                    size="sm"
+                  />
+                </UFormGroup>
+                <div class="grid grid-cols-2 gap-2">
+                  <UFormGroup label="Hora Inicio" :ui="{ label: { base: 'text-xs' } }">
+                    <UInput v-model="group.start_time" type="time" size="sm" />
+                  </UFormGroup>
+                  <UFormGroup label="Hora Fin" :ui="{ label: { base: 'text-xs' } }">
+                    <UInput v-model="group.end_time" type="time" size="sm" />
+                  </UFormGroup>
+                </div>
+              </div>
             </div>
-          </div>
-          <div class="mt-3 p-3 border rounded bg-blue-50 dark:bg-blue-900/20">
-            <p class="text-sm font-semibold mb-2">Ejemplo: Horario Comercial</p>
-            <ul class="text-xs space-y-1">
-              <li>• Lunes-Viernes 8:00-18:00</li>
-              <li>• Sábado 9:00-14:00</li>
-              <li>• Domingo/Festivos: fuera de horario</li>
-            </ul>
+            <div v-if="form.time_groups.length === 0" class="text-center text-gray-500 text-sm py-4">
+              No hay grupos de horarios. Haz clic en "Agregar Grupo" para crear uno.
+            </div>
           </div>
         </div>
 
@@ -209,6 +233,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 
+definePageMeta({
+  middleware: ['auth']
+})
+
+useHead({ title: 'Condiciones de Horario' })
+
 interface TimeGroup {
   name: string
   days: string
@@ -226,6 +256,20 @@ interface TimeCondition {
   false_destination: string
   is_active: boolean
 }
+
+const dayOptions = [
+  { label: 'Lunes a Viernes', value: 'mon-fri' },
+  { label: 'Lunes a Sábado', value: 'mon-sat' },
+  { label: 'Todos los días', value: 'mon-sun' },
+  { label: 'Lunes', value: 'mon' },
+  { label: 'Martes', value: 'tue' },
+  { label: 'Miércoles', value: 'wed' },
+  { label: 'Jueves', value: 'thu' },
+  { label: 'Viernes', value: 'fri' },
+  { label: 'Sábado', value: 'sat' },
+  { label: 'Domingo', value: 'sun' },
+  { label: 'Fines de semana', value: 'sat-sun' }
+]
 
 const destinationTypes = [
   { label: 'IVR', value: 'ivr' },
@@ -331,6 +375,15 @@ const deleteCondition = async (id: number) => {
 
 const deleteTimeGroup = (index: number) => {
   form.value.time_groups.splice(index, 1)
+}
+
+const addTimeGroup = () => {
+  form.value.time_groups.push({
+    name: '',
+    days: 'mon-fri',
+    start_time: '08:00',
+    end_time: '18:00'
+  })
 }
 
 const resetForm = () => {

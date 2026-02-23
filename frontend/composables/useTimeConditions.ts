@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { useApi } from './useApi'
 
 interface TimeGroup {
   name: string
@@ -20,7 +19,7 @@ interface TimeCondition {
 }
 
 export const useTimeConditions = () => {
-  const { get, post, put, delete: del } = useApi()
+  const { apiFetch } = useApi()
   const conditions = ref<TimeCondition[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -28,8 +27,10 @@ export const useTimeConditions = () => {
   const getTimeConditions = async () => {
     loading.value = true
     try {
-      const data = await get('/api/time-conditions/')
-      conditions.value = data
+      const { data, error: fetchError } = await apiFetch<any>('/telephony/time-conditions/')
+      if (fetchError.value) throw new Error('Error al obtener condiciones de horario')
+      const raw = data.value
+      conditions.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
     } catch (err: any) {
       error.value = err.message || 'Error al obtener condiciones de horario'
@@ -39,35 +40,34 @@ export const useTimeConditions = () => {
   }
 
   const createTimeCondition = async (condition: Omit<TimeCondition, 'id'>) => {
-    try {
-      const data = await post('/api/time-conditions/', condition)
-      conditions.value.push(data)
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al crear condición')
-    }
+    const { data, error: fetchError } = await apiFetch<any>('/telephony/time-conditions/', {
+      method: 'POST',
+      body: condition
+    })
+    if (fetchError.value) throw new Error('Error al crear condición')
+    const created = data.value
+    conditions.value.push(created)
+    return created
   }
 
   const updateTimeCondition = async (id: number, condition: Partial<TimeCondition>) => {
-    try {
-      const data = await put(`/api/time-conditions/${id}/`, condition)
-      const index = conditions.value.findIndex(c => c.id === id)
-      if (index > -1) {
-        conditions.value[index] = data
-      }
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al actualizar condición')
-    }
+    const { data, error: fetchError } = await apiFetch<any>(`/telephony/time-conditions/${id}/`, {
+      method: 'PUT',
+      body: condition
+    })
+    if (fetchError.value) throw new Error('Error al actualizar condición')
+    const updated = data.value
+    const index = conditions.value.findIndex(c => c.id === id)
+    if (index > -1) conditions.value[index] = updated
+    return updated
   }
 
   const deleteTimeCondition = async (id: number) => {
-    try {
-      await del(`/api/time-conditions/${id}/`)
-      conditions.value = conditions.value.filter(c => c.id !== id)
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al eliminar condición')
-    }
+    const { error: fetchError } = await apiFetch(`/telephony/time-conditions/${id}/`, {
+      method: 'DELETE'
+    })
+    if (fetchError.value) throw new Error('Error al eliminar condición')
+    conditions.value = conditions.value.filter(c => c.id !== id)
   }
 
   return {

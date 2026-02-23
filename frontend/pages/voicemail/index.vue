@@ -167,6 +167,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 
+definePageMeta({
+  middleware: ['auth']
+})
+
+useHead({ title: 'Buzones de Voz' })
+
 interface Voicemail {
   id: number
   mailbox: string

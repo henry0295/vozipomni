@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { useApi } from './useApi'
 
 interface Voicemail {
   id: number
@@ -14,7 +13,7 @@ interface Voicemail {
 }
 
 export const useVoicemail = () => {
-  const { get, post, put, delete: del } = useApi()
+  const { apiFetch } = useApi()
   const voicemails = ref<Voicemail[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -22,8 +21,10 @@ export const useVoicemail = () => {
   const getVoicemails = async () => {
     loading.value = true
     try {
-      const data = await get('/api/voicemail/')
-      voicemails.value = data
+      const { data, error: fetchError } = await apiFetch<any>('/telephony/voicemail/')
+      if (fetchError.value) throw new Error('Error al obtener buzones de voz')
+      const raw = data.value
+      voicemails.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
     } catch (err: any) {
       error.value = err.message || 'Error al obtener buzones de voz'
@@ -33,35 +34,34 @@ export const useVoicemail = () => {
   }
 
   const createVoicemail = async (vm: Omit<Voicemail, 'id'>) => {
-    try {
-      const data = await post('/api/voicemail/', vm)
-      voicemails.value.push(data)
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al crear buzón')
-    }
+    const { data, error: fetchError } = await apiFetch<any>('/telephony/voicemail/', {
+      method: 'POST',
+      body: vm
+    })
+    if (fetchError.value) throw new Error('Error al crear buzón')
+    const created = data.value
+    voicemails.value.push(created)
+    return created
   }
 
   const updateVoicemail = async (id: number, vm: Partial<Voicemail>) => {
-    try {
-      const data = await put(`/api/voicemail/${id}/`, vm)
-      const index = voicemails.value.findIndex(v => v.id === id)
-      if (index > -1) {
-        voicemails.value[index] = data
-      }
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al actualizar buzón')
-    }
+    const { data, error: fetchError } = await apiFetch<any>(`/telephony/voicemail/${id}/`, {
+      method: 'PUT',
+      body: vm
+    })
+    if (fetchError.value) throw new Error('Error al actualizar buzón')
+    const updated = data.value
+    const index = voicemails.value.findIndex(v => v.id === id)
+    if (index > -1) voicemails.value[index] = updated
+    return updated
   }
 
   const deleteVoicemail = async (id: number) => {
-    try {
-      await del(`/api/voicemail/${id}/`)
-      voicemails.value = voicemails.value.filter(v => v.id !== id)
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al eliminar buzón')
-    }
+    const { error: fetchError } = await apiFetch(`/telephony/voicemail/${id}/`, {
+      method: 'DELETE'
+    })
+    if (fetchError.value) throw new Error('Error al eliminar buzón')
+    voicemails.value = voicemails.value.filter(v => v.id !== id)
   }
 
   return {

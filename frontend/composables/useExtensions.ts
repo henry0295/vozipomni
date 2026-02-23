@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { useApi } from './useApi'
 
 interface Extension {
   id: number
@@ -15,7 +14,7 @@ interface Extension {
 }
 
 export const useExtensions = () => {
-  const { get, post, put, delete: del } = useApi()
+  const { apiFetch } = useApi()
   const extensions = ref<Extension[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -23,8 +22,10 @@ export const useExtensions = () => {
   const getExtensions = async () => {
     loading.value = true
     try {
-      const data = await get('/api/extensions/')
-      extensions.value = data
+      const { data, error: fetchError } = await apiFetch<any>('/telephony/extensions/')
+      if (fetchError.value) throw new Error('Error al obtener extensiones')
+      const raw = data.value
+      extensions.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
     } catch (err: any) {
       error.value = err.message || 'Error al obtener extensiones'
@@ -34,35 +35,34 @@ export const useExtensions = () => {
   }
 
   const createExtension = async (ext: Omit<Extension, 'id'>) => {
-    try {
-      const data = await post('/api/extensions/', ext)
-      extensions.value.push(data)
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al crear extensión')
-    }
+    const { data, error: fetchError } = await apiFetch<any>('/telephony/extensions/', {
+      method: 'POST',
+      body: ext
+    })
+    if (fetchError.value) throw new Error('Error al crear extensión')
+    const created = data.value
+    extensions.value.push(created)
+    return created
   }
 
   const updateExtension = async (id: number, ext: Partial<Extension>) => {
-    try {
-      const data = await put(`/api/extensions/${id}/`, ext)
-      const index = extensions.value.findIndex(e => e.id === id)
-      if (index > -1) {
-        extensions.value[index] = data
-      }
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al actualizar extensión')
-    }
+    const { data, error: fetchError } = await apiFetch<any>(`/telephony/extensions/${id}/`, {
+      method: 'PUT',
+      body: ext
+    })
+    if (fetchError.value) throw new Error('Error al actualizar extensión')
+    const updated = data.value
+    const index = extensions.value.findIndex(e => e.id === id)
+    if (index > -1) extensions.value[index] = updated
+    return updated
   }
 
   const deleteExtension = async (id: number) => {
-    try {
-      await del(`/api/extensions/${id}/`)
-      extensions.value = extensions.value.filter(e => e.id !== id)
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al eliminar extensión')
-    }
+    const { error: fetchError } = await apiFetch(`/telephony/extensions/${id}/`, {
+      method: 'DELETE'
+    })
+    if (fetchError.value) throw new Error('Error al eliminar extensión')
+    extensions.value = extensions.value.filter(e => e.id !== id)
   }
 
   return {

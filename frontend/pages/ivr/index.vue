@@ -195,6 +195,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 
+definePageMeta({
+  middleware: ['auth']
+})
+
+useHead({ title: 'IVR - Menús Interactivos' })
+
 interface IVR {
   id: number
   name: string

@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { useApi } from './useApi'
 
 interface IVR {
   id: number
@@ -15,7 +14,7 @@ interface IVR {
 }
 
 export const useIVR = () => {
-  const { get, post, put, delete: del } = useApi()
+  const { apiFetch } = useApi()
   const ivrs = ref<IVR[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -23,8 +22,10 @@ export const useIVR = () => {
   const getIVRs = async () => {
     loading.value = true
     try {
-      const data = await get('/api/ivr/')
-      ivrs.value = data
+      const { data, error: fetchError } = await apiFetch<any>('/telephony/ivr/')
+      if (fetchError.value) throw new Error('Error al obtener IVRs')
+      const raw = data.value
+      ivrs.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
     } catch (err: any) {
       error.value = err.message || 'Error al obtener IVRs'
@@ -34,35 +35,34 @@ export const useIVR = () => {
   }
 
   const createIVR = async (ivr: Omit<IVR, 'id'>) => {
-    try {
-      const data = await post('/api/ivr/', ivr)
-      ivrs.value.push(data)
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al crear IVR')
-    }
+    const { data, error: fetchError } = await apiFetch<any>('/telephony/ivr/', {
+      method: 'POST',
+      body: ivr
+    })
+    if (fetchError.value) throw new Error('Error al crear IVR')
+    const created = data.value
+    ivrs.value.push(created)
+    return created
   }
 
   const updateIVR = async (id: number, ivr: Partial<IVR>) => {
-    try {
-      const data = await put(`/api/ivr/${id}/`, ivr)
-      const index = ivrs.value.findIndex(i => i.id === id)
-      if (index > -1) {
-        ivrs.value[index] = data
-      }
-      return data
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al actualizar IVR')
-    }
+    const { data, error: fetchError } = await apiFetch<any>(`/telephony/ivr/${id}/`, {
+      method: 'PUT',
+      body: ivr
+    })
+    if (fetchError.value) throw new Error('Error al actualizar IVR')
+    const updated = data.value
+    const index = ivrs.value.findIndex(i => i.id === id)
+    if (index > -1) ivrs.value[index] = updated
+    return updated
   }
 
   const deleteIVR = async (id: number) => {
-    try {
-      await del(`/api/ivr/${id}/`)
-      ivrs.value = ivrs.value.filter(i => i.id !== id)
-    } catch (err: any) {
-      throw new Error(err.message || 'Error al eliminar IVR')
-    }
+    const { error: fetchError } = await apiFetch(`/telephony/ivr/${id}/`, {
+      method: 'DELETE'
+    })
+    if (fetchError.value) throw new Error('Error al eliminar IVR')
+    ivrs.value = ivrs.value.filter(i => i.id !== id)
   }
 
   return {
