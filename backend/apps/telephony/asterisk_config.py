@@ -38,8 +38,16 @@ class AsteriskConfigGenerator:
         Genera pjsip_extensions.conf con extensiones PJSIP de agentes.
         Este archivo se incluye desde pjsip.conf via #include.
         NO incluye transports ni templates (esos están en pjsip.conf estático).
+        
+        Soporta dos tipos:
+        - PJSIP: Softphones SIP tradicionales (MicroSIP, Zoiper, etc.)
+        - WEBRTC: Clientes WebRTC desde navegador
         """
-        extensions = Extension.objects.filter(extension_type='PJSIP', is_active=True)
+        # Incluir tanto PJSIP como WEBRTC (ambos usan el driver chan_pjsip)
+        extensions = Extension.objects.filter(
+            extension_type__in=['PJSIP', 'WEBRTC', 'SIP'],
+            is_active=True
+        )
         
         config = [
             "; ==========================================================================",
@@ -51,31 +59,57 @@ class AsteriskConfigGenerator:
         ]
         
         for ext in extensions:
-            # Endpoint - heredando del template WebRTC o SIP según configuración
+            is_webrtc = ext.extension_type == 'WEBRTC'
+            transport = getattr(ext, 'transport', None) or ('transport-wss' if is_webrtc else 'transport-udp')
+            callerid = ext.callerid if ext.callerid else f'"{ext.name}" <{ext.extension}>'
+            # Si callerid no tiene formato correcto, formatearlo
+            if callerid and '<' not in callerid:
+                callerid = f'"{ext.name}" <{callerid}>'
+            
+            # Códecs según tipo
+            if is_webrtc:
+                codecs = 'opus,ulaw,alaw'
+            else:
+                codecs = getattr(ext, 'codecs', None) or 'ulaw,alaw,g722'
+            
+            max_contacts = getattr(ext, 'max_contacts', 1) or 1
+            
+            # ---- Endpoint ----
             config.extend([
-                f"; Extension: {ext.extension} - {ext.name}",
+                f"; Extension: {ext.extension} - {ext.name} ({ext.extension_type})",
                 f"[{ext.extension}]",
                 "type=endpoint",
+                f"transport={transport}",
                 f"context={ext.context}",
                 "disallow=all",
-                "allow=opus,ulaw,alaw",
+                f"allow={codecs}",
                 f"auth={ext.extension}-auth",
                 f"aors={ext.extension}-aor",
-                f'callerid="{ext.name}" <{ext.extension}>',
+                f"callerid={callerid}",
                 "direct_media=no",
                 "rtp_symmetric=yes",
                 "force_rport=yes",
                 "rewrite_contact=yes",
                 "trust_id_inbound=yes",
                 "device_state_busy_at=1",
-                "webrtc=yes",
-                "dtls_auto_generate_cert=yes",
-                "ice_support=yes",
-                "media_encryption=dtls",
-                "",
+                # Identificar por username de autenticación (crítico para match de INVITEs)
+                "identify_by=username,auth_username",
             ])
             
-            # Auth
+            # Configuración específica WebRTC
+            if is_webrtc:
+                config.extend([
+                    "webrtc=yes",
+                    "dtls_auto_generate_cert=yes",
+                    "dtls_verify=fingerprint",
+                    "dtls_setup=actpass",
+                    "ice_support=yes",
+                    "media_encryption=dtls",
+                ])
+            
+            config.append("")
+            
+            # ---- Auth ----
             config.extend([
                 f"[{ext.extension}-auth]",
                 "type=auth",
@@ -85,11 +119,11 @@ class AsteriskConfigGenerator:
                 "",
             ])
             
-            # AOR
+            # ---- AOR ----
             config.extend([
                 f"[{ext.extension}-aor]",
                 "type=aor",
-                "max_contacts=1",
+                f"max_contacts={max_contacts}",
                 "remove_existing=yes",
                 "qualify_frequency=30",
                 "",

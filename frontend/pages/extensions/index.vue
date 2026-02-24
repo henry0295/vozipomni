@@ -47,9 +47,8 @@
             v-model="extensionFilter"
             :options="[
               { label: 'Todos', value: null },
-              { label: 'SIP', value: 'SIP' },
-              { label: 'IAX2', value: 'IAX2' },
-              { label: 'PJSIP', value: 'PJSIP' }
+              { label: 'SIP (Softphone)', value: 'PJSIP' },
+              { label: 'WebRTC (Navegador)', value: 'WEBRTC' }
             ]"
             option-attribute="label"
             value-attribute="value"
@@ -140,12 +139,31 @@
         <UFormGroup label="Tipo de Extensión">
           <USelect
             v-model="form.extension_type"
-            :options="['SIP', 'IAX2', 'PJSIP']"
+            :options="[
+              { label: 'SIP (Softphone)', value: 'PJSIP' },
+              { label: 'WebRTC (Navegador)', value: 'WEBRTC' }
+            ]"
+            option-attribute="label"
+            value-attribute="value"
+            @change="onTypeChange"
           />
         </UFormGroup>
 
         <UFormGroup label="Contraseña">
           <UInput v-model="form.secret" type="password" placeholder="Contraseña segura" />
+        </UFormGroup>
+
+        <UFormGroup label="Transporte">
+          <USelect
+            v-model="form.transport"
+            :options="[
+              { label: 'UDP (Softphone)', value: 'transport-udp' },
+              { label: 'TCP', value: 'transport-tcp' },
+              { label: 'WSS (WebRTC)', value: 'transport-wss' }
+            ]"
+            option-attribute="label"
+            value-attribute="value"
+          />
         </UFormGroup>
 
         <UFormGroup label="Contexto">
@@ -200,10 +218,13 @@ interface Extension {
   extension_type: string
   secret: string
   context: string
+  transport: string
   callerid: string
   email: string
   voicemail_enabled: boolean
   is_active: boolean
+  max_contacts: number
+  codecs: string
 }
 
 const extensions = ref<Extension[]>([])
@@ -221,14 +242,28 @@ const { apiFetch } = useApi()
 const form = ref({
   extension: '',
   name: '',
-  extension_type: 'SIP',
+  extension_type: 'PJSIP',
   secret: '',
   context: 'from-internal',
+  transport: 'transport-udp',
   callerid: '',
   email: '',
   voicemail_enabled: false,
-  is_active: true
+  is_active: true,
+  max_contacts: 1,
+  codecs: 'ulaw,alaw,g722'
 })
+
+// Auto-ajustar transport al cambiar tipo de extensión
+const onTypeChange = () => {
+  if (form.value.extension_type === 'WEBRTC') {
+    form.value.transport = 'transport-wss'
+    form.value.codecs = 'opus,ulaw,alaw'
+  } else {
+    form.value.transport = 'transport-udp'
+    form.value.codecs = 'ulaw,alaw,g722'
+  }
+}
 
 const filteredExtensions = computed(() => {
   return extensions.value.filter(ext => {
@@ -310,13 +345,16 @@ const resetForm = () => {
   form.value = {
     extension: '',
     name: '',
-    extension_type: 'SIP',
+    extension_type: 'PJSIP',
     secret: '',
     context: 'from-internal',
+    transport: 'transport-udp',
     callerid: '',
     email: '',
     voicemail_enabled: false,
-    is_active: true
+    is_active: true,
+    max_contacts: 1,
+    codecs: 'ulaw,alaw,g722'
   }
   editingId.value = null
 }

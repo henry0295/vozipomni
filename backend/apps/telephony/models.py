@@ -329,29 +329,56 @@ class IVR(models.Model):
 
 class Extension(models.Model):
     """
-    Extensiones telefónicas
+    Extensiones telefónicas PJSIP
+    Soporta tanto softphones SIP tradicionales como clientes WebRTC.
     """
     EXTENSION_TYPE_CHOICES = [
-        ('SIP', 'SIP'),
-        ('IAX2', 'IAX2'),
-        ('PJSIP', 'PJSIP'),
+        ('PJSIP', 'SIP (Softphone)'),
+        ('WEBRTC', 'WebRTC (Navegador)'),
     ]
-    
+
     CONTEXT_CHOICES = [
         ('from-internal', 'from-internal'),
         ('from-external', 'from-external'),
         ('custom', 'custom'),
     ]
-    
+
+    TRANSPORT_CHOICES = [
+        ('transport-udp', 'UDP (Softphone)'),
+        ('transport-tcp', 'TCP'),
+        ('transport-wss', 'WSS (WebRTC)'),
+    ]
+
     extension = models.CharField(max_length=20, unique=True, verbose_name='Extensión')
     name = models.CharField(max_length=100, verbose_name='Nombre')
-    extension_type = models.CharField(max_length=10, choices=EXTENSION_TYPE_CHOICES, default='SIP', verbose_name='Tipo')
+    extension_type = models.CharField(
+        max_length=10,
+        choices=EXTENSION_TYPE_CHOICES,
+        default='PJSIP',
+        verbose_name='Tipo',
+        help_text='PJSIP para softphones (MicroSIP, Zoiper), WebRTC para navegador'
+    )
     secret = models.CharField(max_length=100, verbose_name='Contraseña')
     context = models.CharField(max_length=50, choices=CONTEXT_CHOICES, default='from-internal', verbose_name='Contexto')
+    transport = models.CharField(
+        max_length=20,
+        choices=TRANSPORT_CHOICES,
+        default='transport-udp',
+        verbose_name='Transporte',
+        help_text='UDP para softphones, WSS para WebRTC'
+    )
     callerid = models.CharField(max_length=100, blank=True, verbose_name='Caller ID')
     email = models.EmailField(blank=True, verbose_name='Email')
     voicemail_enabled = models.BooleanField(default=False, verbose_name='Buzón habilitado')
-    
+    max_contacts = models.IntegerField(default=1, verbose_name='Contactos máximos')
+    codecs = models.CharField(
+        max_length=100,
+        default='ulaw,alaw,g722',
+        blank=True,
+        verbose_name='Códecs',
+        help_text='Para WebRTC se agrega opus automáticamente'
+    )
+
     is_active = models.BooleanField(default=True, verbose_name='Activo')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
