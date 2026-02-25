@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     xmlstarlet \
     procps \
+    bc \
     vim \
     nano \
     net-tools \

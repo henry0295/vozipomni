@@ -24,7 +24,27 @@ mkdir -p "${DYNAMIC_DIR}"
 echo "  [entrypoint] Directorio de configs dinámicas: ${DYNAMIC_DIR}"
 
 # -------------------------------------------------------
-# 1. Archivos de inclusión dinámica (placeholders vacíos)
+# 1. Ajustar maxload según cores disponibles del sistema
+# -------------------------------------------------------
+CORES=$(nproc 2>/dev/null || echo 1)
+# maxload = cores * 0.9 (permite usar ~90% de la capacidad del sistema)
+if command -v bc >/dev/null 2>&1; then
+    MAXLOAD=$(echo "$CORES * 0.9" | bc)
+else
+    # Fallback sin bc: usar el número de cores directamente
+    MAXLOAD=$CORES
+fi
+echo "  [entrypoint] CPUs detectados: ${CORES} → maxload = ${MAXLOAD}"
+
+# Reemplazar placeholder o valor existente en asterisk.conf
+ASTERISK_CONF="${CONFIG_DIR}/asterisk.conf"
+if [ -f "${ASTERISK_CONF}" ]; then
+    sed -i "s/^maxload.*/maxload = ${MAXLOAD}/" "${ASTERISK_CONF}"
+    echo "  [entrypoint] asterisk.conf → maxload = ${MAXLOAD}"
+fi
+
+# -------------------------------------------------------
+# 2. Archivos de inclusión dinámica (placeholders vacíos)
 # -------------------------------------------------------
 for conf in pjsip_extensions.conf pjsip_wizard.conf extensions_dynamic.conf; do
     if [ ! -f "${DYNAMIC_DIR}/${conf}" ]; then
