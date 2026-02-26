@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from apps.api import viewsets
 from apps.api import views
 from apps.telephony.views import SIPTrunkViewSet
+from apps.reports.views import ReportViewSet as ReportViewSetFull
 
 router = DefaultRouter()
 router.register(r'users', viewsets.UserViewSet, basename='user')
@@ -16,7 +17,7 @@ router.register(r'contact-lists', viewsets.ContactListViewSet, basename='contact
 router.register(r'queues', viewsets.QueueViewSet, basename='queue')
 router.register(r'calls', viewsets.CallViewSet, basename='call')
 router.register(r'recordings', viewsets.RecordingViewSet, basename='recording')
-router.register(r'reports', viewsets.ReportViewSet, basename='report')
+router.register(r'reports', ReportViewSetFull, basename='report')
 router.register(r'trunks', SIPTrunkViewSet, basename='trunk')
 
 urlpatterns = [

@@ -43,6 +43,7 @@ services:
       - recordings_volume:/app/recordings
       - ./docker/asterisk/configs:/etc/asterisk
       - asterisk_dynamic:/var/lib/asterisk/dynamic
+      - asterisk_recordings:/var/spool/asterisk/monitor
     environment:
       - DEBUG=True
       - SECRET_KEY=vozipomni-secret-key-change-in-production-2026
@@ -79,6 +80,7 @@ services:
       - recordings_volume:/app/recordings
       - ./docker/asterisk/configs:/etc/asterisk
       - asterisk_dynamic:/var/lib/asterisk/dynamic
+      - asterisk_recordings:/var/spool/asterisk/monitor
     environment:
       - DEBUG=True
       - SECRET_KEY=vozipomni-secret-key-change-in-production-2026
@@ -89,10 +91,14 @@ services:
       - DB_PORT=5432
       - REDIS_URL=redis://:vozipomni_redis_2026@redis:6379/0
       - ASTERISK_HOST=asterisk
+      - ASTERISK_AMI_PORT=5038
+      - ASTERISK_AMI_USER=admin
+      - ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
     depends_on:
       - postgres
       - redis
       - backend
+      - asterisk
     networks:
       - vozipomni_network
     restart: unless-stopped

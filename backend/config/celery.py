@@ -61,3 +61,19 @@ app.conf.beat_schedule = {
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')
+
+
+# ===== ARRANQUE AUTOMÁTICO DEL CDR LISTENER =====
+from celery.signals import worker_ready
+
+@worker_ready.connect
+def start_cdr_listener_on_worker_ready(sender=None, **kwargs):
+    """Arranca el AMI CDR Listener cuando el worker Celery está listo."""
+    import logging
+    _logger = logging.getLogger(__name__)
+    try:
+        from apps.telephony.ami_cdr_listener import start_listener
+        start_listener()
+        _logger.info("✓ AMI CDR Listener arrancado con el worker")
+    except Exception as e:
+        _logger.error(f"Error arrancando CDR Listener: {e}")

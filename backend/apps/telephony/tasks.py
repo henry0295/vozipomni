@@ -110,3 +110,15 @@ def check_asterisk_health():
         logger.error(f"Health check error: {e}")
     cache.set('asterisk_health', {'status': 'disconnected'}, timeout=120)
     return {'status': 'disconnected'}
+
+
+@shared_task(name='apps.telephony.tasks.run_ami_cdr_listener')
+def run_ami_cdr_listener():
+    """Arranca el listener AMI CDR como hilo daemon dentro del worker Celery."""
+    from apps.telephony.ami_cdr_listener import start_listener, is_running
+    if not is_running():
+        start_listener()
+        logger.info("[celery] AMI CDR Listener iniciado")
+    else:
+        logger.info("[celery] AMI CDR Listener ya estaba corriendo")
+    return {'cdr_listener': 'running'}
