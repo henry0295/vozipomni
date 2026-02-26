@@ -21,6 +21,9 @@ class Call(models.Model):
         ('no_answer', 'No Contestada'),
         ('failed', 'Fallida'),
         ('cancelled', 'Cancelada'),
+        ('voicemail', 'Buzón de Voz'),
+        ('abandoned', 'Abandonada'),
+        ('transferred', 'Transferida'),
     ]
     
     # Identificadores
@@ -47,6 +50,7 @@ class Call(models.Model):
     start_time = models.DateTimeField(default=timezone.now, verbose_name='Hora inicio')
     answer_time = models.DateTimeField(null=True, blank=True, verbose_name='Hora respuesta')
     end_time = models.DateTimeField(null=True, blank=True, verbose_name='Hora fin')
+    queue_enter_time = models.DateTimeField(null=True, blank=True, verbose_name='Hora entrada cola')
     
     # Duraciones (en segundos)
     wait_time = models.IntegerField(default=0, verbose_name='Tiempo espera')

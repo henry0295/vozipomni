@@ -98,7 +98,7 @@
     </div>
 
     <!-- KPIs secundarios -->
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
       <UCard>
         <div class="flex items-center justify-between">
           <div>
@@ -120,6 +120,33 @@
       <UCard>
         <div class="flex items-center justify-between">
           <div>
+            <p class="text-xs text-gray-500">Abandonadas</p>
+            <p class="text-xl font-bold text-red-600">{{ kpis.abandonedCalls }}</p>
+          </div>
+          <UIcon name="i-heroicons-phone-x-mark" class="h-8 w-8 text-red-400" />
+        </div>
+      </UCard>
+      <UCard>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500">Buzón de Voz</p>
+            <p class="text-xl font-bold text-violet-600">{{ kpis.voicemailCalls }}</p>
+          </div>
+          <UIcon name="i-heroicons-envelope" class="h-8 w-8 text-violet-400" />
+        </div>
+      </UCard>
+      <UCard>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500">Transferidas</p>
+            <p class="text-xl font-bold text-cyan-600">{{ kpis.transferredCalls }}</p>
+          </div>
+          <UIcon name="i-heroicons-arrows-right-left" class="h-8 w-8 text-cyan-400" />
+        </div>
+      </UCard>
+      <UCard>
+        <div class="flex items-center justify-between">
+          <div>
             <p class="text-xs text-gray-500">AHT (Handle Time)</p>
             <p class="text-xl font-bold text-orange-600">{{ formatSeconds(kpis.avgHandleTime) }}</p>
           </div>
@@ -129,10 +156,47 @@
       <UCard>
         <div class="flex items-center justify-between">
           <div>
-            <p class="text-xs text-gray-500">Espera Promedio</p>
+            <p class="text-xs text-gray-500">Espera Prom.</p>
             <p class="text-xl font-bold text-amber-600">{{ formatSeconds(kpis.avgWaitTime) }}</p>
           </div>
           <UIcon name="i-heroicons-queue-list" class="h-8 w-8 text-amber-400" />
+        </div>
+      </UCard>
+      <UCard>
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs text-gray-500">Ocupación</p>
+            <p class="text-xl font-bold" :class="kpis.avgOccupancy >= 80 ? 'text-red-600' : kpis.avgOccupancy >= 50 ? 'text-yellow-600' : 'text-green-600'">{{ kpis.avgOccupancy }}%</p>
+          </div>
+          <UIcon name="i-heroicons-chart-bar" class="h-8 w-8 text-indigo-400" />
+        </div>
+      </UCard>
+    </div>
+
+    <!-- Hold y Tasa de Abandono -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <UCard>
+        <div class="text-center">
+          <p class="text-xs text-gray-500 uppercase">Hold Prom.</p>
+          <p class="text-2xl font-bold text-pink-600">{{ formatSeconds(kpis.avgHoldTime) }}</p>
+        </div>
+      </UCard>
+      <UCard>
+        <div class="text-center">
+          <p class="text-xs text-gray-500 uppercase">Tasa Abandono</p>
+          <p class="text-2xl font-bold" :class="kpis.abandonRate > 10 ? 'text-red-600' : kpis.abandonRate > 5 ? 'text-yellow-600' : 'text-green-600'">{{ kpis.abandonRate }}%</p>
+        </div>
+      </UCard>
+      <UCard>
+        <div class="text-center">
+          <p class="text-xs text-gray-500 uppercase">Espera Máx.</p>
+          <p class="text-2xl font-bold text-amber-600">{{ formatSeconds(kpis.maxWaitTime) }}</p>
+        </div>
+      </UCard>
+      <UCard>
+        <div class="text-center">
+          <p class="text-xs text-gray-500 uppercase">Agentes en Llamada</p>
+          <p class="text-2xl font-bold text-blue-600">{{ kpis.oncallAgents }} <span class="text-sm text-gray-400">/ {{ kpis.activeAgents }}</span></p>
         </div>
       </UCard>
     </div>
@@ -225,9 +289,12 @@
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Contest.</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Perdidas</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Transfer.</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">% Resp.</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">T.Prom</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">T.Total</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hold Prom</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sesión</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ocupación</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -245,13 +312,20 @@
               <td class="px-4 py-3 text-sm text-right font-medium">{{ agent.totalCalls }}</td>
               <td class="px-4 py-3 text-sm text-right text-green-600">{{ agent.answeredCalls }}</td>
               <td class="px-4 py-3 text-sm text-right text-red-600">{{ agent.missedCalls }}</td>
+              <td class="px-4 py-3 text-sm text-right text-cyan-600">{{ agent.transferredCalls }}</td>
               <td class="px-4 py-3 text-sm text-right">
                 <span :class="agent.answerRate >= 80 ? 'text-green-600' : agent.answerRate >= 60 ? 'text-yellow-600' : 'text-red-600'">
                   {{ agent.answerRate }}%
                 </span>
               </td>
               <td class="px-4 py-3 text-sm text-right text-gray-600">{{ formatSeconds(agent.avgTalkTime) }}</td>
-              <td class="px-4 py-3 text-sm text-right text-gray-600">{{ formatDuration(agent.totalTalkTime) }}</td>
+              <td class="px-4 py-3 text-sm text-right text-pink-600">{{ formatSeconds(agent.avgHoldTime) }}</td>
+              <td class="px-4 py-3 text-sm text-right text-gray-600">{{ formatDuration(agent.sessionTime) }}</td>
+              <td class="px-4 py-3 text-sm text-right">
+                <span :class="agent.occupancy >= 80 ? 'text-red-600 font-semibold' : agent.occupancy >= 50 ? 'text-yellow-600' : 'text-green-600'">
+                  {{ agent.occupancy }}%
+                </span>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -274,8 +348,9 @@
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Contest.</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Perdidas</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Entrantes</th>
-              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Salientes</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Abandon.</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Buzón</th>
+              <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Transfer.</th>
               <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">T.Prom</th>
             </tr>
           </thead>
@@ -285,8 +360,9 @@
               <td class="px-4 py-3 text-sm text-right font-medium">{{ day.total }}</td>
               <td class="px-4 py-3 text-sm text-right text-green-600">{{ day.answered }}</td>
               <td class="px-4 py-3 text-sm text-right text-red-600">{{ day.missed }}</td>
-              <td class="px-4 py-3 text-sm text-right text-blue-600">{{ day.inbound }}</td>
-              <td class="px-4 py-3 text-sm text-right text-indigo-600">{{ day.outbound }}</td>
+              <td class="px-4 py-3 text-sm text-right text-orange-600">{{ day.abandoned }}</td>
+              <td class="px-4 py-3 text-sm text-right text-violet-600">{{ day.voicemail }}</td>
+              <td class="px-4 py-3 text-sm text-right text-cyan-600">{{ day.transferred }}</td>
               <td class="px-4 py-3 text-sm text-right text-gray-600">{{ formatSeconds(day.avgTalkTime) }}</td>
             </tr>
           </tbody>
@@ -296,8 +372,9 @@
               <td class="px-4 py-3 text-sm text-right font-bold">{{ dailyTotals.total }}</td>
               <td class="px-4 py-3 text-sm text-right font-bold text-green-600">{{ dailyTotals.answered }}</td>
               <td class="px-4 py-3 text-sm text-right font-bold text-red-600">{{ dailyTotals.missed }}</td>
-              <td class="px-4 py-3 text-sm text-right font-bold text-blue-600">{{ dailyTotals.inbound }}</td>
-              <td class="px-4 py-3 text-sm text-right font-bold text-indigo-600">{{ dailyTotals.outbound }}</td>
+              <td class="px-4 py-3 text-sm text-right font-bold text-orange-600">{{ dailyTotals.abandoned }}</td>
+              <td class="px-4 py-3 text-sm text-right font-bold text-violet-600">{{ dailyTotals.voicemail }}</td>
+              <td class="px-4 py-3 text-sm text-right font-bold text-cyan-600">{{ dailyTotals.transferred }}</td>
               <td class="px-4 py-3 text-sm text-right font-bold text-gray-600">—</td>
             </tr>
           </tfoot>
@@ -331,12 +408,17 @@ const kpis = reactive<KPIs>({
   missedCalls: 0,
   abandonedCalls: 0,
   failedCalls: 0,
+  voicemailCalls: 0,
+  transferredCalls: 0,
   answerRate: 0,
   abandonRate: 0,
+  missedRate: 0,
   avgTalkTime: 0,
   avgWaitTime: 0,
   avgHoldTime: 0,
+  maxWaitTime: 0,
   avgHandleTime: 0,
+  totalHoldTime: 0,
   serviceLevel: 0,
   slaThreshold: 20,
   inboundCalls: 0,
@@ -344,6 +426,9 @@ const kpis = reactive<KPIs>({
   totalTalkTime: 0,
   activeAgents: 0,
   availableAgents: 0,
+  oncallAgents: 0,
+  breakAgents: 0,
+  avgOccupancy: 0,
   period: { start: '', end: '' },
 })
 
@@ -372,10 +457,13 @@ const dailyTotals = computed(() => {
       total: acc.total + d.total,
       answered: acc.answered + d.answered,
       missed: acc.missed + d.missed,
+      abandoned: acc.abandoned + (d.abandoned || 0),
+      voicemail: acc.voicemail + (d.voicemail || 0),
+      transferred: acc.transferred + (d.transferred || 0),
       inbound: acc.inbound + d.inbound,
       outbound: acc.outbound + d.outbound,
     }),
-    { total: 0, answered: 0, missed: 0, inbound: 0, outbound: 0 }
+    { total: 0, answered: 0, missed: 0, abandoned: 0, voicemail: 0, transferred: 0, inbound: 0, outbound: 0 }
   )
 })
 

@@ -39,6 +39,8 @@ class Agent(models.Model):
     talk_time_today = models.IntegerField(default=0, help_text="Segundos", verbose_name='Tiempo hablado hoy')
     available_time_today = models.IntegerField(default=0, help_text="Segundos", verbose_name='Tiempo disponible hoy')
     break_time_today = models.IntegerField(default=0, help_text="Segundos", verbose_name='Tiempo descanso hoy')
+    oncall_time_today = models.IntegerField(default=0, help_text="Segundos", verbose_name='Tiempo en llamada hoy')
+    wrapup_time_today = models.IntegerField(default=0, help_text="Segundos", verbose_name='Tiempo post-llamada hoy')
     
     # Relaciones
     campaigns = models.ManyToManyField('campaigns.Campaign', related_name='agents', blank=True)
