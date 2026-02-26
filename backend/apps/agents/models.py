@@ -76,6 +76,22 @@ class Agent(models.Model):
         """Verificar si el agente está disponible"""
         return self.status == 'available' and self.current_calls < self.max_concurrent_calls
 
+    @property
+    def session_duration(self):
+        """Duración de la sesión actual en segundos."""
+        if self.logged_in_at:
+            return int((timezone.now() - self.logged_in_at).total_seconds())
+        return 0
+
+    @property
+    def occupancy(self):
+        """Porcentaje de ocupación (tiempo productivo / tiempo sesión)."""
+        session = self.session_duration
+        if session > 0:
+            productive = self.oncall_time_today + self.talk_time_today + self.wrapup_time_today
+            return round((productive / session * 100), 1)
+        return 0.0
+
 
 class AgentStatusHistory(models.Model):
     """

@@ -32,6 +32,9 @@ RUN apt-get update && apt-get install -y \
     nano \
     net-tools \
     tcpdump \
+    sngrep \
+    ngrep \
+    tshark \
     && rm -rf /var/lib/apt/lists/*
 
 # Descargar Asterisk desde Git (siempre disponible)
