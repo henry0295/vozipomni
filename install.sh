@@ -2,11 +2,34 @@
 
 ################################################################################
 # VoziPOmni Contact Center - Installation Script
-# Version: 1.0.0
-# Compatible with: Ubuntu 20.04+, Debian 11+, CentOS 8+, Rocky Linux 8+, RHEL 8+
+# Version: 2.0.0
+# Compatible with: Any Linux distribution (Ubuntu, Debian, CentOS, Rocky,
+#                   RHEL, Fedora, openSUSE, Arch, Amazon Linux, Alpine...)
+#
+# Estilo OmniLeads: pipefail, trap ERR, wait_for_env HTTP polling,
+#   network_mode: host en producción, healthcheck-based depends_on
 ################################################################################
 
-set -e
+set -Eeuo pipefail
+
+# ─── Manejo de errores estilo OmniLeads ──────────────────────────────────────
+on_error() {
+    local exit_code=$?
+    local line_no=${BASH_LINENO[0]}
+    echo ""
+    echo -e "\033[0;31m╔════════════════════════════════════════════════════════════╗\033[0m"
+    echo -e "\033[0;31m║  ERROR: El script falló en la línea $line_no (código: $exit_code)  ║\033[0m"
+    echo -e "\033[0;31m║  Revise los logs arriba para más detalles.               ║\033[0m"
+    echo -e "\033[0;31m╚════════════════════════════════════════════════════════════╝\033[0m"
+    echo ""
+    echo -e "\033[1;33mSugerencias:\033[0m"
+    echo "  1. Verifique su conexión a internet"
+    echo "  2. Revise los logs: cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml logs"
+    echo "  3. Reintente: sudo bash install.sh"
+    echo ""
+    exit $exit_code
+}
+trap on_error ERR
 
 # Colors for output
 RED='\033[0;31m'
@@ -18,6 +41,8 @@ NC='\033[0m' # No Color
 # Installation directory
 INSTALL_DIR="/opt/vozipomni"
 BACKUP_DIR="/opt/vozipomni/backups"
+COMPOSE_CMD=""
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Check if script is run as root
 if [[ $EUID -ne 0 ]]; then
@@ -29,14 +54,28 @@ fi
 # Functions
 ################################################################################
 
+# ─── Detectar comando docker compose ─────────────────────────────────────────
+detect_compose_cmd() {
+    if docker compose version &>/dev/null; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        COMPOSE_CMD="docker-compose"
+    else
+        log_error "No se encontró 'docker compose' ni 'docker-compose'"
+        log_error "Instale Docker Compose e intente de nuevo"
+        exit 1
+    fi
+    log_info "Usando compose: $COMPOSE_CMD"
+}
+
 print_header() {
     clear
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
-    echo -e "${BLUE}║          VoziPOmni Contact Center Installer v1.0          ║${NC}"
+    echo -e "${BLUE}║          VoziPOmni Contact Center Installer v2.0          ║${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
     echo -e "${BLUE}║          Sistema de Contact Center Omnicanal              ║${NC}"
-    echo -e "${BLUE}║          Powered by Django, React & Asterisk               ║${NC}"
+    echo -e "${BLUE}║          Powered by Django, Nuxt 3 & Asterisk             ║${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -490,39 +529,39 @@ clone_or_update_repo() {
 }
 
 create_env_file() {
-    log_info "Creando archivo de configuración..."
+    log_info "Creando archivo de configuración del backend..."
     
     cat > $INSTALL_DIR/backend/.env <<EOF
-# Django Settings
+# Django Settings — VoziPOmni (Generado: $(date))
 SECRET_KEY=$SECRET_KEY
 DEBUG=False
 ALLOWED_HOSTS=$SERVER_IP,localhost,127.0.0.1
 CORS_ALLOWED_ORIGINS=http://$SERVER_IP,https://$SERVER_IP
 
-# Database (must match POSTGRES_* in root .env / docker-compose)
+# Database (network_mode: host → usa IP del servidor)
 DB_NAME=vozipomni
 DB_USER=vozipomni_user
 DB_PASSWORD=$DB_PASSWORD
-DB_HOST=postgres
+DB_HOST=$SERVER_IP
 DB_PORT=5432
 
-# Redis
-REDIS_HOST=redis
+# Redis (network_mode: host → usa IP del servidor)
+REDIS_HOST=$SERVER_IP
 REDIS_PORT=6379
 REDIS_PASSWORD=$REDIS_PASSWORD
 
-# Asterisk
-ASTERISK_HOST=asterisk
+# Asterisk (network_mode: host → usa IP del servidor)
+ASTERISK_HOST=$SERVER_IP
 ASTERISK_AMI_USER=admin
 ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
-ASTERISK_CONFIG_DIR=/etc/asterisk
+ASTERISK_CONFIG_DIR=/var/lib/asterisk/dynamic
 ASTERISK_PUBLIC_IP=$SERVER_IP
 
 # Celery
-CELERY_BROKER_URL=redis://:$REDIS_PASSWORD@redis:6379/0
-CELERY_RESULT_BACKEND=redis://:$REDIS_PASSWORD@redis:6379/0
+CELERY_BROKER_URL=redis://:$REDIS_PASSWORD@$SERVER_IP:6379/0
+CELERY_RESULT_BACKEND=redis://:$REDIS_PASSWORD@$SERVER_IP:6379/1
 
-# Email (opcional - configurar después)
+# Email (configurar después)
 EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
@@ -531,39 +570,68 @@ EMAIL_HOST_USER=
 EMAIL_HOST_PASSWORD=
 EOF
 
-    log_success "Archivo de configuración creado"
+    log_success "Archivo de configuración del backend creado"
 }
 
 create_root_env_file() {
-    log_info "Creando archivo .env raíz para Docker Compose..."
+    log_info "Creando archivo .env raíz para Docker Compose (network_mode: host)..."
 
     cat > $INSTALL_DIR/.env <<EOF
-# Docker Compose environment variables
-# Generado por install.sh - $(date)
+# ============================================================================
+# VoziPOmni — Docker Compose Environment (Producción)
+# Generado automáticamente por install.sh — $(date)
+# ============================================================================
+# IMPORTANTE: En producción todos los servicios usan network_mode: host
+#   por eso DB_HOST, REDIS_HOST, ASTERISK_HOST usan la IP del servidor.
+# ============================================================================
 
-# IP pública del servidor (usada por trunk-nat-transport)
+# === SERVIDOR ===
 VOZIPOMNI_IPV4=$SERVER_IP
+NAT_IPV4=
+TZ=America/Bogota
 
-# Credenciales base de datos (must match DB_* in backend/.env)
+# === POSTGRESQL ===
 POSTGRES_DB=vozipomni
 POSTGRES_USER=vozipomni_user
 POSTGRES_PASSWORD=$DB_PASSWORD
 
-# Redis
+# === REDIS ===
 REDIS_PASSWORD=$REDIS_PASSWORD
 
-# Django
+# === DJANGO / BACKEND ===
 SECRET_KEY=$SECRET_KEY
+DEBUG=False
 ALLOWED_HOSTS=$SERVER_IP,localhost,127.0.0.1
 CORS_ORIGINS=http://$SERVER_IP,https://$SERVER_IP
+GUNICORN_WORKERS=4
+GUNICORN_TIMEOUT=120
 
-# Asterisk AMI
+# === CELERY ===
+CELERY_LOG_LEVEL=info
+CELERY_CONCURRENCY=4
+
+# === ASTERISK ===
 ASTERISK_AMI_USER=admin
 ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
 
-# Frontend
+# === FRONTEND (Nuxt 3) ===
 NUXT_PUBLIC_API_BASE=/api
 NUXT_PUBLIC_WS_BASE=/ws
+NUXT_PUBLIC_APP_NAME=VozipOmni
+
+# === WEBSOCKET ===
+WS_PORT=8765
+
+# === NGINX ===
+NGINX_HTTP_PORT=80
+NGINX_HTTPS_PORT=443
+
+# === EMAIL (configurar después si se necesita) ===
+EMAIL_HOST=
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=
+EMAIL_HOST_PASSWORD=
 EOF
 
     chmod 600 $INSTALL_DIR/.env
@@ -571,27 +639,84 @@ EOF
 }
 
 update_docker_compose() {
-    log_info "Configuración de Docker Compose (producción)..."
+    log_info "Configuración de Docker Compose (producción con network_mode: host)..."
     # Las credenciales se inyectan via .env raíz (create_root_env_file)
-    # No es necesario sed sobre docker-compose.prod.yml
-    log_success "Docker Compose configurado (usando docker-compose.prod.yml)"
+    # Los servicios usan network_mode: host y healthchecks
+    log_success "Docker Compose configurado (docker-compose.prod.yml)"
+}
+
+# ─── wait_for_env — Polling HTTP estilo OmniLeads ──────────────────────────
+# Espera a que el backend responda HTTP antes de continuar,
+# en lugar de un sleep fijo. Máximo WAIT_TIMEOUT segundos.
+# ────────────────────────────────────────────────────────────────────────────
+wait_for_env() {
+    local url="http://localhost:8000/api/"
+    local WAIT_TIMEOUT=${1:-600}  # 10 minutos por defecto
+    local WAIT_INTERVAL=10
+    local elapsed=0
+
+    log_info "Esperando a que VoziPOmni esté listo (máx ${WAIT_TIMEOUT}s)..."
+    log_info "Monitoreando: $url"
+    echo ""
+
+    while [ $elapsed -lt $WAIT_TIMEOUT ]; do
+        local http_code
+        http_code=$(curl -sS -o /dev/null -w "%{http_code}" --connect-timeout 5 "$url" 2>/dev/null || echo "000")
+
+        case $http_code in
+            200|301|302|403)
+                echo ""
+                log_success "VoziPOmni está respondiendo (HTTP $http_code) después de ${elapsed}s"
+                return 0
+                ;;
+            000)
+                printf "  [%3ds/%ds] Esperando conexión...\\r" "$elapsed" "$WAIT_TIMEOUT"
+                ;;
+            *)
+                printf "  [%3ds/%ds] HTTP %s — esperando...\\r" "$elapsed" "$WAIT_TIMEOUT" "$http_code"
+                ;;
+        esac
+
+        sleep $WAIT_INTERVAL
+        elapsed=$((elapsed + WAIT_INTERVAL))
+    done
+
+    echo ""
+    log_warning "Timeout de ${WAIT_TIMEOUT}s alcanzado esperando el backend"
+    log_warning "El sistema puede necesitar más tiempo para iniciar"
+    log_info "Verifique manualmente: $COMPOSE_CMD -f docker-compose.prod.yml logs backend"
+    return 1
 }
 
 start_services() {
     log_info "Iniciando servicios Docker..."
     
     cd $INSTALL_DIR
+
+    # Detectar comando compose
+    detect_compose_cmd
     
-    # Detener servicios y eliminar volúmenes para instalación limpia
+    # Detener servicios anteriores (si existen)
     log_info "Limpiando instalación anterior (si existe)..."
-    docker compose -f docker-compose.prod.yml down -v 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.prod.yml down 2>/dev/null || true
     
-    # Iniciar servicios (producción)
-    log_info "Construyendo e iniciando servicios (esto puede tardar unos minutos)..."
-    docker compose -f docker-compose.prod.yml up -d --build
+    # Construir e iniciar en modo detached
+    log_info "Construyendo e iniciando servicios (esto puede tardar varios minutos)..."
+    $COMPOSE_CMD -f docker-compose.prod.yml up -d --build 2>&1
+
+    # Polling HTTP en lugar de sleep fijo
+    echo ""
+    if wait_for_env 600; then
+        log_success "Todos los servicios están operativos"
+    else
+        log_warning "Continuando sin confirmación del backend..."
+    fi
     
-    log_info "Esperando a que los servicios estén listos..."
-    sleep 30
+    # Mostrar estado de los contenedores
+    echo ""
+    log_info "Estado de los servicios:"
+    $COMPOSE_CMD -f docker-compose.prod.yml ps 2>/dev/null || true
+    echo ""
     
     log_success "Servicios iniciados"
 }
@@ -601,20 +726,23 @@ run_migrations() {
     
     cd $INSTALL_DIR
     
-    # Esperar a que PostgreSQL esté listo
+    # Esperar a que PostgreSQL esté listo via healthcheck
     log_info "Esperando a que PostgreSQL esté disponible..."
-    for i in {1..30}; do
-        if docker compose -f docker-compose.prod.yml exec -T postgres pg_isready -U ${POSTGRES_USER:-vozipomni_user} -d ${POSTGRES_DB:-vozipomni} > /dev/null 2>&1; then
+    for i in {1..60}; do
+        if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres pg_isready -U ${POSTGRES_USER:-vozipomni_user} -d ${POSTGRES_DB:-vozipomni} > /dev/null 2>&1; then
             log_success "PostgreSQL está listo"
             break
         fi
-        echo -n "."
+        if [ $i -eq 60 ]; then
+            log_warning "Timeout esperando PostgreSQL, intentando migraciones de todas formas..."
+        fi
+        printf "  Esperando PostgreSQL... (%ds)\r" "$((i*2))"
         sleep 2
     done
     echo ""
     
-    # Ejecutar migraciones usando run en lugar de exec
-    docker compose -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
+    # Ejecutar migraciones
+    $COMPOSE_CMD -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
     
     log_success "Migraciones completadas"
 }
@@ -623,7 +751,7 @@ create_superuser() {
     log_info "Creando usuario administrador..."
     
     cd $INSTALL_DIR
-    docker compose -f docker-compose.prod.yml run --rm backend python manage.py shell <<EOF
+    $COMPOSE_CMD -f docker-compose.prod.yml run --rm backend python manage.py shell <<EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
@@ -677,7 +805,7 @@ ASTERISK AMI:
   Host: localhost (desde el servidor)
   Puerto: 5038
   Usuario: admin
-  Contraseña: VoziPOmni2026!
+  Contraseña: vozipomni_ami_2026
 
 ════════════════════════════════════════════════════════════
 IMPORTANTE: Guarda este archivo en un lugar seguro.
@@ -710,10 +838,10 @@ show_final_message() {
     echo -e "  ${GREEN}$INSTALL_DIR/credentials.txt${NC}"
     echo ""
     echo -e "${BLUE}Comandos útiles:${NC}"
-    echo -e "  Ver logs:        ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml logs -f${NC}"
-    echo -e "  Reiniciar:       ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml restart${NC}"
-    echo -e "  Detener:         ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml down${NC}"
-    echo -e "  Iniciar:         ${GREEN}cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml up -d${NC}"
+    echo -e "  Ver logs:        ${GREEN}cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml logs -f${NC}"
+    echo -e "  Reiniciar:       ${GREEN}cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml restart${NC}"
+    echo -e "  Detener:         ${GREEN}cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml down${NC}"
+    echo -e "  Iniciar:         ${GREEN}cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml up -d${NC}"
     echo ""
     echo -e "${BLUE}Próximos pasos:${NC}"
     echo -e "  1. Configurar SSL/TLS con certbot para HTTPS"
@@ -726,7 +854,7 @@ show_final_message() {
 install_vozipomni() {
     print_header
     
-    log_info "Iniciando instalación de VoziPOmni Contact Center..."
+    log_info "Iniciando instalación de VoziPOmni Contact Center v2.0..."
     echo ""
     
     detect_os
@@ -739,6 +867,9 @@ install_vozipomni() {
     if ! check_docker; then
         install_docker
     fi
+
+    # Detectar compose
+    detect_compose_cmd
     
     # Reiniciar Docker si daemon.json fue creado antes de instalar
     if systemctl is-active --quiet docker 2>/dev/null; then
@@ -806,7 +937,7 @@ uninstall_vozipomni() {
     fi
     
     log_info "Deteniendo servicios..."
-    cd $INSTALL_DIR 2>/dev/null && docker compose -f docker-compose.prod.yml down -v
+    cd $INSTALL_DIR 2>/dev/null && $COMPOSE_CMD -f docker-compose.prod.yml down -v
     
     log_info "Eliminando archivos..."
     rm -rf $INSTALL_DIR
@@ -835,6 +966,7 @@ show_menu() {
             ;;
         2)
             log_info "Actualizando VoziPOmni..."
+            detect_compose_cmd
             clone_or_update_repo
             start_services
             run_migrations
@@ -852,10 +984,10 @@ show_menu() {
             fi
             ;;
         5)
-            cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml logs -f
+            cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml logs -f
             ;;
         6)
-            cd $INSTALL_DIR && docker compose -f docker-compose.prod.yml restart
+            cd $INSTALL_DIR && $COMPOSE_CMD -f docker-compose.prod.yml restart
             log_success "Servicios reiniciados"
             ;;
         7)
@@ -872,8 +1004,16 @@ show_menu() {
 # Main
 ################################################################################
 
-# If VOZIPOMNI_IPV4 is set, go straight to installation
-if [ -n "$VOZIPOMNI_IPV4" ]; then
+# Detectar OS y compose al inicio para el menú
+detect_os
+if command -v docker &>/dev/null; then
+    detect_compose_cmd 2>/dev/null || COMPOSE_CMD="docker compose"
+else
+    COMPOSE_CMD="docker compose"
+fi
+
+# If VOZIPOMNI_IPV4 is set, go straight to installation (estilo OmniLeads)
+if [ -n "${VOZIPOMNI_IPV4:-}" ]; then
     install_vozipomni
 else
     show_menu
