@@ -64,12 +64,124 @@ detect_os() {
         OS=$ID
         OS_VERSION=$VERSION_ID
         OS_NAME=$NAME
+    elif [ -f /etc/redhat-release ]; then
+        OS="rhel"
+        OS_VERSION="unknown"
+        OS_NAME="Red Hat / CentOS"
+    elif [ -f /etc/debian_version ]; then
+        OS="debian"
+        OS_VERSION=$(cat /etc/debian_version)
+        OS_NAME="Debian"
+    elif [ -f /etc/arch-release ]; then
+        OS="arch"
+        OS_VERSION="rolling"
+        OS_NAME="Arch Linux"
     else
-        log_error "No se pudo detectar el sistema operativo"
-        exit 1
+        log_warning "No se pudo detectar el sistema operativo, intentando continuar..."
+        OS="unknown"
+        OS_VERSION="unknown"
+        OS_NAME="Linux desconocido"
     fi
     
     log_info "Sistema operativo detectado: $OS_NAME $OS_VERSION"
+}
+
+prepare_system() {
+    log_info "Preparando sistema para instalación limpia..."
+
+    # ── 1. Silenciar mensajes del kernel (problema de logs veth/bridge) ──
+    log_info "Silenciando mensajes del kernel en consola..."
+    if [ -f /proc/sys/kernel/printk ]; then
+        echo "1 4 1 7" > /proc/sys/kernel/printk
+    else
+        dmesg -n 1 2>/dev/null || true
+    fi
+
+    # Persistir configuración
+    cat > /etc/sysctl.d/10-vozipomni-silence.conf <<'SYSCTL'
+# VoziPOmni: Silenciar mensajes del kernel en consola
+kernel.printk = 1 4 1 7
+SYSCTL
+    log_success "Mensajes del kernel silenciados"
+
+    # ── 2. Optimizaciones de red para VoIP y Docker ──
+    log_info "Aplicando optimizaciones del kernel para VoIP..."
+    cat > /etc/sysctl.d/20-vozipomni-optimize.conf <<'SYSCTL'
+# VoziPOmni - Optimizaciones para VoIP y Docker
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.rmem_default = 262144
+net.core.wmem_default = 262144
+net.core.netdev_max_backlog = 5000
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 65535
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.ipv4.tcp_keepalive_time = 300
+net.ipv4.ip_forward = 1
+net.ipv4.conf.all.forwarding = 1
+vm.swappiness = 10
+vm.overcommit_memory = 1
+vm.max_map_count = 262144
+fs.file-max = 2097152
+fs.inotify.max_user_watches = 524288
+SYSCTL
+
+    # Cargar módulo bridge para Docker
+    modprobe br_netfilter 2>/dev/null || true
+
+    # Aplicar sysctl (ignorar errores de parámetros no soportados)
+    sysctl -p /etc/sysctl.d/10-vozipomni-silence.conf 2>/dev/null || true
+    sysctl -p /etc/sysctl.d/20-vozipomni-optimize.conf 2>/dev/null || true
+    log_success "Optimizaciones del kernel aplicadas"
+
+    # ── 3. Configurar límites del sistema ──
+    cat > /etc/security/limits.d/99-vozipomni.conf <<'LIMITS'
+* soft nofile 65536
+* hard nofile 65536
+* soft nproc  65536
+* hard nproc  65536
+root soft nofile 65536
+root hard nofile 65536
+LIMITS
+    log_success "Límites del sistema configurados"
+
+    # ── 4. Configurar Docker daemon optimizado ──
+    mkdir -p /etc/docker
+    if [ ! -f /etc/docker/daemon.json ]; then
+        cat > /etc/docker/daemon.json <<'DAEMON'
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "storage-driver": "overlay2",
+  "live-restore": true,
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 65536,
+      "Soft": 65536
+    }
+  }
+}
+DAEMON
+        log_success "Docker daemon configurado"
+    else
+        log_info "Docker daemon.json ya existe, respetando configuración actual"
+    fi
+
+    # ── 5. SELinux a permissive si está en enforcing (RHEL/CentOS/Rocky) ──
+    if command -v getenforce &>/dev/null; then
+        if [ "$(getenforce 2>/dev/null)" = "Enforcing" ]; then
+            setenforce 0 2>/dev/null || true
+            sed -i 's/^SELINUX=enforcing/SELINUX=permissive/' /etc/selinux/config 2>/dev/null || true
+            log_success "SELinux configurado a Permissive"
+        fi
+    fi
+
+    log_success "Sistema preparado correctamente para la instalación"
 }
 
 check_system_requirements() {
@@ -110,15 +222,44 @@ install_system_dependencies() {
     log_info "Instalando dependencias del sistema (git, curl, openssl)..."
 
     case $OS in
-        ubuntu|debian)
+        ubuntu|debian|linuxmint|pop|elementary|zorin|kali)
             apt-get update
-            apt-get install -y git curl openssl ca-certificates
+            apt-get install -y git curl openssl ca-certificates gnupg lsb-release
             ;;
-        centos|rhel|rocky|almalinux)
+        centos|rhel|rocky|almalinux|ol|oracle|scientific)
+            if command -v dnf &>/dev/null; then
+                dnf install -y git curl openssl ca-certificates
+            else
+                yum install -y git curl openssl ca-certificates
+            fi
+            ;;
+        fedora)
+            dnf install -y git curl openssl ca-certificates
+            ;;
+        opensuse*|sles|suse)
+            zypper install -y git curl openssl ca-certificates
+            ;;
+        arch|manjaro|endeavouros)
+            pacman -Sy --noconfirm git curl openssl ca-certificates
+            ;;
+        amzn|amazon)
             yum install -y git curl openssl ca-certificates
             ;;
         *)
-            log_warning "No se instalaron dependencias: sistema no soportado"
+            log_warning "Distribución '$OS' no reconocida. Intentando con gestor de paquetes disponible..."
+            if command -v apt-get &>/dev/null; then
+                apt-get update && apt-get install -y git curl openssl ca-certificates
+            elif command -v dnf &>/dev/null; then
+                dnf install -y git curl openssl ca-certificates
+            elif command -v yum &>/dev/null; then
+                yum install -y git curl openssl ca-certificates
+            elif command -v pacman &>/dev/null; then
+                pacman -Sy --noconfirm git curl openssl ca-certificates
+            elif command -v zypper &>/dev/null; then
+                zypper install -y git curl openssl ca-certificates
+            else
+                log_warning "No se pudo instalar dependencias automáticamente"
+            fi
             ;;
     esac
 
@@ -165,24 +306,71 @@ install_docker() {
             apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
             ;;
             
-        centos|rhel|rocky|almalinux)
+        centos|rhel|rocky|almalinux|ol|oracle|scientific)
             # Install prerequisites
-            yum install -y yum-utils
+            if command -v dnf &>/dev/null; then
+                dnf install -y dnf-plugins-core || yum install -y yum-utils
+            else
+                yum install -y yum-utils
+            fi
             
             # Add Docker repository
-            yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+            yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo 2>/dev/null || true
             
             # Install Docker Engine
-            yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            if command -v dnf &>/dev/null; then
+                dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            else
+                yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            fi
             
             # Start Docker
             systemctl start docker
             systemctl enable docker
             ;;
+
+        fedora)
+            dnf install -y dnf-plugins-core
+            dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+            dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+            systemctl start docker
+            systemctl enable docker
+            ;;
+
+        opensuse*|sles|suse)
+            zypper install -y docker docker-compose
+            systemctl start docker
+            systemctl enable docker
+            ;;
+
+        arch|manjaro|endeavouros)
+            pacman -Sy --noconfirm docker docker-compose
+            systemctl start docker
+            systemctl enable docker
+            ;;
+
+        amzn|amazon)
+            yum install -y docker
+            systemctl start docker
+            systemctl enable docker
+            # Docker Compose via pip
+            if ! command -v docker-compose &>/dev/null && ! docker compose version &>/dev/null; then
+                curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                chmod +x /usr/local/bin/docker-compose
+            fi
+            ;;
             
         *)
-            log_error "Sistema operativo no soportado: $OS"
-            exit 1
+            log_warning "Distribución '$OS' no reconocida. Intentando instalación universal de Docker..."
+            if curl -fsSL https://get.docker.com | sh; then
+                systemctl start docker 2>/dev/null || true
+                systemctl enable docker 2>/dev/null || true
+                log_success "Docker instalado via get.docker.com"
+            else
+                log_error "No se pudo instalar Docker automáticamente en: $OS"
+                log_error "Instale Docker manualmente y vuelva a ejecutar este script."
+                exit 1
+            fi
             ;;
     esac
     
@@ -235,63 +423,54 @@ generate_credentials() {
 configure_firewall() {
     log_info "Configurando firewall..."
     
-    case $OS in
-        ubuntu|debian)
-            if command -v ufw &> /dev/null; then
-                # Allow SSH
-                ufw allow 22/tcp
-                # Allow HTTP/HTTPS
-                ufw allow 80/tcp
-                ufw allow 443/tcp
-                # Allow SIP
-                ufw allow 5060/tcp
-                ufw allow 5060/udp
-                ufw allow 5061/tcp
-                # Allow SIP Trunks
-                ufw allow 5161/udp
-                ufw allow 5162/udp
-                # Allow AMI (solo red interna)
-                ufw allow 5038/tcp
-                # Allow RTP media
-                ufw allow 10000:20000/udp
-                # Allow WebSocket
-                ufw allow 8089/tcp
-                
-                # Enable firewall if not active
-                ufw --force enable
-                log_success "Firewall UFW configurado"
-            else
-                log_warning "UFW no está instalado"
-            fi
-            ;;
-            
-        centos|rhel|rocky|almalinux)
-            if command -v firewall-cmd &> /dev/null; then
-                # Allow services
-                firewall-cmd --permanent --add-service=http
-                firewall-cmd --permanent --add-service=https
-                firewall-cmd --permanent --add-service=ssh
-                # Allow SIP
-                firewall-cmd --permanent --add-port=5060/tcp
-                firewall-cmd --permanent --add-port=5060/udp
-                firewall-cmd --permanent --add-port=5061/tcp
-                # Allow SIP Trunks
-                firewall-cmd --permanent --add-port=5161/udp
-                firewall-cmd --permanent --add-port=5162/udp
-                # Allow AMI
-                firewall-cmd --permanent --add-port=5038/tcp
-                # Allow RTP
-                firewall-cmd --permanent --add-port=10000-20000/udp
-                # Allow WebSocket
-                firewall-cmd --permanent --add-port=8089/tcp
-                
-                firewall-cmd --reload
-                log_success "Firewall configurado"
-            else
-                log_warning "firewalld no está instalado"
-            fi
-            ;;
-    esac
+    # Intentar configurar firewall según lo que esté disponible en el sistema
+    if command -v ufw &> /dev/null; then
+        # UFW (Ubuntu, Debian y derivados)
+        ufw allow 22/tcp
+        ufw allow 80/tcp
+        ufw allow 443/tcp
+        ufw allow 5060/tcp
+        ufw allow 5060/udp
+        ufw allow 5061/tcp
+        ufw allow 5161/udp
+        ufw allow 5162/udp
+        ufw allow 5038/tcp
+        ufw allow 10000:20000/udp
+        ufw allow 8089/tcp
+        ufw --force enable
+        log_success "Firewall UFW configurado"
+    elif command -v firewall-cmd &> /dev/null; then
+        # firewalld (RHEL, CentOS, Rocky, Fedora, openSUSE)
+        firewall-cmd --permanent --add-service=http 2>/dev/null || true
+        firewall-cmd --permanent --add-service=https 2>/dev/null || true
+        firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
+        firewall-cmd --permanent --add-port=5060/tcp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=5060/udp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=5061/tcp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=5161/udp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=5162/udp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=5038/tcp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=10000-20000/udp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=8089/tcp 2>/dev/null || true
+        firewall-cmd --reload 2>/dev/null || true
+        log_success "Firewall firewalld configurado"
+    elif command -v iptables &> /dev/null; then
+        # iptables directo (cualquier Linux)
+        iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 5060 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 5060 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 5061 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 5161 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 5162 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 5038 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 10000:20000 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 8089 -j ACCEPT 2>/dev/null || true
+        log_success "Firewall iptables configurado"
+    else
+        log_warning "No se detectó firewall (ufw, firewalld, iptables). Configure manualmente."
+    fi
 }
 
 clone_or_update_repo() {
@@ -552,12 +731,18 @@ install_vozipomni() {
     
     detect_os
     check_system_requirements
+    prepare_system
     install_system_dependencies
     echo ""
     
     # Check and install Docker
     if ! check_docker; then
         install_docker
+    fi
+    
+    # Reiniciar Docker si daemon.json fue creado antes de instalar
+    if systemctl is-active --quiet docker 2>/dev/null; then
+        systemctl restart docker 2>/dev/null || true
     fi
     echo ""
     

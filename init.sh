@@ -26,6 +26,30 @@ print_error() {
     echo -e "${RED}[✗]${NC} $1"
 }
 
+# Función para preparar el sistema (silenciar kernel, optimizar)
+prepare_system() {
+    echo ""
+    echo "Preparando sistema..."
+    
+    # Silenciar mensajes del kernel en consola (evita logs de veth/bridge)
+    if [ -w /proc/sys/kernel/printk ] 2>/dev/null; then
+        echo "1 4 1 7" > /proc/sys/kernel/printk 2>/dev/null || true
+    elif command -v dmesg &>/dev/null; then
+        dmesg -n 1 2>/dev/null || true
+    fi
+    
+    # Persistir configuración si tenemos permisos
+    if [ -w /etc/sysctl.d/ ] 2>/dev/null; then
+        echo "kernel.printk = 1 4 1 7" > /etc/sysctl.d/10-vozipomni-silence.conf 2>/dev/null || true
+        sysctl -p /etc/sysctl.d/10-vozipomni-silence.conf 2>/dev/null || true
+    fi
+    
+    # Cargar módulo bridge para Docker
+    modprobe br_netfilter 2>/dev/null || true
+    
+    print_status "Sistema preparado (kernel silenciado)"
+}
+
 # Verificar Docker
 echo "Verificando prerequisitos..."
 if ! command -v docker &> /dev/null; then
@@ -39,6 +63,9 @@ if ! command -v docker-compose &> /dev/null; then
     exit 1
 fi
 print_status "Docker Compose instalado"
+
+# Preparar sistema antes de Docker
+prepare_system
 
 # Crear directorios necesarios
 echo ""

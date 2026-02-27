@@ -5,6 +5,13 @@ set -e
 echo "=== Deploy Frontend Producción ==="
 echo ""
 
+# Silenciar mensajes del kernel (evita logs de veth/bridge en consola)
+if [ -w /proc/sys/kernel/printk ] 2>/dev/null; then
+    echo "1 4 1 7" > /proc/sys/kernel/printk 2>/dev/null || true
+elif command -v dmesg &>/dev/null; then
+    dmesg -n 1 2>/dev/null || true
+fi
+
 # 1. Git pull
 echo "1. Actualizando código desde GitHub..."
 git pull origin main

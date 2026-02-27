@@ -18,6 +18,20 @@ if [ ! -f "docker-compose.yml" ]; then
     exit 1
 fi
 
+# ── Preparar sistema (silenciar mensajes del kernel) ──
+echo "🔧 Preparando sistema..."
+if [ -w /proc/sys/kernel/printk ] 2>/dev/null; then
+    echo "1 4 1 7" > /proc/sys/kernel/printk 2>/dev/null || true
+elif command -v dmesg &>/dev/null; then
+    dmesg -n 1 2>/dev/null || true
+fi
+if [ -w /etc/sysctl.d/ ] 2>/dev/null; then
+    echo "kernel.printk = 1 4 1 7" > /etc/sysctl.d/10-vozipomni-silence.conf 2>/dev/null || true
+    sysctl -p /etc/sysctl.d/10-vozipomni-silence.conf 2>/dev/null || true
+fi
+modprobe br_netfilter 2>/dev/null || true
+echo "✓ Sistema preparado (kernel silenciado)"
+
 # Hacer backup del Dockerfile actual
 echo "📦 Creando backup del Dockerfile actual..."
 if [ -f "docker/asterisk/Dockerfile" ]; then
