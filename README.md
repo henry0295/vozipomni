@@ -1,21 +1,27 @@
 # VoziPOmni Contact Center
 
+![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.11-blue.svg)
 ![Django](https://img.shields.io/badge/django-4.2.9-green.svg)
 ![Nuxt](https://img.shields.io/badge/nuxt-3.10-00DC82.svg)
 ![Vue](https://img.shields.io/badge/vue-3.4-42b883.svg)
 ![Asterisk](https://img.shields.io/badge/asterisk-PBX-orange.svg)
+![Docker](https://img.shields.io/badge/docker-compose-2496ED.svg)
 
 Plataforma de Contact Center omnicanal con arquitectura moderna basada en Django REST Framework, Nuxt 3, Asterisk, Kamailio y RTPEngine. Incluye marcadores predictivo, progresivo y call blasting, consola de agente WebRTC, IVR, colas ACD y reportería en tiempo real.
+
+> **v2.0.0** — Despliegue con `network_mode: host` para rendimiento VoIP óptimo, healthchecks en todos los servicios, YAML anchors, resource limits, polling HTTP inteligente y compatibilidad universal con cualquier distribución Linux.
 
 ## 📋 Tabla de Contenidos
 
 - [Características](#-características)
 - [Stack Tecnológico](#-stack-tecnológico)
 - [Arquitectura](#️-arquitectura)
-- [Instalación Rápida (Producción)](#-instalación-rápida-producción)
+- [Despliegue Rápido (Una Línea)](#-despliegue-rápido-una-línea)
+- [Instalación Interactiva](#-instalación-interactiva)
 - [Desarrollo Local](#-desarrollo-local)
+- [Estructura de Archivos de Despliegue](#-estructura-de-archivos-de-despliegue)
 - [Servicios del Sistema](#-servicios-del-sistema)
 - [Módulos del Frontend](#-módulos-del-frontend)
 - [API REST](#-api-rest)
@@ -131,43 +137,95 @@ Plataforma de Contact Center omnicanal con arquitectura moderna basada en Django
 
 ---
 
-## 🚀 Instalación Rápida (Producción)
+## 🚀 Despliegue Rápido (Una Línea)
 
-Para instalar VoziPOmni en un servidor Linux (VPS, Cloud o VM):
-
-```bash
-curl -o install.sh -L "https://raw.githubusercontent.com/VOZIP/vozipomni/main/install.sh" && chmod +x install.sh
-```
-
-Ejecuta el instalador indicando la IP pública de tu servidor:
+Para desplegar VoziPOmni en cualquier servidor Linux con un solo comando:
 
 ```bash
-export VOZIPOMNI_IPV4=X.X.X.X && ./install.sh
+export VOZIPOMNI_IPV4=X.X.X.X && curl -sL https://raw.githubusercontent.com/VOZIP/vozipomni/main/deploy.sh | sudo bash
 ```
 
-> **Reemplaza `X.X.X.X` con tu dirección IP pública.**
+> **Reemplaza `X.X.X.X` con la dirección IP de tu servidor.**
 
-El instalador realiza automáticamente:
-- Detección y validación de sistema operativo
-- Verificación de requisitos mínimos (4 GB RAM, 40 GB disco, 2 CPU)
-- Instalación de Docker CE + Docker Compose
-- Configuración de firewall (UFW o firewalld)
-- Clonado del repositorio en `/opt/vozipomni`
-- Generación de credenciales seguras (openssl rand)
-- Build y despliegue de todos los contenedores
-- Migraciones de base de datos y creación de superusuario
-- Guardado de credenciales en `credentials.txt`
+O descargando primero el script:
+
+```bash
+curl -o deploy.sh -L "https://raw.githubusercontent.com/VOZIP/vozipomni/main/deploy.sh"
+chmod +x deploy.sh
+export VOZIPOMNI_IPV4=X.X.X.X
+sudo bash deploy.sh
+```
+
+### Variables opcionales
+
+| Variable | Descripción | Default |
+|----------|-------------|---------|
+| `VOZIPOMNI_IPV4` | IP pública/privada del servidor **(requerido)** | — |
+| `NAT_IPV4` | IP pública si el servidor está detrás de NAT | — |
+| `TZ` | Zona horaria | `America/Bogota` |
+| `INSTALL_DIR` | Directorio de instalación | `/opt/vozipomni` |
+| `BRANCH` | Rama Git a desplegar | `main` |
+
+### ¿Qué hace `deploy.sh`?
+
+1. Verifica prerequisitos (root, IP válida)
+2. Prepara el sistema operativo (kernel, sysctl, SELinux, límites)
+3. Instala Docker CE + Docker Compose (detección universal)
+4. Clona el repositorio en `/opt/vozipomni`
+5. Genera credenciales seguras (openssl rand)
+6. Crea `.env` centralizado con `network_mode: host`
+7. Construye e inicia todos los contenedores
+8. **Polling HTTP inteligente**: espera hasta 10 min verificando que el backend responda (HTTP 200/301/302/403) en lugar de un sleep fijo
+9. Ejecuta migraciones y crea superusuario
+10. Guarda credenciales en `credentials.txt`
+11. Configura firewall automáticamente (UFW, firewalld)
+
+### Manejo de errores
+
+El script usa `set -Eeuo pipefail` con `trap ERR` para capturar errores. Si algo falla, muestra:
+- La línea exacta donde ocurrió el error
+- El código de salida
+- Sugerencias de resolución
+
+---
+
+## 📦 Instalación Interactiva
+
+Para una instalación guiada con menú interactivo:
+
+```bash
+curl -o install.sh -L "https://raw.githubusercontent.com/VOZIP/vozipomni/main/install.sh"
+chmod +x install.sh
+sudo bash install.sh
+```
+
+El menú ofrece:
+
+| Opción | Descripción |
+|--------|-------------|
+| 1 | Instalar VoziPOmni (completa) |
+| 2 | Actualizar VoziPOmni (preserva datos) |
+| 3 | Desinstalar VoziPOmni |
+| 4 | Ver credenciales |
+| 5 | Ver logs |
+| 6 | Reiniciar servicios |
+| 7 | Salir |
+
+> Si la variable `VOZIPOMNI_IPV4` está definida, el instalador omite el menú y ejecuta la instalación directamente.
 
 ### Sistemas Operativos Soportados
 
-| Distribución | Versiones |
-|---|---|
-| Ubuntu | 20.04 / 22.04 LTS |
-| Debian | 11 / 12 |
-| CentOS Stream | 8 / 9 |
-| Rocky Linux | 8 / 9 |
-| RHEL | 8 / 9 |
-| AlmaLinux | 8 / 9 |
+Compatible con **cualquier distribución Linux** moderna. Detección automática de:
+
+| Familia | Distribuciones |
+|---------|---------------|
+| **Debian** | Ubuntu, Debian, Linux Mint, Pop!_OS, Elementary, Zorin, Kali |
+| **RHEL** | CentOS, Rocky Linux, AlmaLinux, Oracle Linux, RHEL, Scientific Linux |
+| **Fedora** | Fedora |
+| **SUSE** | openSUSE, SLES |
+| **Arch** | Arch Linux, Manjaro, EndeavourOS |
+| **Amazon** | Amazon Linux |
+| **Otras** | Cualquier distro con Docker (instalación via `get.docker.com`) |
 
 ### Requisitos Mínimos
 
@@ -177,16 +235,20 @@ El instalador realiza automáticamente:
 | CPU | 2 cores | 4 cores |
 | Disco | 40 GB | 100 GB |
 
-### Puertos requeridos
+### Puertos Requeridos
 
 | Puerto | Protocolo | Servicio |
 |--------|-----------|----------|
+| 22 | TCP | SSH |
 | 80 / 443 | TCP | Nginx (HTTP/HTTPS) |
 | 5060 | UDP/TCP | Kamailio (SIP) |
 | 5061 | TCP | Kamailio (SIP TLS) |
 | 5161 / 5162 | UDP | Asterisk (Troncales SIP) |
-| 8089 | TCP | Asterisk WebSocket (WebRTC) |
-| 10000-20000 | UDP | RTP (media de audio/video) |
+| 5038 | TCP | Asterisk AMI |
+| 8080 | TCP | Kamailio HTTP |
+| 8088 / 8089 | TCP | Asterisk WebSocket (WebRTC) |
+| 8765 | TCP | WebSocket Server |
+| 10000-23100 | UDP | RTP media (audio/vídeo) |
 
 ---
 
@@ -194,7 +256,7 @@ El instalador realiza automáticamente:
 
 ### Prerrequisitos
 
-- Docker Desktop (Windows/Mac) o Docker + Docker Compose (Linux)
+- Docker Desktop (Windows/Mac) o Docker + Docker Compose v2 (Linux)
 - Git
 - 8 GB RAM mínimo
 - 50 GB espacio en disco
@@ -209,26 +271,27 @@ cd vozipomni
 ### 2. Configurar variables de entorno
 
 ```bash
-cp backend/.env.example backend/.env
+cp env.template .env
+# Editar .env si es necesario (los valores por defecto funcionan para desarrollo)
 ```
-
-Para desarrollo local, los valores por defecto son suficientes.
 
 ### 3. Levantar los contenedores
 
 ```bash
-# Modo producción
-docker-compose up -d
+# Modo producción (usa docker-compose.yml con healthchecks y resource limits)
+docker compose up -d
 
-# Modo desarrollo (con hot-reload del frontend)
-docker-compose --profile dev up -d
+# Modo desarrollo (incluye hot-reload del frontend en puerto 3001)
+docker compose --profile dev up -d
 ```
+
+> Los servicios esperan automáticamente a que sus dependencias estén saludables (PostgreSQL, Redis) gracias a `depends_on: condition: service_healthy`.
 
 ### 4. Ejecutar migraciones y crear superusuario
 
 ```bash
-docker-compose exec backend python manage.py migrate
-docker-compose exec backend python manage.py createsuperuser
+docker compose exec backend python manage.py migrate
+docker compose exec backend python manage.py createsuperuser
 ```
 
 ### 5. Acceder a la aplicación
@@ -244,32 +307,110 @@ docker-compose exec backend python manage.py createsuperuser
 
 ---
 
+## � Estructura de Archivos de Despliegue
+
+```
+vozipomni/
+├── deploy.sh                    # Despliegue en una línea (set -Eeuo pipefail, trap ERR)
+├── install.sh                   # Instalación interactiva con menú
+├── prepare-system.sh            # Preparación universal del sistema operativo
+├── env.template                 # Template centralizado de variables .env
+├── docker-compose.yml           # Desarrollo (bridge network, port mappings)
+├── docker-compose.prod.yml      # Producción (network_mode: host, healthchecks)
+├── backend/                     # Django REST API
+├── frontend/                    # Nuxt 3 + Vue 3
+├── dialer_engine/               # Motor de discado (panoramisk/AMI)
+├── websocket_server/            # Eventos en tiempo real (aiohttp)
+└── docker/
+    ├── asterisk/                # Asterisk PBX (configs, Dockerfile)
+    ├── kamailio/                # Proxy SIP / WebRTC gateway
+    ├── rtpengine/               # Media proxy RTP
+    ├── nginx/                   # Reverse proxy (dev + prod)
+    ├── postgresql/              # Init SQL
+    └── redis/
+```
+
+### Archivos clave
+
+| Archivo | Descripción |
+|---------|-------------|
+| `deploy.sh` | Despliegue automatizado con polling HTTP, manejo de errores y detección de compose |
+| `install.sh` | Instalador interactivo v2.0 con menú (instalar, actualizar, desinstalar) |
+| `prepare-system.sh` | Preparación del kernel (silencia mensajes veth/bridge), sysctl VoIP, Docker daemon |
+| `env.template` | Template de todas las variables de entorno con valores por defecto |
+| `docker-compose.yml` | Desarrollo: bridge network, YAML anchors, healthchecks, resource limits |
+| `docker-compose.prod.yml` | Producción: `network_mode: host` en todos los servicios para rendimiento VoIP |
+
+### YAML Anchors (Templates reutilizables)
+
+Ambos archivos Docker Compose usan anchors para evitar duplicación:
+
+| Anchor | Uso |
+|--------|-----|
+| `x-logging` | Configuración de logs JSON (`max-size: 10m`, `max-file: 3`) |
+| `x-restart-policy` | `restart: unless-stopped` |
+| `x-healthcheck-http` | Healthcheck HTTP (30s interval, 10s timeout) |
+| `x-healthcheck-tcp` | Healthcheck TCP (15s interval, 5s timeout) |
+| `x-django-env` | Variables de entorno compartidas por Django, Celery Worker y Celery Beat |
+| `x-django-common` | Configuración base compartida por servicios Django |
+
+---
+
 ## 🐳 Servicios del Sistema
 
-### Desarrollo (docker-compose.yml)
+### Desarrollo (`docker-compose.yml`)
 
-| Servicio | Contenedor | Puerto(s) | Descripción |
-|----------|-----------|-----------|-------------|
-| PostgreSQL 14 | `vozipomni_postgres` | 5432 | Base de datos principal |
-| Redis 7 | `vozipomni_redis` | 6379 | Cache, broker Celery, PubSub |
-| Django Backend | `vozipomni_backend` | 8000 | API REST + Admin |
-| Celery Worker | `vozipomni_celery_worker` | — | 4 workers para tareas asíncronas |
-| Celery Beat | `vozipomni_celery_beat` | — | Scheduler de tareas periódicas |
-| Asterisk | `vozipomni_asterisk` | 5060, 5061, 5161, 5162, 5038, 8088, 8089, 10000-10100/udp | PBX central |
-| Nginx | `vozipomni_nginx` | 80, 443 | Reverse proxy |
-| Nuxt 3 Frontend | `vozipomni-frontend` | 3000 | Frontend producción (SSR) |
-| Nuxt 3 Frontend Dev | `vozipomni-frontend-dev` | 3001 | Frontend desarrollo (perfil `dev`) |
+Usa red bridge con port mappings. Todos los servicios tienen healthchecks y resource limits.
 
-### Producción (docker-compose.prod.yml)
+| Servicio | Contenedor | Puerto(s) | Healthcheck | Memoria máx. |
+|----------|-----------|-----------|-------------|---------------|
+| PostgreSQL 14 | `vozipomni_postgres` | 5432 | `pg_isready` | 1 GB |
+| Redis 7 | `vozipomni_redis` | 6379 | `redis-cli ping` | 512 MB |
+| Django Backend | `vozipomni_backend` | 8000 | `curl /api/` | 1 GB |
+| Celery Worker | `vozipomni_celery_worker` | — | — | 512 MB |
+| Celery Beat | `vozipomni_celery_beat` | — | — | 256 MB |
+| Asterisk | `vozipomni_asterisk` | 5060, 5061, 5161, 5162, 5038, 8088, 8089, 10000-10100/udp | `asterisk -rx` | — |
+| Nginx | `vozipomni_nginx` | 80, 443 | `curl /` | 256 MB |
+| Nuxt 3 Frontend | `vozipomni_frontend` | 3000 | — | 512 MB |
+| WebSocket Server | `vozipomni_websocket` | 8765 | — | 256 MB |
+| Dialer Engine | `vozipomni_dialer` | — | — | 512 MB |
+| Frontend Dev | `vozipomni_frontend_dev` | 3001 | — | — |
 
-Incluye servicios adicionales:
+> El frontend dev solo se activa con el perfil `dev`: `docker compose --profile dev up -d`
 
-| Servicio | Puerto(s) | Descripción |
-|----------|-----------|-------------|
-| Kamailio | 5060/udp+tcp, 5061/tcp, 8080/tcp | Proxy SIP + Gateway WebRTC |
-| RTPEngine | 22222/udp, 23000-23100/udp | Media proxy / transcodificación RTP |
-| WebSocket Server | 8765 | Eventos en tiempo real (aiohttp) |
-| Dialer Engine | — | Motor de discado de campañas |
+### Producción (`docker-compose.prod.yml`)
+
+**Todos los servicios usan `network_mode: host`** para rendimiento óptimo de VoIP. No hay redes Docker bridge ni port mappings — los servicios escuchan directamente en las interfaces de red del host.
+
+| Servicio | Puerto(s) en el host | Healthcheck | Memoria máx. | `depends_on` |
+|----------|---------------------|-------------|---------------|-------------|
+| PostgreSQL 14 | 5432 | `pg_isready` | 1 GB | — |
+| Redis 7 | 6379 | `redis-cli ping` | 512 MB | — |
+| Django Backend | 8000 | `curl /api/` | 1 GB | postgres ✅, redis ✅ |
+| Celery Worker | — | — | 512 MB | postgres ✅, redis ✅, backend ✅ |
+| Celery Beat | — | — | 256 MB | postgres ✅, redis ✅, backend ✅ |
+| Asterisk | 5161, 5162, 5038, 8088, 8089, 10000-10099/udp | `asterisk -rx` | 1 GB | — |
+| Kamailio | 5060, 5061, 8080 | — | 512 MB | redis ✅, asterisk ✅, rtpengine |
+| RTPEngine | 22222, 23000-23100/udp | — | 256 MB | redis ✅ |
+| Nginx | 80, 443 | `curl /` | 256 MB | backend ✅, frontend |
+| Nuxt 3 Frontend | 3000 | — | 512 MB | backend ✅ |
+| WebSocket Server | 8765 | — | 256 MB | redis ✅ |
+| Dialer Engine | — | — | 512 MB | redis ✅, asterisk ✅ |
+
+> ✅ = `condition: service_healthy` (espera a que el servicio esté saludable antes de iniciar)
+
+### Cadena de dependencias
+
+```
+PostgreSQL ──┐
+             ├──► Backend ──► Celery Worker
+Redis ───────┤              ├──► Celery Beat
+             │              ├──► Nginx ◄── Frontend
+             ├──► Asterisk ──► Kamailio
+             │              └──► Dialer Engine
+             ├──► RTPEngine
+             └──► WebSocket Server
+```
 
 ---
 
@@ -447,7 +588,7 @@ password=tu_password
 ```
 
 ```bash
-docker-compose restart asterisk
+docker compose restart asterisk
 ```
 
 ### Tipos de troncal soportados
@@ -464,40 +605,81 @@ docker-compose restart asterisk
 
 ## 🔧 Gestión del Sistema
 
+### Desarrollo local
+
 ```bash
-# Ver estado de servicios
-docker-compose ps
+# Ver estado de servicios (con healthcheck status)
+docker compose ps
 
 # Ver logs de todos los servicios
-docker-compose logs -f
+docker compose logs -f
 
 # Ver logs de un servicio específico
-docker-compose logs -f backend
-docker-compose logs -f asterisk
+docker compose logs -f backend
+docker compose logs -f asterisk
 
 # Reiniciar un servicio
-docker-compose restart backend
+docker compose restart backend
 
 # Reiniciar todos los servicios
-docker-compose restart
+docker compose restart
 
 # Detener todos los servicios
-docker-compose down
+docker compose down
 
 # Limpiar volúmenes (⚠️ elimina datos)
-docker-compose down -v
+docker compose down -v
 
 # Acceder al contenedor del backend
-docker-compose exec backend bash
+docker compose exec backend bash
 
 # Consola de Asterisk
-docker-compose exec asterisk asterisk -rvvv
+docker compose exec asterisk asterisk -rvvv
+```
 
+### Producción
+
+```bash
+cd /opt/vozipomni
+
+# Ver estado de servicios
+docker compose -f docker-compose.prod.yml ps
+
+# Ver logs (filtrar por servicio)
+docker compose -f docker-compose.prod.yml logs -f
+docker compose -f docker-compose.prod.yml logs -f backend asterisk
+
+# Reiniciar un servicio
+docker compose -f docker-compose.prod.yml restart backend
+
+# Reiniciar todos los servicios
+docker compose -f docker-compose.prod.yml restart
+
+# Detener todos los servicios (preserva datos)
+docker compose -f docker-compose.prod.yml down
+
+# Reconstruir un servicio sin afectar otros
+docker compose -f docker-compose.prod.yml up -d --build backend
+
+# Consola de Asterisk
+docker compose -f docker-compose.prod.yml exec asterisk asterisk -rvvv
+
+# Ver registros SIP
+docker compose -f docker-compose.prod.yml exec asterisk asterisk -rx "pjsip show registrations"
+```
+
+### Backup y restauración
+
+```bash
 # Backup de base de datos
-docker-compose exec postgres pg_dump -U vozipomni_user vozipomni_db > backup.sql
+docker compose -f docker-compose.prod.yml exec -T postgres pg_dump -U vozipomni_user vozipomni > backup_$(date +%Y%m%d).sql
 
 # Restaurar backup
-cat backup.sql | docker-compose exec -T postgres psql -U vozipomni_user vozipomni_db
+cat backup.sql | docker compose -f docker-compose.prod.yml exec -T postgres psql -U vozipomni_user vozipomni
+
+# Backup de .env y credenciales
+cp /opt/vozipomni/.env /opt/vozipomni/.env.backup
+cp /opt/vozipomni/credentials.txt /opt/vozipomni/credentials.backup.txt
 ```
 
 ---
@@ -506,11 +688,20 @@ cat backup.sql | docker-compose exec -T postgres psql -U vozipomni_user vozipomn
 
 ### Instalación de producción
 
-Las credenciales se generan automáticamente y se guardan en `/opt/vozipomni/credentials.txt`.
+Las credenciales se generan automáticamente con `openssl rand` y se guardan en `/opt/vozipomni/credentials.txt` (permisos `600`).
+
+La configuración centralizada está en `/opt/vozipomni/.env`:
+
+| Variable | Descripción |
+|----------|-------------|
+| `SECRET_KEY` | Clave secreta de Django (generada) |
+| `POSTGRES_PASSWORD` | Password de PostgreSQL (generada) |
+| `REDIS_PASSWORD` | Password de Redis (generada) |
+| `ASTERISK_AMI_PASSWORD` | Password de AMI (default: `vozipomni_ami_2026`) |
 
 ### Desarrollo local
 
-Definidas en `backend/.env` y `docker-compose.yml`.
+Definidas en `.env` (raíz) y `backend/.env`. El template base es `env.template`.
 
 **Usuario Admin**:
 - Usuario: `admin`
@@ -518,7 +709,7 @@ Definidas en `backend/.env` y `docker-compose.yml`.
 
 **Agente de prueba WebRTC**:
 - Extensión SIP: `agent1000`
-- Contraseña: `VoziPOmni2026!`
+- Contraseña: `vozipomni_ami_2026`
 - WebSocket: `wss://TU_IP:8089/ws`
 
 ---
@@ -540,37 +731,72 @@ Recomendaciones para producción:
 
 ## 🐛 Troubleshooting
 
+### Mensajes del kernel inundan la consola (veth/bridge)
+
+Esto ocurre cuando Docker crea interfaces de red y el kernel imprime mensajes en la consola. Se soluciona automáticamente con `prepare-system.sh`, pero si persiste:
+
+```bash
+# Silenciar mensajes del kernel
+echo "1 4 1 7" > /proc/sys/kernel/printk
+dmesg -n 1
+
+# Persistir
+echo "kernel.printk = 1 4 1 7" > /etc/sysctl.d/10-vozipomni.conf
+sysctl -p /etc/sysctl.d/10-vozipomni.conf
+```
+
+### Los servicios no inician en orden correcto
+
+Los archivos Docker Compose usan `depends_on: condition: service_healthy`. Verifique el estado de los healthchecks:
+
+```bash
+docker compose ps
+# o en producción:
+docker compose -f docker-compose.prod.yml ps
+```
+
+Si un servicio muestra `unhealthy`, revise sus logs:
+
+```bash
+docker compose logs postgres   # ¿pg_isready falla?
+docker compose logs redis      # ¿redis-cli ping falla?
+docker compose logs backend    # ¿curl /api/ falla?
+```
+
 ### PostgreSQL no conecta
 
 ```bash
-docker-compose ps postgres
-docker-compose logs postgres
+docker compose ps postgres
+docker compose logs postgres
+
+# En producción (network_mode: host), verificar directamente:
+pg_isready -h 127.0.0.1 -U vozipomni_user -d vozipomni
 ```
 
 ### Asterisk no inicia
 
 ```bash
-docker-compose logs asterisk
-docker-compose exec asterisk asterisk -rx "core show settings"
-docker-compose exec asterisk asterisk -rx "pjsip show endpoints"
+docker compose logs asterisk
+docker compose exec asterisk asterisk -rx "core show settings"
+docker compose exec asterisk asterisk -rx "pjsip show endpoints"
 ```
 
 ### Frontend no carga
 
 ```bash
 # Reconstruir frontend
-docker-compose build frontend
-docker-compose up -d frontend
+docker compose build frontend
+docker compose up -d frontend
 
 # O en modo desarrollo
-docker-compose --profile dev build frontend_dev
-docker-compose --profile dev up -d frontend_dev
+docker compose --profile dev build frontend_dev
+docker compose --profile dev up -d frontend_dev
 ```
 
 ### WebSocket no conecta
 
 ```bash
-docker-compose logs websocket_server
+docker compose logs websocket_server
 # Verificar health check
 curl http://localhost:8765/health
 ```
@@ -578,8 +804,23 @@ curl http://localhost:8765/health
 ### Troncales SIP no registran
 
 ```bash
-docker-compose exec asterisk asterisk -rx "pjsip show registrations"
-docker-compose exec asterisk asterisk -rx "pjsip show endpoints"
+docker compose exec asterisk asterisk -rx "pjsip show registrations"
+docker compose exec asterisk asterisk -rx "pjsip show endpoints"
+```
+
+### El deploy se queda esperando (timeout)
+
+El `wait_for_env` espera hasta 10 minutos (600s) a que el backend responda HTTP. Si el timeout se alcanza:
+
+```bash
+# Ver qué servicios están corriendo
+docker compose -f docker-compose.prod.yml ps
+
+# Ver logs del backend
+docker compose -f docker-compose.prod.yml logs backend
+
+# Verificar manualmente
+curl -v http://localhost:8000/api/
 ```
 
 ---

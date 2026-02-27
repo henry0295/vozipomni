@@ -85,6 +85,7 @@ logs/
 !deploy-frontend-production.sh
 !update-production.sh
 !verify-production.sh
+!deploy.sh
 
 # Scripts Docker - NUNCA ignorar (necesarios para build)
 !docker/**/*.sh
