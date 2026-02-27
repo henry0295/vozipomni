@@ -40,7 +40,7 @@ on_error() {
     echo "Sugerencias:"
     echo "  1. Verifique que VOZIPOMNI_IPV4 esté configurado correctamente"
     echo "  2. Verifique su conexión a internet"
-    echo "  3. Revise: $COMPOSE_CMD -f docker-compose.prod.yml logs"
+    echo "  3. Revise: ${COMPOSE_CMD:-docker compose} -f docker-compose.prod.yml logs"
     echo "  4. Reintente: sudo bash deploy.sh"
     echo ""
     exit $exit_code
@@ -85,12 +85,86 @@ BRANCH="${BRANCH:-main}"
 TZ="${TZ:-America/Bogota}"
 COMPOSE_CMD=""
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+FRESH_ENV=false
 
 # ─── Funciones ───────────────────────────────────────────────────────────────
 log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Usa docker inspect para verificar healthcheck — más confiable que compose ps
+wait_container_healthy() {
+    local container="$1"
+    local timeout="${2:-120}"
+    local elapsed=0
+    log_info "Esperando healthcheck de $container (max ${timeout}s)..."
+    while [ "$elapsed" -lt "$timeout" ]; do
+        local status
+        status=$(docker inspect --format='{{if .State.Health}}{{.State.Health.Status}}{{else}}no-healthcheck{{end}}' "$container" 2>/dev/null || echo "not-found")
+        case "$status" in
+            healthy)
+                echo ""
+                log_success "$container healthy (${elapsed}s)"
+                return 0
+                ;;
+            unhealthy)
+                echo ""
+                log_error "$container unhealthy después de ${elapsed}s"
+                docker logs --tail=15 "$container" 2>/dev/null || true
+                return 1
+                ;;
+            *)
+                printf "  [%3ds/%ds] %s: %s\r" "$elapsed" "$timeout" "$container" "$status"
+                ;;
+        esac
+        sleep 3
+        elapsed=$((elapsed + 3))
+    done
+    echo ""
+    log_error "Timeout: $container no alcanzó healthy en ${timeout}s"
+    docker logs --tail=15 "$container" 2>/dev/null || true
+    return 1
+}
+
+# Verificar credenciales PostgreSQL contra el volumen existente
+verify_postgres_credentials() {
+    log_info "Verificando credenciales de PostgreSQL..."
+    local db_pass
+    db_pass=$(grep '^POSTGRES_PASSWORD=' "$INSTALL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-)
+
+    if [ -z "$db_pass" ]; then
+        log_warning "No se pudo leer POSTGRES_PASSWORD del .env — omitiendo verificación"
+        return 0
+    fi
+
+    if $COMPOSE_CMD -f docker-compose.prod.yml exec -T \
+        -e PGPASSWORD="$db_pass" \
+        postgres psql -U vozipomni_user -d vozipomni -c "SELECT 1" &>/dev/null; then
+        log_success "Credenciales de PostgreSQL verificadas"
+        return 0
+    fi
+
+    log_warning "Credenciales no coinciden con el volumen existente"
+    log_info "Reseteando PostgreSQL con credenciales del .env..."
+
+    # Detener y eliminar contenedor y volumen
+    docker stop vozipomni_postgres 2>/dev/null || true
+    docker rm -f vozipomni_postgres 2>/dev/null || true
+    docker volume ls -q 2>/dev/null | grep -i vozipomni | grep -i postgres | while read -r v; do
+        docker volume rm -f "$v" 2>/dev/null || true
+    done || true
+
+    # Recrear postgres con las credenciales del .env
+    $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres 2>&1
+
+    if ! wait_container_healthy "vozipomni_postgres" 120; then
+        log_error "PostgreSQL no recuperó después del reset"
+        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=30 postgres
+        return 1
+    fi
+    log_success "PostgreSQL reseteado con credenciales correctas"
+}
 
 # ─── Limpiar instalación existente ───────────────────────────────────────────
 clean_existing() {
@@ -491,8 +565,12 @@ CELERY_BROKER_URL=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/0
 CELERY_RESULT_BACKEND=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/1
 EOF
 
-            # Exportar para post_deploy
-            export ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
+            # Recuperar contraseña admin de credentials.txt (si existe)
+            local SAVED_ADMIN_PW=""
+            if [ -f "$INSTALL_DIR/credentials.txt" ]; then
+                SAVED_ADMIN_PW=$(grep '^Password:' "$INSTALL_DIR/credentials.txt" 2>/dev/null | head -1 | awk '{print $2}') || true
+            fi
+            export ADMIN_PASSWORD="${SAVED_ADMIN_PW:-${ADMIN_PASSWORD:-admin}}"
             export DB_PASSWORD
             export REDIS_PASSWORD
 
@@ -598,6 +676,7 @@ EOF
     export DB_PASSWORD
     export REDIS_PASSWORD
 
+    FRESH_ENV=true
     log_success "Credenciales generadas y .env creado"
 }
 
@@ -630,112 +709,50 @@ deploy_services() {
     cd "$INSTALL_DIR"
 
     # Parar servicios anteriores si existen
-    $COMPOSE_CMD -f docker-compose.prod.yml down 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
 
     # Build
     log_info "Construyendo imágenes Docker (esto puede tardar varios minutos)..."
     $COMPOSE_CMD -f docker-compose.prod.yml build 2>&1
 
-    # Levantar data stores primero y esperar que estén healthy
+    # ─── Fase 1: Data stores ─────────────────────────────────────────────
     log_info "Iniciando PostgreSQL y Redis..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres redis 2>&1
 
-    log_info "Esperando que PostgreSQL esté listo..."
-    local db_ready=false
-    for i in $(seq 1 60); do
-        local pg_status
-        pg_status=$($COMPOSE_CMD -f docker-compose.prod.yml ps postgres --format '{{.Status}}' 2>/dev/null || echo "")
-        if echo "$pg_status" | grep -qi "healthy"; then
-            db_ready=true
-            break
-        fi
-        printf "  Intento %d/60 — estado: %s\\r" "$i" "$pg_status"
-        sleep 3
-    done
-
-    if [ "$db_ready" = false ]; then
-        log_error "PostgreSQL no pasó el healthcheck después de 3 minutos"
-        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=20 postgres
+    if ! wait_container_healthy "vozipomni_postgres" 180; then
+        log_error "PostgreSQL no arrancó correctamente"
+        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=30 postgres
         exit 1
     fi
-    log_success "PostgreSQL healthy"
 
-    # ─── Verificar autenticación a la BD antes de levantar backend ───
-    log_info "Verificando credenciales de PostgreSQL..."
-    local db_pass
-    db_pass=$(grep -oP '^POSTGRES_PASSWORD=\K.*' "$INSTALL_DIR/.env" 2>/dev/null || echo "")
-
-    if [ -n "$db_pass" ]; then
-        local auth_ok=false
-        if $COMPOSE_CMD -f docker-compose.prod.yml exec -T \
-            -e PGPASSWORD="$db_pass" \
-            postgres psql -U vozipomni_user -d vozipomni -c "SELECT 1" &>/dev/null; then
-            auth_ok=true
-        fi
-
-        if [ "$auth_ok" = false ]; then
-            log_warning "Las credenciales del .env NO coinciden con PostgreSQL"
-            log_warning "El volumen de PostgreSQL tiene una contraseña diferente"
-            log_info "Reseteando PostgreSQL con credenciales correctas..."
-
-            # Parar postgres, borrar su volumen, recrear
-            $COMPOSE_CMD -f docker-compose.prod.yml stop postgres 2>/dev/null || true
-            $COMPOSE_CMD -f docker-compose.prod.yml rm -f postgres 2>/dev/null || true
-
-            # Borrar volumen de postgres
-            docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i 'postgres' | grep -i 'vozipomni' | while read -r vol; do
-                docker volume rm -f "$vol" 2>/dev/null || true
-            done || true
-
-            # Reiniciar postgres con credenciales del .env
-            log_info "Reiniciando PostgreSQL..."
-            $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres 2>&1
-
-            # Esperar que Docker lo marque como healthy (no solo pg_isready)
-            log_info "Esperando que PostgreSQL pase healthcheck..."
-            local pg_healthy=false
-            for i in $(seq 1 60); do
-                local pg_status
-                pg_status=$($COMPOSE_CMD -f docker-compose.prod.yml ps postgres --format '{{.Status}}' 2>/dev/null || echo "")
-                if echo "$pg_status" | grep -qi "healthy"; then
-                    pg_healthy=true
-                    break
-                fi
-                printf "  Intento %d/60 — estado: %s\\r" "$i" "$pg_status"
-                sleep 3
-            done
-
-            if [ "$pg_healthy" = false ]; then
-                log_error "PostgreSQL no pasó el healthcheck después del reset"
-                $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=20 postgres
-                exit 1
-            fi
-            log_success "PostgreSQL reseteado y healthy"
-        else
-            log_success "Credenciales de PostgreSQL verificadas"
-        fi
+    if ! wait_container_healthy "vozipomni_redis" 60; then
+        log_warning "Redis no reporta healthy — continuando de todos modos"
     fi
 
-    # Levantar backend
+    # Verificar credenciales solo cuando se reutiliza .env existente.
+    # En instalación limpia (FRESH_ENV=true) el volumen y las credenciales
+    # siempre coinciden, así que no hace falta verificar.
+    if [ "$FRESH_ENV" != true ]; then
+        verify_postgres_credentials || exit 1
+    fi
+
+    # ─── Fase 2: Backend ─────────────────────────────────────────────────
     log_info "Iniciando backend..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d backend 2>&1
 
-    # Verificar que el backend arrancó (esperar 25s y revisar logs)
-    sleep 25
-    local backend_status
-    backend_status=$($COMPOSE_CMD -f docker-compose.prod.yml ps backend --format '{{.Status}}' 2>/dev/null || echo "")
-
-    if echo "$backend_status" | grep -qiE "exit|dead|unhealthy"; then
-        log_error "El backend no arrancó correctamente"
-        log_info "Logs del backend:"
-        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=30 backend
+    # El backend tiene start_period=120s (migraciones + collectstatic).
+    # Esperamos hasta 300s (5 min) para que pase el healthcheck.
+    if ! wait_container_healthy "vozipomni_backend" 300; then
+        log_warning "Backend aún no reporta healthy — revisando logs:"
+        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=40 backend
         echo ""
         log_info "Reintentando backend..."
-        $COMPOSE_CMD -f docker-compose.prod.yml up -d backend 2>&1
-        sleep 15
+        $COMPOSE_CMD -f docker-compose.prod.yml restart backend 2>/dev/null || true
+        # Dar 60s extra tras reinicio
+        wait_container_healthy "vozipomni_backend" 180 || true
     fi
 
-    # Levantar el resto de servicios
+    # ─── Fase 3: Resto de servicios ──────────────────────────────────────
     log_info "Iniciando todos los servicios restantes..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d 2>&1
 
