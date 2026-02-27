@@ -504,7 +504,7 @@ deploy_services() {
 
 # ─── 8. wait_for_env — Polling HTTP ──────────────────────
 wait_for_env() {
-    local url="http://localhost:8000/api/"
+    local url="http://localhost:8000/api/health/"
     local WAIT_TIMEOUT=${1:-600}
     local WAIT_INTERVAL=10
     local elapsed=0

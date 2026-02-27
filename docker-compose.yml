@@ -167,9 +167,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost:8000/api/ || exit 1"]
-      <<: *healthcheck-http
-      start_period: 90s
+      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost:8000/api/health/ || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
     stop_grace_period: 30s
     deploy:
       resources:
