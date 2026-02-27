@@ -133,6 +133,17 @@ clean_existing() {
         $COMPOSE -f "$INSTALL_DIR/docker-compose.prod.yml" down -v --remove-orphans 2>/dev/null || true
     fi
 
+    # Borrar volúmenes explícitamente (por si down -v no los eliminó todos)
+    log_info "Eliminando volúmenes Docker del proyecto..."
+    docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | while read -r vol; do
+        docker volume rm -f "$vol" 2>/dev/null || true
+    done
+
+    # Borrar contenedores huérfanos
+    docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | while read -r ctr; do
+        docker rm -f "$ctr" 2>/dev/null || true
+    done
+
     # Borrar imágenes del proyecto
     log_info "Borrando imágenes Docker del proyecto..."
     docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i vozipomni | xargs -r docker rmi -f 2>/dev/null || true
@@ -629,7 +640,7 @@ deploy_services() {
     log_info "Iniciando PostgreSQL y Redis..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres redis 2>&1
 
-    log_info "Esperando que PostgreSQL y Redis estén healthy..."
+    log_info "Esperando que PostgreSQL esté listo..."
     local db_ready=false
     for i in $(seq 1 60); do
         if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres pg_isready -U vozipomni_user -d vozipomni -q 2>/dev/null; then
@@ -642,22 +653,68 @@ deploy_services() {
 
     if [ "$db_ready" = false ]; then
         log_error "PostgreSQL no respondió después de 3 minutos"
-        log_info "Logs de PostgreSQL:"
         $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=20 postgres
         exit 1
     fi
     log_success "PostgreSQL listo"
 
+    # ─── Verificar autenticación a la BD antes de levantar backend ───
+    log_info "Verificando credenciales de PostgreSQL..."
+    local db_pass
+    db_pass=$(grep -oP '^POSTGRES_PASSWORD=\K.*' "$INSTALL_DIR/.env" 2>/dev/null || echo "")
+
+    if [ -n "$db_pass" ]; then
+        local auth_ok=false
+        if $COMPOSE_CMD -f docker-compose.prod.yml exec -T \
+            -e PGPASSWORD="$db_pass" \
+            postgres psql -U vozipomni_user -d vozipomni -c "SELECT 1" &>/dev/null; then
+            auth_ok=true
+        fi
+
+        if [ "$auth_ok" = false ]; then
+            log_warning "Las credenciales del .env NO coinciden con PostgreSQL"
+            log_warning "El volumen de PostgreSQL tiene una contraseña diferente"
+            log_info "Reseteando PostgreSQL con credenciales correctas..."
+
+            # Parar postgres, borrar su volumen, recrear
+            $COMPOSE_CMD -f docker-compose.prod.yml stop postgres 2>/dev/null || true
+            $COMPOSE_CMD -f docker-compose.prod.yml rm -f postgres 2>/dev/null || true
+
+            # Borrar volumen de postgres
+            docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i 'postgres' | grep -i 'vozipomni' | while read -r vol; do
+                docker volume rm -f "$vol" 2>/dev/null || true
+            done
+
+            # Reiniciar postgres con credenciales del .env
+            log_info "Reiniciando PostgreSQL..."
+            $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres 2>&1
+
+            # Esperar que esté listo
+            for i in $(seq 1 40); do
+                if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres pg_isready -U vozipomni_user -d vozipomni -q 2>/dev/null; then
+                    break
+                fi
+                sleep 3
+            done
+            log_success "PostgreSQL reseteado con credenciales correctas"
+        else
+            log_success "Credenciales de PostgreSQL verificadas"
+        fi
+    fi
+
     # Levantar backend
     log_info "Iniciando backend..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d backend 2>&1
 
-    # Verificar que el backend no crasheó (esperar 20s y revisar)
-    sleep 20
-    if ! $COMPOSE_CMD -f docker-compose.prod.yml ps backend 2>/dev/null | grep -qiE "up|running"; then
+    # Verificar que el backend arrancó (esperar 25s y revisar logs)
+    sleep 25
+    local backend_status
+    backend_status=$($COMPOSE_CMD -f docker-compose.prod.yml ps backend --format '{{.Status}}' 2>/dev/null || echo "")
+
+    if echo "$backend_status" | grep -qiE "exit|dead|unhealthy"; then
         log_error "El backend no arrancó correctamente"
         log_info "Logs del backend:"
-        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=50 backend
+        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=30 backend
         echo ""
         log_info "Reintentando backend..."
         $COMPOSE_CMD -f docker-compose.prod.yml up -d backend 2>&1
@@ -772,11 +829,11 @@ main() {
     banner
     check_prerequisites
     echo ""
-    clean_existing
     prepare_system
     echo ""
     install_docker
     echo ""
+    clean_existing
     clone_repo
     echo ""
     generate_env
