@@ -12,5 +12,18 @@ if [ ! -f /etc/kamailio/cert.pem ]; then
     echo "  [entrypoint] Certificados TLS creados en /etc/kamailio/cert.pem"
 fi
 
+# Sustituir placeholders en kamailio.cfg con las variables de entorno reales.
+# Con network_mode: host los nombres de contenedor no resuelven;
+# todos los servicios escuchan en la misma IP.
+KAM_CFG="/etc/kamailio/kamailio.cfg"
+RTPENGINE_ADDR="${RTPENGINE_HOST:-${VOZIPOMNI_IPV4:-127.0.0.1}}"
+ASTERISK_ADDR="${ASTERISK_HOST:-${VOZIPOMNI_IPV4:-127.0.0.1}}"
+
+sed -i "s|RTPENGINE_HOST_PLACEHOLDER|${RTPENGINE_ADDR}|g" "$KAM_CFG"
+sed -i "s|ASTERISK_HOST_PLACEHOLDER|${ASTERISK_ADDR}|g"   "$KAM_CFG"
+
+echo "  [entrypoint] RTPEngine  → ${RTPENGINE_ADDR}:22222"
+echo "  [entrypoint] Asterisk   → ${ASTERISK_ADDR}:5060"
+
 echo "=== Iniciando Kamailio ==="
 exec kamailio -DD -E
