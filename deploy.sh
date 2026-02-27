@@ -6,11 +6,15 @@
 # Uso rápido (una línea, recomendado):
 #   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X
 #
+# Reinstalar desde cero (borra volúmenes, .env, credenciales):
+#   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- --clean X.X.X.X
+#
 # Alternativas:
 #   export VOZIPOMNI_IPV4=X.X.X.X
 #   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo -E bash
 #
 #   sudo VOZIPOMNI_IPV4=X.X.X.X bash deploy.sh
+#   sudo bash deploy.sh --clean X.X.X.X
 #
 # Variables opcionales:
 #   VOZIPOMNI_IPV4  — IP pública/privada del servidor (REQUERIDO, o pasar como argumento $1)
@@ -51,10 +55,29 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# ─── Aceptar IP como argumento $1 (curl ... | sudo bash -s -- IP) ────────────
-if [[ -n "${1:-}" ]]; then
-    export VOZIPOMNI_IPV4="$1"
-fi
+# ─── Parsear argumentos (--clean, IP) ────────────────────────────────────────
+CLEAN_INSTALL=false
+for arg in "$@"; do
+    case "$arg" in
+        --clean|-c)
+            CLEAN_INSTALL=true
+            ;;
+        --help|-h)
+            echo "Uso: deploy.sh [--clean] <IP>"
+            echo ""
+            echo "  IP          IP del servidor (requerido)"
+            echo "  --clean     Borrar instalación existente (volúmenes, .env, credenciales)"
+            echo "  --help      Mostrar esta ayuda"
+            exit 0
+            ;;
+        *)
+            # Si parece una IP, usarla
+            if [[ "$arg" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+                export VOZIPOMNI_IPV4="$arg"
+            fi
+            ;;
+    esac
+done
 
 # ─── Variables ───────────────────────────────────────────────────────────────
 INSTALL_DIR="${INSTALL_DIR:-/opt/vozipomni}"
@@ -68,6 +91,65 @@ log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# ─── Limpiar instalación existente ───────────────────────────────────────────
+clean_existing() {
+    if [ "$CLEAN_INSTALL" != true ]; then
+        return 0
+    fi
+
+    log_warning "══════════════════════════════════════════════════════"
+    log_warning "  MODO LIMPIO: Se borrará toda la instalación"
+    log_warning "  - Contenedores y volúmenes Docker"
+    log_warning "  - Archivos .env y credenciales"
+    log_warning "  - Base de datos, grabaciones, archivos media"
+    log_warning "══════════════════════════════════════════════════════"
+    echo ""
+
+    # Si es interactivo, pedir confirmación
+    if [ -t 0 ]; then
+        read -r -p "¿Está seguro? Esto es IRREVERSIBLE [s/N]: " confirm
+        if [[ ! "$confirm" =~ ^[sS]$ ]]; then
+            log_info "Cancelado por el usuario"
+            exit 0
+        fi
+    else
+        log_info "Modo no-interactivo detectado, continuando limpieza..."
+    fi
+
+    cd "$INSTALL_DIR" 2>/dev/null || true
+
+    # Detectar compose antes de usarlo
+    local COMPOSE=""
+    if docker compose version &>/dev/null; then
+        COMPOSE="docker compose"
+    elif command -v docker-compose &>/dev/null; then
+        COMPOSE="docker-compose"
+    fi
+
+    # Parar y borrar contenedores + volúmenes
+    if [ -n "$COMPOSE" ] && [ -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
+        log_info "Deteniendo servicios y borrando volúmenes..."
+        $COMPOSE -f "$INSTALL_DIR/docker-compose.prod.yml" down -v --remove-orphans 2>/dev/null || true
+    fi
+
+    # Borrar imágenes del proyecto
+    log_info "Borrando imágenes Docker del proyecto..."
+    docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i vozipomni | xargs -r docker rmi -f 2>/dev/null || true
+
+    # Borrar archivos de configuración
+    if [ -d "$INSTALL_DIR" ]; then
+        log_info "Limpiando archivos de configuración..."
+        rm -f "$INSTALL_DIR/.env" \
+              "$INSTALL_DIR/.env.backup_"* \
+              "$INSTALL_DIR/backend/.env" \
+              "$INSTALL_DIR/credentials.txt"
+        rm -rf "$INSTALL_DIR/logs/"* 2>/dev/null || true
+    fi
+
+    log_success "Instalación anterior eliminada completamente"
+    echo ""
+}
 
 banner() {
     echo ""
@@ -690,6 +772,7 @@ main() {
     banner
     check_prerequisites
     echo ""
+    clean_existing
     prepare_system
     echo ""
     install_docker
