@@ -643,20 +643,22 @@ deploy_services() {
     log_info "Esperando que PostgreSQL esté listo..."
     local db_ready=false
     for i in $(seq 1 60); do
-        if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres pg_isready -U vozipomni_user -d vozipomni -q 2>/dev/null; then
+        local pg_status
+        pg_status=$($COMPOSE_CMD -f docker-compose.prod.yml ps postgres --format '{{.Status}}' 2>/dev/null || echo "")
+        if echo "$pg_status" | grep -qi "healthy"; then
             db_ready=true
             break
         fi
-        printf "  Intento %d/60 — esperando PostgreSQL...\\r" "$i"
+        printf "  Intento %d/60 — estado: %s\\r" "$i" "$pg_status"
         sleep 3
     done
 
     if [ "$db_ready" = false ]; then
-        log_error "PostgreSQL no respondió después de 3 minutos"
+        log_error "PostgreSQL no pasó el healthcheck después de 3 minutos"
         $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=20 postgres
         exit 1
     fi
-    log_success "PostgreSQL listo"
+    log_success "PostgreSQL healthy"
 
     # ─── Verificar autenticación a la BD antes de levantar backend ───
     log_info "Verificando credenciales de PostgreSQL..."
@@ -689,14 +691,26 @@ deploy_services() {
             log_info "Reiniciando PostgreSQL..."
             $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres 2>&1
 
-            # Esperar que esté listo
-            for i in $(seq 1 40); do
-                if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres pg_isready -U vozipomni_user -d vozipomni -q 2>/dev/null; then
+            # Esperar que Docker lo marque como healthy (no solo pg_isready)
+            log_info "Esperando que PostgreSQL pase healthcheck..."
+            local pg_healthy=false
+            for i in $(seq 1 60); do
+                local pg_status
+                pg_status=$($COMPOSE_CMD -f docker-compose.prod.yml ps postgres --format '{{.Status}}' 2>/dev/null || echo "")
+                if echo "$pg_status" | grep -qi "healthy"; then
+                    pg_healthy=true
                     break
                 fi
+                printf "  Intento %d/60 — estado: %s\\r" "$i" "$pg_status"
                 sleep 3
             done
-            log_success "PostgreSQL reseteado con credenciales correctas"
+
+            if [ "$pg_healthy" = false ]; then
+                log_error "PostgreSQL no pasó el healthcheck después del reset"
+                $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=20 postgres
+                exit 1
+            fi
+            log_success "PostgreSQL reseteado y healthy"
         else
             log_success "Credenciales de PostgreSQL verificadas"
         fi
