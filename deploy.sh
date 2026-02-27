@@ -356,19 +356,66 @@ clone_repo() {
 
 # ─── 5. Generar credenciales y .env ─────────────────────────────────────────
 generate_env() {
-    log_info "Generando credenciales y archivo .env..."
+    # Si ya existe .env, reutilizar credenciales existentes (volúmenes de DB/Redis persisten)
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        log_info "Archivo .env existente encontrado, reutilizando credenciales..."
+        # Extraer credenciales del .env existente
+        source "$INSTALL_DIR/.env" 2>/dev/null || true
+        local DB_PASSWORD="${POSTGRES_PASSWORD:-}"
+        local REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+        local SECRET_KEY="${SECRET_KEY:-}"
+
+        # Si faltan credenciales críticas, regenerar
+        if [ -z "$DB_PASSWORD" ] || [ -z "$SECRET_KEY" ]; then
+            log_warning "Credenciales incompletas en .env existente, regenerando..."
+            cp "$INSTALL_DIR/.env" "$INSTALL_DIR/.env.backup_${TIMESTAMP}"
+        else
+            # Solo actualizar la IP si cambió
+            sed -i "s|^VOZIPOMNI_IPV4=.*|VOZIPOMNI_IPV4=$VOZIPOMNI_IPV4|" "$INSTALL_DIR/.env"
+            sed -i "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=$VOZIPOMNI_IPV4,localhost,127.0.0.1|" "$INSTALL_DIR/.env"
+            sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4|" "$INSTALL_DIR/.env"
+
+            # Actualizar backend/.env con credenciales existentes y nueva IP
+            cat > "$INSTALL_DIR/backend/.env" <<EOF
+SECRET_KEY=$SECRET_KEY
+DEBUG=False
+ALLOWED_HOSTS=$VOZIPOMNI_IPV4,localhost,127.0.0.1
+CORS_ALLOWED_ORIGINS=http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4
+DB_NAME=vozipomni
+DB_USER=vozipomni_user
+DB_PASSWORD=$DB_PASSWORD
+DB_HOST=$VOZIPOMNI_IPV4
+DB_PORT=5432
+REDIS_HOST=$VOZIPOMNI_IPV4
+REDIS_PORT=6379
+REDIS_PASSWORD=$REDIS_PASSWORD
+ASTERISK_HOST=$VOZIPOMNI_IPV4
+ASTERISK_AMI_USER=admin
+ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
+ASTERISK_CONFIG_DIR=/var/lib/asterisk/dynamic
+ASTERISK_PUBLIC_IP=$VOZIPOMNI_IPV4
+CELERY_BROKER_URL=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/0
+CELERY_RESULT_BACKEND=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/1
+EOF
+
+            # Exportar para post_deploy
+            export ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin}"
+            export DB_PASSWORD
+            export REDIS_PASSWORD
+
+            log_success "Credenciales existentes reutilizadas (IP actualizada: $VOZIPOMNI_IPV4)"
+            return 0
+        fi
+    fi
+
+    # === Primera instalación: generar credenciales nuevas ===
+    log_info "Generando credenciales nuevas..."
 
     local DB_PASSWORD REDIS_PASSWORD SECRET_KEY ADMIN_PASSWORD
     DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     SECRET_KEY=$(openssl rand -base64 50 | tr -d "=+/")
     ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-12)
-
-    # Si ya existe .env, hacer backup
-    if [ -f "$INSTALL_DIR/.env" ]; then
-        cp "$INSTALL_DIR/.env" "$INSTALL_DIR/.env.backup_${TIMESTAMP}"
-        log_info "Backup de .env existente creado"
-    fi
 
     cat > "$INSTALL_DIR/.env" <<EOF
 # VoziPOmni — Producción (Generado: $(date))
@@ -492,14 +539,54 @@ deploy_services() {
     # Parar servicios anteriores si existen
     $COMPOSE_CMD -f docker-compose.prod.yml down 2>/dev/null || true
 
-    # Build e iniciar
+    # Build
     log_info "Construyendo imágenes Docker (esto puede tardar varios minutos)..."
     $COMPOSE_CMD -f docker-compose.prod.yml build 2>&1
 
-    log_info "Iniciando servicios..."
+    # Levantar data stores primero y esperar que estén healthy
+    log_info "Iniciando PostgreSQL y Redis..."
+    $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres redis 2>&1
+
+    log_info "Esperando que PostgreSQL y Redis estén healthy..."
+    local db_ready=false
+    for i in $(seq 1 60); do
+        if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres pg_isready -U vozipomni_user -d vozipomni -q 2>/dev/null; then
+            db_ready=true
+            break
+        fi
+        printf "  Intento %d/60 — esperando PostgreSQL...\\r" "$i"
+        sleep 3
+    done
+
+    if [ "$db_ready" = false ]; then
+        log_error "PostgreSQL no respondió después de 3 minutos"
+        log_info "Logs de PostgreSQL:"
+        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=20 postgres
+        exit 1
+    fi
+    log_success "PostgreSQL listo"
+
+    # Levantar backend
+    log_info "Iniciando backend..."
+    $COMPOSE_CMD -f docker-compose.prod.yml up -d backend 2>&1
+
+    # Verificar que el backend no crasheó (esperar 20s y revisar)
+    sleep 20
+    if ! $COMPOSE_CMD -f docker-compose.prod.yml ps backend 2>/dev/null | grep -qiE "up|running"; then
+        log_error "El backend no arrancó correctamente"
+        log_info "Logs del backend:"
+        $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=50 backend
+        echo ""
+        log_info "Reintentando backend..."
+        $COMPOSE_CMD -f docker-compose.prod.yml up -d backend 2>&1
+        sleep 15
+    fi
+
+    # Levantar el resto de servicios
+    log_info "Iniciando todos los servicios restantes..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d 2>&1
 
-    log_success "Servicios iniciados en background"
+    log_success "Servicios iniciados"
 }
 
 # ─── 8. wait_for_env — Polling HTTP ──────────────────────
