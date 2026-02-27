@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# VoziPOmni Contact Center — Deploy Script (estilo OmniLeads)
+# VoziPOmni Contact Center — Deploy Script
 # Version: 2.0.0
 #
 # Uso rápido (una línea, recomendado):
@@ -502,7 +502,7 @@ deploy_services() {
     log_success "Servicios iniciados en background"
 }
 
-# ─── 8. wait_for_env — Polling HTTP (estilo OmniLeads) ──────────────────────
+# ─── 8. wait_for_env — Polling HTTP ──────────────────────
 wait_for_env() {
     local url="http://localhost:8000/api/"
     local WAIT_TIMEOUT=${1:-600}
