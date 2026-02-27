@@ -142,18 +142,22 @@ Plataforma de Contact Center omnicanal con arquitectura moderna basada en Django
 Para desplegar VoziPOmni en cualquier servidor Linux con un solo comando:
 
 ```bash
-export VOZIPOMNI_IPV4=X.X.X.X && curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash
+curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X
 ```
 
 > **Reemplaza `X.X.X.X` con la dirección IP de tu servidor.**
 
-O descargando primero el script:
+Alternativas equivalentes:
 
 ```bash
+# Opción 2: Con export y sudo -E para preservar variables
+export VOZIPOMNI_IPV4=X.X.X.X
+curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo -E bash
+
+# Opción 3: Descargando primero el script
 curl -o deploy.sh -L "https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh"
 chmod +x deploy.sh
-export VOZIPOMNI_IPV4=X.X.X.X
-sudo bash deploy.sh
+sudo bash deploy.sh X.X.X.X
 ```
 
 ### Variables opcionales
@@ -170,7 +174,7 @@ sudo bash deploy.sh
 
 1. Verifica prerequisitos (root, IP válida)
 2. Prepara el sistema operativo (kernel, sysctl, SELinux, límites)
-3. Instala Docker CE + Docker Compose (detección universal)
+3. Instala Docker CE + Docker Compose (detección nativa por distribución: Rocky, AlmaLinux, RHEL, CentOS, Fedora, Ubuntu, Debian, Amazon Linux, Alpine, Arch, openSUSE)
 4. Clona el repositorio en `/opt/vozipomni`
 5. Genera credenciales seguras (openssl rand)
 6. Crea `.env` centralizado con `network_mode: host`

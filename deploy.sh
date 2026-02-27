@@ -3,15 +3,17 @@
 # VoziPOmni Contact Center — Deploy Script (estilo OmniLeads)
 # Version: 2.0.0
 #
-# Uso rápido (una línea):
-#   export VOZIPOMNI_IPV4=X.X.X.X && curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | bash
+# Uso rápido (una línea, recomendado):
+#   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X
 #
-# Uso manual:
-#   export VOZIPOMNI_IPV4=192.168.1.100
-#   bash deploy.sh
+# Alternativas:
+#   export VOZIPOMNI_IPV4=X.X.X.X
+#   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo -E bash
+#
+#   sudo VOZIPOMNI_IPV4=X.X.X.X bash deploy.sh
 #
 # Variables opcionales:
-#   VOZIPOMNI_IPV4  — IP pública/privada del servidor (REQUERIDO)
+#   VOZIPOMNI_IPV4  — IP pública/privada del servidor (REQUERIDO, o pasar como argumento $1)
 #   NAT_IPV4        — IP pública si el servidor está detrás de NAT
 #   TZ              — Zona horaria (default: America/Bogota)
 #   INSTALL_DIR     — Directorio de instalación (default: /opt/vozipomni)
@@ -48,6 +50,11 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
+
+# ─── Aceptar IP como argumento $1 (curl ... | sudo bash -s -- IP) ────────────
+if [[ -n "${1:-}" ]]; then
+    export VOZIPOMNI_IPV4="$1"
+fi
 
 # ─── Variables ───────────────────────────────────────────────────────────────
 INSTALL_DIR="${INSTALL_DIR:-/opt/vozipomni}"
@@ -88,9 +95,14 @@ check_prerequisites() {
     if [ -z "${VOZIPOMNI_IPV4:-}" ]; then
         log_error "Variable VOZIPOMNI_IPV4 no está configurada"
         echo ""
-        echo "Uso:"
+        echo "Uso (recomendado):"
+        echo "  curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X"
+        echo ""
+        echo "Alternativas:"
         echo "  export VOZIPOMNI_IPV4=X.X.X.X"
-        echo "  bash deploy.sh"
+        echo "  curl -sL .../deploy.sh | sudo -E bash"
+        echo ""
+        echo "  sudo VOZIPOMNI_IPV4=X.X.X.X bash deploy.sh"
         echo ""
         exit 1
     fi
@@ -173,34 +185,141 @@ DAEMON
     log_success "Sistema preparado"
 }
 
-# ─── 3. Instalar Docker ─────────────────────────────────────────────────────
+# ─── 3. Instalar Docker (soporte universal de distribuciones) ────────────────
 install_docker() {
     if command -v docker &>/dev/null; then
         log_success "Docker ya instalado: $(docker --version 2>/dev/null | head -1)"
     else
         log_info "Instalando Docker..."
-        
-        # Instalar dependencias básicas
-        if command -v apt-get &>/dev/null; then
-            apt-get update -qq
-            apt-get install -y -qq git curl ca-certificates gnupg >/dev/null 2>&1
-        elif command -v dnf &>/dev/null; then
-            dnf install -y -q git curl ca-certificates >/dev/null 2>&1
-        elif command -v yum &>/dev/null; then
-            yum install -y -q git curl ca-certificates >/dev/null 2>&1
+
+        # Detectar distribución
+        local DISTRO_ID="unknown" DISTRO_LIKE=""
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release
+            DISTRO_ID="${ID:-unknown}"
+            DISTRO_LIKE="${ID_LIKE:-}"
         fi
 
-        # Docker via get.docker.com (universal)
-        curl -fsSL https://get.docker.com | sh
-        
-        systemctl start docker 2>/dev/null || true
-        systemctl enable docker 2>/dev/null || true
-        
+        case "$DISTRO_ID" in
+            rocky|almalinux|centos|ol)
+                log_info "Distribución detectada: $DISTRO_ID — Usando repositorio CentOS Docker"
+                dnf remove -y docker docker-client docker-client-latest docker-common \
+                    docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+                dnf install -y yum-utils
+                yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+            rhel)
+                log_info "Distribución detectada: RHEL"
+                dnf remove -y docker docker-client docker-client-latest docker-common \
+                    docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+                dnf install -y yum-utils
+                yum-config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo 2>/dev/null || \
+                    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+            fedora)
+                log_info "Distribución detectada: Fedora"
+                dnf remove -y docker docker-client docker-client-latest docker-common \
+                    docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+                dnf install -y dnf-plugins-core
+                dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
+                dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+            ubuntu|linuxmint|pop)
+                log_info "Distribución detectada: $DISTRO_ID — Usando repositorio Ubuntu Docker"
+                apt-get remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
+                apt-get update -y
+                apt-get install -y ca-certificates curl gnupg lsb-release
+                install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+                chmod a+r /etc/apt/keyrings/docker.gpg
+                local UBUNTU_CODENAME_VAL
+                if [ "$DISTRO_ID" = "ubuntu" ]; then
+                    UBUNTU_CODENAME_VAL="${VERSION_CODENAME:-$(lsb_release -cs 2>/dev/null || echo focal)}"
+                else
+                    UBUNTU_CODENAME_VAL="${UBUNTU_CODENAME:-$(grep UBUNTU_CODENAME /etc/os-release 2>/dev/null | cut -d= -f2 || echo focal)}"
+                fi
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $UBUNTU_CODENAME_VAL stable" | \
+                    tee /etc/apt/sources.list.d/docker.list > /dev/null
+                apt-get update -y
+                apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+            debian)
+                log_info "Distribución detectada: Debian"
+                apt-get remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
+                apt-get update -y
+                apt-get install -y ca-certificates curl gnupg lsb-release
+                install -m 0755 -d /etc/apt/keyrings
+                curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+                chmod a+r /etc/apt/keyrings/docker.gpg
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian ${VERSION_CODENAME:-bullseye} stable" | \
+                    tee /etc/apt/sources.list.d/docker.list > /dev/null
+                apt-get update -y
+                apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                ;;
+            amzn)
+                log_info "Distribución detectada: Amazon Linux"
+                yum remove -y docker docker-client docker-client-latest docker-common \
+                    docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+                amazon-linux-extras install docker -y 2>/dev/null || yum install -y docker
+                ;;
+            opensuse*|sles)
+                log_info "Distribución detectada: openSUSE/SLES"
+                zypper remove -y docker docker-client docker-client-latest 2>/dev/null || true
+                zypper install -y docker docker-compose
+                ;;
+            arch|manjaro)
+                log_info "Distribución detectada: Arch/Manjaro"
+                pacman -Sy --noconfirm docker docker-compose
+                ;;
+            alpine)
+                log_info "Distribución detectada: Alpine"
+                apk add --no-cache docker docker-compose
+                ;;
+            *)
+                # Fallback por ID_LIKE
+                if echo "$DISTRO_LIKE" | grep -qiE "rhel|centos|fedora"; then
+                    log_warning "Distribución '$DISTRO_ID' no reconocida pero basada en RHEL — Usando repositorio CentOS"
+                    dnf install -y yum-utils 2>/dev/null || yum install -y yum-utils
+                    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                    dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin 2>/dev/null || \
+                        yum install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                elif echo "$DISTRO_LIKE" | grep -qiE "debian|ubuntu"; then
+                    log_warning "Distribución '$DISTRO_ID' no reconocida pero basada en Debian — Usando repositorio Ubuntu"
+                    apt-get update -y
+                    apt-get install -y ca-certificates curl gnupg
+                    install -m 0755 -d /etc/apt/keyrings
+                    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+                    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu focal stable" | \
+                        tee /etc/apt/sources.list.d/docker.list > /dev/null
+                    apt-get update -y
+                    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+                else
+                    log_error "Distribución '$DISTRO_ID' no soportada. Instale Docker manualmente:"
+                    echo "  https://docs.docker.com/engine/install/"
+                    exit 1
+                fi
+                ;;
+        esac
+
         log_success "Docker instalado correctamente"
     fi
 
+    # Habilitar y arrancar Docker
+    systemctl enable docker --now 2>/dev/null || true
+    systemctl start docker 2>/dev/null || true
+
     # Reiniciar Docker con daemon.json optimizado
     systemctl restart docker 2>/dev/null || true
+
+    # Verificar que Docker funciona
+    if ! docker info &>/dev/null; then
+        log_error "Docker no se pudo iniciar correctamente"
+        exit 1
+    fi
+
+    log_success "Docker listo: $(docker --version)"
 
     # Detectar compose
     if docker compose version &>/dev/null; then
@@ -208,10 +327,14 @@ install_docker() {
     elif command -v docker-compose &>/dev/null; then
         COMPOSE_CMD="docker-compose"
     else
-        log_error "Docker Compose no encontrado"
-        exit 1
+        # Instalar docker-compose standalone como fallback
+        log_warning "docker compose plugin no encontrado, instalando docker-compose standalone..."
+        curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" \
+            -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+        COMPOSE_CMD="docker-compose"
     fi
-    log_info "Usando: $COMPOSE_CMD"
+    log_info "Usando: $COMPOSE_CMD ($($COMPOSE_CMD version 2>/dev/null || echo 'versión desconocida'))"
 }
 
 # ─── 4. Clonar repositorio ──────────────────────────────────────────────────
