@@ -108,13 +108,10 @@ wait_container_healthy() {
                 log_success "$container healthy (${elapsed}s)"
                 return 0
                 ;;
-            unhealthy)
-                echo ""
-                log_error "$container unhealthy después de ${elapsed}s"
-                docker logs --tail=15 "$container" 2>/dev/null || true
-                return 1
-                ;;
             *)
+                # No abortar en unhealthy: el contenedor puede recuperarse
+                # tras un restart (ej. PostgreSQL primera inicialización).
+                # Solo fallamos al agotar el timeout.
                 printf "  [%3ds/%ds] %s: %s\r" "$elapsed" "$timeout" "$container" "$status"
                 ;;
         esac
@@ -706,6 +703,30 @@ deploy_services() {
     # Build
     log_info "Construyendo imágenes Docker (esto puede tardar varios minutos)..."
     $COMPOSE_CMD -f docker-compose.prod.yml build 2>&1
+
+    # Asegurar que init.sql sea un archivo regular.
+    # Docker crea un directorio si el archivo fuente no existía al montar
+    # el bind mount por primera vez → PostgreSQL falla al leerlo.
+    local INIT_SQL="$INSTALL_DIR/docker/postgresql/init.sql"
+    if [ -d "$INIT_SQL" ]; then
+        log_warning "init.sql es un directorio (artefacto de Docker), recreando como archivo..."
+        rm -rf "$INIT_SQL"
+    fi
+    if [ ! -f "$INIT_SQL" ]; then
+        mkdir -p "$(dirname "$INIT_SQL")"
+        cat > "$INIT_SQL" <<'INITSQL'
+-- Inicialización de la base de datos VoziPOmni
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+SET timezone = 'America/Bogota';
+CREATE SCHEMA IF NOT EXISTS reports;
+CREATE SCHEMA IF NOT EXISTS analytics;
+GRANT ALL ON SCHEMA public TO vozipomni_user;
+GRANT ALL ON SCHEMA reports TO vozipomni_user;
+GRANT ALL ON SCHEMA analytics TO vozipomni_user;
+INITSQL
+        log_info "init.sql recreado"
+    fi
 
     # ─── Fase 1: Data stores ─────────────────────────────────────────────
     log_info "Iniciando PostgreSQL y Redis..."

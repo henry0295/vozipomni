@@ -99,7 +99,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 20s
+      start_period: 60s
     <<: *restart-policy
     logging: *default-logging
     stop_grace_period: 90s
