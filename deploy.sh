@@ -528,9 +528,9 @@ generate_env() {
         log_info "Archivo .env existente encontrado, reutilizando credenciales..."
         # Extraer credenciales del .env existente
         source "$INSTALL_DIR/.env" 2>/dev/null || true
-        local DB_PASSWORD="${POSTGRES_PASSWORD:-}"
-        local REDIS_PASSWORD="${REDIS_PASSWORD:-}"
-        local SECRET_KEY="${SECRET_KEY:-}"
+        DB_PASSWORD="${POSTGRES_PASSWORD:-}"
+        REDIS_PASSWORD="${REDIS_PASSWORD:-}"
+        SECRET_KEY="${SECRET_KEY:-}"
 
         # Si faltan credenciales críticas, regenerar
         if [ -z "$DB_PASSWORD" ] || [ -z "$SECRET_KEY" ]; then
@@ -566,13 +566,11 @@ CELERY_RESULT_BACKEND=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/1
 EOF
 
             # Recuperar contraseña admin de credentials.txt (si existe)
-            local SAVED_ADMIN_PW=""
+            SAVED_ADMIN_PW=""
             if [ -f "$INSTALL_DIR/credentials.txt" ]; then
                 SAVED_ADMIN_PW=$(grep '^Password:' "$INSTALL_DIR/credentials.txt" 2>/dev/null | head -1 | awk '{print $2}') || true
             fi
-            export ADMIN_PASSWORD="${SAVED_ADMIN_PW:-${ADMIN_PASSWORD:-admin}}"
-            export DB_PASSWORD
-            export REDIS_PASSWORD
+            ADMIN_PASSWORD="${SAVED_ADMIN_PW:-${ADMIN_PASSWORD:-admin}}"
 
             log_success "Credenciales existentes reutilizadas (IP actualizada: $VOZIPOMNI_IPV4)"
             return 0
@@ -582,7 +580,6 @@ EOF
     # === Primera instalación: generar credenciales nuevas ===
     log_info "Generando credenciales nuevas..."
 
-    local DB_PASSWORD REDIS_PASSWORD SECRET_KEY ADMIN_PASSWORD
     DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     SECRET_KEY=$(openssl rand -base64 50 | tr -d "=+/")
@@ -670,11 +667,6 @@ AMI:        admin / vozipomni_ami_2026 (puerto 5038)
 ════════════════════════════════════════════════════════════
 EOF
     chmod 600 "$INSTALL_DIR/credentials.txt"
-
-    # Exportar para uso posterior
-    export ADMIN_PASSWORD
-    export DB_PASSWORD
-    export REDIS_PASSWORD
 
     FRESH_ENV=true
     log_success "Credenciales generadas y .env creado"
