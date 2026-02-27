@@ -142,7 +142,7 @@ Plataforma de Contact Center omnicanal con arquitectura moderna basada en Django
 Para desplegar VoziPOmni en cualquier servidor Linux con un solo comando:
 
 ```bash
-export VOZIPOMNI_IPV4=X.X.X.X && curl -sL https://raw.githubusercontent.com/VOZIP/vozipomni/main/deploy.sh | sudo bash
+export VOZIPOMNI_IPV4=X.X.X.X && curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash
 ```
 
 > **Reemplaza `X.X.X.X` con la dirección IP de tu servidor.**
@@ -150,7 +150,7 @@ export VOZIPOMNI_IPV4=X.X.X.X && curl -sL https://raw.githubusercontent.com/VOZI
 O descargando primero el script:
 
 ```bash
-curl -o deploy.sh -L "https://raw.githubusercontent.com/VOZIP/vozipomni/main/deploy.sh"
+curl -o deploy.sh -L "https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh"
 chmod +x deploy.sh
 export VOZIPOMNI_IPV4=X.X.X.X
 sudo bash deploy.sh
