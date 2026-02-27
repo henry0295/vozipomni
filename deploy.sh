@@ -137,12 +137,12 @@ clean_existing() {
     log_info "Eliminando volúmenes Docker del proyecto..."
     docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | while read -r vol; do
         docker volume rm -f "$vol" 2>/dev/null || true
-    done
+    done || true
 
     # Borrar contenedores huérfanos
     docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | while read -r ctr; do
         docker rm -f "$ctr" 2>/dev/null || true
-    done
+    done || true
 
     # Borrar imágenes del proyecto
     log_info "Borrando imágenes Docker del proyecto..."
@@ -683,7 +683,7 @@ deploy_services() {
             # Borrar volumen de postgres
             docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i 'postgres' | grep -i 'vozipomni' | while read -r vol; do
                 docker volume rm -f "$vol" 2>/dev/null || true
-            done
+            done || true
 
             # Reiniciar postgres con credenciales del .env
             log_info "Reiniciando PostgreSQL..."
