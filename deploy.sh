@@ -205,9 +205,8 @@ clean_existing() {
 
     # Parar y borrar con docker-compose si existe
     if [ -n "$COMPOSE" ] && [ -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
-        cd "$INSTALL_DIR" 2>/dev/null || true
         log_info "Deteniendo servicios con docker-compose..."
-        $COMPOSE -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
+        (cd "$INSTALL_DIR" 2>/dev/null && $COMPOSE -f docker-compose.prod.yml down -v --remove-orphans) 2>/dev/null || true
     fi
 
     # CRÍTICO: Borrar volúmenes MÚLTIPLES VECES para asegurar eliminación
@@ -220,8 +219,8 @@ clean_existing() {
     done
 
     # Verificar que los volúmenes se eliminaron
-    local remaining_vols=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l)
-    if [ "$remaining_vols" -gt 0 ]; then
+    local remaining_vols=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ')
+    if [ "${remaining_vols:-0}" -gt 0 ]; then
         log_warning "Algunos volúmenes no se pudieron eliminar. Intentando con prune..."
         docker volume prune -f 2>/dev/null || true
     fi
@@ -242,16 +241,19 @@ clean_existing() {
         rm -rf "$INSTALL_DIR/logs/"* 2>/dev/null || true
     fi
 
+    # Salir del directorio de instalación antes de eliminarlo
+    cd /tmp 2>/dev/null || cd /
+
     # Limpiar completamente el directorio de instalación
     log_info "Eliminando directorio de instalación..."
     rm -rf "$INSTALL_DIR" 2>/dev/null || true
 
     # Verificación final
     log_info "Verificando limpieza..."
-    local remaining_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | wc -l)
-    local remaining_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l)
+    local remaining_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ')
+    local remaining_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ')
     
-    if [ "$remaining_containers" -gt 0 ] || [ "$remaining_volumes" -gt 0 ]; then
+    if [ "${remaining_containers:-0}" -gt 0 ] || [ "${remaining_volumes:-0}" -gt 0 ]; then
         log_warning "Limpieza incompleta: $remaining_containers contenedores, $remaining_volumes volúmenes restantes"
     else
         log_success "Limpieza completa verificada: 0 contenedores, 0 volúmenes"
@@ -531,6 +533,9 @@ install_docker() {
 
 # ─── 4. Clonar repositorio ──────────────────────────────────────────────────
 clone_repo() {
+    # Asegurarse de estar en un directorio válido
+    cd /tmp 2>/dev/null || cd /
+    
     if [ -d "$INSTALL_DIR/.git" ]; then
         log_info "Actualizando repositorio existente..."
         cd "$INSTALL_DIR"
@@ -539,7 +544,8 @@ clone_repo() {
         git pull origin "$BRANCH"
     else
         log_info "Clonando repositorio (rama: $BRANCH)..."
-        mkdir -p /opt
+        # Asegurar que el directorio padre existe
+        mkdir -p "$(dirname "$INSTALL_DIR")"
         git clone -b "$BRANCH" https://github.com/henry0295/vozipomni.git "$INSTALL_DIR"
         cd "$INSTALL_DIR"
     fi
