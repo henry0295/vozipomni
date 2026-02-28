@@ -128,6 +128,16 @@ class AsteriskConfigGenerator:
                 "qualify_frequency=30",
                 "",
             ])
+            
+            # ---- Identify (opcional pero recomendado para evitar bugs de PJSIP) ----
+            # Permite identificar el endpoint por auth_username además de IP
+            config.extend([
+                f"[{ext.extension}-identify]",
+                "type=identify",
+                f"endpoint={ext.extension}",
+                f"match_header=Authorization: Digest username=\"{ext.extension}\"",
+                "",
+            ])
         
         return '\n'.join(config)
     
