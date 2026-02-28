@@ -188,8 +188,6 @@ clean_existing() {
         log_info "Modo no-interactivo detectado, continuando limpieza..."
     fi
 
-    cd "$INSTALL_DIR" 2>/dev/null || true
-
     # Detectar compose antes de usarlo
     local COMPOSE=""
     if docker compose version &>/dev/null; then
@@ -198,26 +196,41 @@ clean_existing() {
         COMPOSE="docker-compose"
     fi
 
-    # Parar y borrar contenedores + volúmenes
-    if [ -n "$COMPOSE" ] && [ -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
-        log_info "Deteniendo servicios y borrando volúmenes..."
-        $COMPOSE -f "$INSTALL_DIR/docker-compose.prod.yml" down -v --remove-orphans 2>/dev/null || true
-    fi
-
-    # Borrar volúmenes explícitamente (por si down -v no los eliminó todos)
-    log_info "Eliminando volúmenes Docker del proyecto..."
-    docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | while read -r vol; do
-        docker volume rm -f "$vol" 2>/dev/null || true
-    done || true
-
-    # Borrar contenedores huérfanos
+    # Parar todos los contenedores relacionados con vozipomni
+    log_info "Deteniendo y eliminando contenedores..."
     docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | while read -r ctr; do
+        docker stop "$ctr" 2>/dev/null || true
         docker rm -f "$ctr" 2>/dev/null || true
     done || true
 
+    # Parar y borrar con docker-compose si existe
+    if [ -n "$COMPOSE" ] && [ -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
+        cd "$INSTALL_DIR" 2>/dev/null || true
+        log_info "Deteniendo servicios con docker-compose..."
+        $COMPOSE -f docker-compose.prod.yml down -v --remove-orphans 2>/dev/null || true
+    fi
+
+    # CRÍTICO: Borrar volúmenes MÚLTIPLES VECES para asegurar eliminación
+    log_info "Eliminando volúmenes Docker del proyecto..."
+    for i in {1..3}; do
+        docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | while read -r vol; do
+            docker volume rm -f "$vol" 2>/dev/null || true
+        done || true
+        sleep 1
+    done
+
+    # Verificar que los volúmenes se eliminaron
+    local remaining_vols=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l)
+    if [ "$remaining_vols" -gt 0 ]; then
+        log_warning "Algunos volúmenes no se pudieron eliminar. Intentando con prune..."
+        docker volume prune -f 2>/dev/null || true
+    fi
+
     # Borrar imágenes del proyecto
     log_info "Borrando imágenes Docker del proyecto..."
-    docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i vozipomni | xargs -r docker rmi -f 2>/dev/null || true
+    docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -i vozipomni | while read -r img; do
+        docker rmi -f "$img" 2>/dev/null || true
+    done || true
 
     # Borrar archivos de configuración
     if [ -d "$INSTALL_DIR" ]; then
@@ -225,8 +238,23 @@ clean_existing() {
         rm -f "$INSTALL_DIR/.env" \
               "$INSTALL_DIR/.env.backup_"* \
               "$INSTALL_DIR/backend/.env" \
-              "$INSTALL_DIR/credentials.txt"
+              "$INSTALL_DIR/credentials.txt" 2>/dev/null || true
         rm -rf "$INSTALL_DIR/logs/"* 2>/dev/null || true
+    fi
+
+    # Limpiar completamente el directorio de instalación
+    log_info "Eliminando directorio de instalación..."
+    rm -rf "$INSTALL_DIR" 2>/dev/null || true
+
+    # Verificación final
+    log_info "Verificando limpieza..."
+    local remaining_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | wc -l)
+    local remaining_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l)
+    
+    if [ "$remaining_containers" -gt 0 ] || [ "$remaining_volumes" -gt 0 ]; then
+        log_warning "Limpieza incompleta: $remaining_containers contenedores, $remaining_volumes volúmenes restantes"
+    else
+        log_success "Limpieza completa verificada: 0 contenedores, 0 volúmenes"
     fi
 
     log_success "Instalación anterior eliminada completamente"
@@ -520,8 +548,12 @@ clone_repo() {
 
 # ─── 5. Generar credenciales y .env ─────────────────────────────────────────
 generate_env() {
+    # Si es instalación limpia, SIEMPRE generar credenciales nuevas
+    if [ "$CLEAN_INSTALL" = true ]; then
+        log_info "Modo limpio detectado: generando credenciales nuevas..."
+        # Saltar al bloque de generación nueva
     # Si ya existe .env, reutilizar credenciales existentes (volúmenes de DB/Redis persisten)
-    if [ -f "$INSTALL_DIR/.env" ]; then
+    elif [ -f "$INSTALL_DIR/.env" ]; then
         log_info "Archivo .env existente encontrado, reutilizando credenciales..."
         # Extraer credenciales del .env existente
         source "$INSTALL_DIR/.env" 2>/dev/null || true
@@ -743,10 +775,12 @@ INITSQL
     fi
 
     # Verificar credenciales solo cuando se reutiliza .env existente.
-    # En instalación limpia (FRESH_ENV=true) el volumen y las credenciales
+    # En instalación limpia (CLEAN_INSTALL=true o FRESH_ENV=true) el volumen y las credenciales
     # siempre coinciden, así que no hace falta verificar.
-    if [ "$FRESH_ENV" != true ]; then
+    if [ "$FRESH_ENV" != true ] && [ "$CLEAN_INSTALL" != true ]; then
         verify_postgres_credentials || exit 1
+    else
+        log_info "Instalación nueva: omitiendo verificación de credenciales"
     fi
 
     # ─── Fase 2: Backend ─────────────────────────────────────────────────
