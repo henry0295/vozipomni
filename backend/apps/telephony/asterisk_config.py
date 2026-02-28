@@ -83,8 +83,8 @@ class AsteriskConfigGenerator:
                 f"context={ext.context}",
                 "disallow=all",
                 f"allow={codecs}",
-                f"auth={ext.extension}-auth",
-                f"aors={ext.extension}-aor",
+                f"auth={ext.extension}",
+                f"aors={ext.extension}",
                 f"callerid={callerid}",
                 "direct_media=no",
                 "rtp_symmetric=yes",
@@ -111,7 +111,7 @@ class AsteriskConfigGenerator:
             
             # ---- Auth ----
             config.extend([
-                f"[{ext.extension}-auth]",
+                f"[{ext.extension}]",
                 "type=auth",
                 "auth_type=userpass",
                 f"username={ext.extension}",
@@ -121,7 +121,7 @@ class AsteriskConfigGenerator:
             
             # ---- AOR ----
             config.extend([
-                f"[{ext.extension}-aor]",
+                f"[{ext.extension}]",
                 "type=aor",
                 f"max_contacts={max_contacts}",
                 "remove_existing=yes",
@@ -129,10 +129,10 @@ class AsteriskConfigGenerator:
                 "",
             ])
             
-            # ---- Identify (opcional pero recomendado para evitar bugs de PJSIP) ----
-            # Permite identificar el endpoint por auth_username además de IP
+            # ---- Identify ----
+            # Permite identificar endpoint por auth_username
             config.extend([
-                f"[{ext.extension}-identify]",
+                f"[{ext.extension}]",
                 "type=identify",
                 f"endpoint={ext.extension}",
                 f"match_header=Authorization: Digest username=\"{ext.extension}\"",
