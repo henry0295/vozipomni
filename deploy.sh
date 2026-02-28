@@ -219,8 +219,9 @@ clean_existing() {
     done
 
     # Verificar que los volúmenes se eliminaron
-    local remaining_vols=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ')
-    if [ "${remaining_vols:-0}" -gt 0 ]; then
+    local remaining_vols=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ' || echo "0")
+    remaining_vols=${remaining_vols:-0}
+    if [ "$remaining_vols" -gt 0 ] 2>/dev/null; then
         log_warning "Algunos volúmenes no se pudieron eliminar. Intentando con prune..."
         docker volume prune -f 2>/dev/null || true
     fi
@@ -250,10 +251,12 @@ clean_existing() {
 
     # Verificación final
     log_info "Verificando limpieza..."
-    local remaining_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ')
-    local remaining_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ')
+    local remaining_containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ' || echo "0")
+    local remaining_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep -i vozipomni | wc -l | tr -d ' ' || echo "0")
+    remaining_containers=${remaining_containers:-0}
+    remaining_volumes=${remaining_volumes:-0}
     
-    if [ "${remaining_containers:-0}" -gt 0 ] || [ "${remaining_volumes:-0}" -gt 0 ]; then
+    if [ "$remaining_containers" -gt 0 ] 2>/dev/null || [ "$remaining_volumes" -gt 0 ] 2>/dev/null; then
         log_warning "Limpieza incompleta: $remaining_containers contenedores, $remaining_volumes volúmenes restantes"
     else
         log_success "Limpieza completa verificada: 0 contenedores, 0 volúmenes"
