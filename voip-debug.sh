@@ -89,7 +89,7 @@ function sngrep_kamailio() {
     print_info "Capturando tráfico SIP en Kamailio..."
     print_warning "Presiona 'Q' o Ctrl+C para salir"
     echo ""
-    docker compose -f "$COMPOSE_FILE" exec kamailio sngrep -d lo -d eth0 port 5060
+    docker compose -f "$COMPOSE_FILE" exec kamailio sngrep -d any port 5060
 }
 
 function sngrep_asterisk() {
@@ -97,7 +97,7 @@ function sngrep_asterisk() {
     print_info "Capturando tráfico SIP en Asterisk..."
     print_warning "Presiona 'Q' o Ctrl+C para salir"
     echo ""
-    docker compose -f "$COMPOSE_FILE" exec asterisk sngrep -d lo -d eth0 port 5080
+    docker compose -f "$COMPOSE_FILE" exec asterisk sngrep -d any port 5080
 }
 
 function sngrep_all() {
@@ -105,7 +105,7 @@ function sngrep_all() {
     print_info "Capturando SIP: 5060, 5080, 5161, 5162..."
     print_warning "Presiona 'Q' o Ctrl+C para salir"
     echo ""
-    docker compose -f "$COMPOSE_FILE" exec kamailio sngrep -d lo -d eth0 'port 5060 or port 5080 or port 5161 or port 5162'
+    docker compose -f "$COMPOSE_FILE" exec kamailio sngrep -d any 'port 5060 or port 5080 or port 5161 or port 5162'
 }
 
 function capture_rtp() {
