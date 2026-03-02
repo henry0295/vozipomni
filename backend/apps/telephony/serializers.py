@@ -175,11 +175,48 @@ class ExtensionSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
         extra_kwargs = {
-            'secret': {'write_only': True}
+            'secret': {'write_only': True, 'required': False, 'allow_blank': True}
         }
     
     def get_status(self, obj):
         return 'Activo' if obj.is_active else 'Inactivo'
+    
+    def validate(self, attrs):
+        """Validar y generar valores por defecto"""
+        import secrets
+        import string
+        
+        # Si no se proporciona contraseña, generar una automáticamente
+        if not attrs.get('secret'):
+            # Generar contraseña segura de 12 caracteres
+            alphabet = string.ascii_letters + string.digits
+            attrs['secret'] = ''.join(secrets.choice(alphabet) for i in range(12))
+        
+        # Valores por defecto si no se proporcionan
+        if not attrs.get('context'):
+            attrs['context'] = 'from-internal'
+        
+        if not attrs.get('transport'):
+            # Si es WebRTC, usar transport-wss, sino transport-udp
+            attrs['transport'] = 'transport-wss' if attrs.get('extension_type') == 'WEBRTC' else 'transport-udp'
+        
+        if not attrs.get('callerid'):
+            # Generar callerid si no se proporciona
+            name = attrs.get('name', f"Ext {attrs.get('extension', '')}")
+            extension = attrs.get('extension', '')
+            attrs['callerid'] = f'"{name}" <{extension}>'
+        
+        if not attrs.get('codecs'):
+            # Códecs por defecto según tipo
+            if attrs.get('extension_type') == 'WEBRTC':
+                attrs['codecs'] = 'opus,ulaw,alaw'
+            else:
+                attrs['codecs'] = 'ulaw,alaw,g729'
+        
+        if attrs.get('max_contacts') is None:
+            attrs['max_contacts'] = 1
+        
+        return attrs
     
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -187,6 +224,28 @@ class ExtensionSerializer(serializers.ModelSerializer):
         if 'secret' in data:
             data['secret'] = '********'
         return data
+    
+    def create(self, validated_data):
+        """Crear extensión y log"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        extension = super().create(validated_data)
+        logger.info(f"✨ Extensión {extension.extension} creada vía API por {self.context.get('request').user if self.context.get('request') else 'sistema'}")
+        return extension
+    
+    def update(self, instance, validated_data):
+        """Actualizar extensión y log"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # Si se proporciona secret='********', no actualizar la contraseña
+        if validated_data.get('secret') == '********':
+            validated_data.pop('secret')
+        
+        extension = super().update(instance, validated_data)
+        logger.info(f"🔄 Extensión {extension.extension} actualizada vía API por {self.context.get('request').user if self.context.get('request') else 'sistema'}")
+        return extension
 
 
 class InboundRouteSerializer(serializers.ModelSerializer):
