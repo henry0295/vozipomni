@@ -77,6 +77,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     net-tools \
     ca-certificates \
+    sngrep \
+    tcpdump \
+    ngrep \
+    iproute2 \
+    iputils-ping \
+    netcat-openbsd \
+    dnsutils \
+    vim-tiny \
+    less \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar Asterisk compilado desde builder

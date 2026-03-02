@@ -1,7 +1,7 @@
 # Dockerfile para Kamailio - WebRTC SIP Proxy
 FROM debian:bookworm-slim
 
-# Instalar Kamailio desde paquetes Debian
+# Instalar Kamailio y herramientas de debugging VoIP
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg2 \
     curl \
@@ -16,6 +16,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     kamailio-redis-modules \
     kamailio-extra-modules \
     openssl \
+    sngrep \
+    tcpdump \
+    ngrep \
+    net-tools \
+    iproute2 \
+    iputils-ping \
+    netcat-openbsd \
+    dnsutils \
+    vim-tiny \
+    less \
     && rm -rf /var/lib/apt/lists/*
 
 # Crear directorios necesarios
