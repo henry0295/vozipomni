@@ -230,8 +230,9 @@ services:
   # TELEPHONY — network_mode: host (rendimiento VoIP)
   # ──────────────────────────────────────────────────────────────────────────
   # NOTA: Con network_mode: host NO se usan "ports:" ni "networks:".
-  #       Asterisk escucha en :5161/:5162 (trunks), :5038 (AMI), :8088/:8089 (WebRTC)
-  #       Kamailio escucha en :5060 (SIP), :5061 (TLS), :8080 (HTTP)
+  #       Asterisk escucha en :5080 (interno Kamailio), :5161/:5162 (trunks),
+  #                          :5038 (AMI), :8088/:8089 (WebRTC)
+  #       Kamailio escucha en :5060 (SIP externo), :5061 (TLS), :8080 (HTTP/WebSocket)
   #       RTPEngine escucha en :22222 (control), :23000-23100 (media)
   # ──────────────────────────────────────────────────────────────────────────
   asterisk:

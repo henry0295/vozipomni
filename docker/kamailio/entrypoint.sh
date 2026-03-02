@@ -23,7 +23,7 @@ sed -i "s|RTPENGINE_HOST_PLACEHOLDER|${RTPENGINE_ADDR}|g" "$KAM_CFG"
 sed -i "s|ASTERISK_HOST_PLACEHOLDER|${ASTERISK_ADDR}|g"   "$KAM_CFG"
 
 echo "  [entrypoint] RTPEngine  → ${RTPENGINE_ADDR}:22222"
-echo "  [entrypoint] Asterisk   → ${ASTERISK_ADDR}:5060"
+echo "  [entrypoint] Asterisk   → ${ASTERISK_ADDR}:5080"
 
 echo "=== Iniciando Kamailio ==="
 exec kamailio -DD -E
