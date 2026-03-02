@@ -46,7 +46,7 @@ if total > 0:
         print(f"\n  ... y {total - 10} más")
 else:
     print("\n  ℹ️  No hay extensiones creadas")
-    print("  👉 Crea extensiones desde la web: http://localhost:3001/extensions")
+    print('  👉 Crea extensiones desde la web: http://IP-SERVIDOR/extensions')
 
 print("")
 EOF
@@ -66,7 +66,7 @@ echo ""
 echo "🎯 Próximos pasos:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  1. Accede al panel web: http://localhost:3001/extensions"
+echo "  1. Accede al panel web: http://IP-SERVIDOR/extensions"
 echo "  2. Crea tus primeras extensiones desde la interfaz"
 echo "  3. Las extensiones se sincronizarán automáticamente con Asterisk"
 echo "  4. Configura tus softphones con las credenciales creadas"
