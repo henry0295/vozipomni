@@ -86,6 +86,7 @@ logs/
 !update-production.sh
 !verify-production.sh
 !deploy.sh
+!apply-improvements.sh
 
 # Scripts Docker - NUNCA ignorar (necesarios para build)
 !docker/**/*.sh
