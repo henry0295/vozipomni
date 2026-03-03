@@ -294,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 definePageMeta({
   middleware: ['auth']
@@ -512,6 +512,20 @@ const openCreateModal = async () => {
   error.value = null
   await loadNextAvailable()
   isModalOpen.value = true
+  
+  // Scroll al inicio del modal después de abrirlo
+  setTimeout(() => {
+    const modalContent = document.querySelector('.flex-1.overflow-y-auto')
+    if (modalContent) {
+      modalContent.scrollTop = 0
+    }
+  }, 100)
+  
+  // Debug: mostrar estado del formulario en consola
+  console.log('📋 Formulario de creación abierto')
+  console.log('📝 Valores iniciales:', form.value)
+  console.log('✅ Formulario válido:', isFormValid.value)
+  console.log('📌 Campos faltantes:', missingFields.value)
 }
 
 const editAgent = (agent: AgentRow) => {
@@ -776,4 +790,23 @@ const resetForm = () => {
 }
 
 onMounted(() => loadAgents())
+
+// Debug: mostrar en consola cuando cambie la validez del formulario
+watch(isFormValid, (newVal, oldVal) => {
+  if (newVal !== oldVal) {
+    console.log('🔄 isFormValid cambió:', oldVal, '→', newVal)
+    console.log('📌 Campos faltantes:', missingFields.value)
+    console.log('📝 Valores actuales:', {
+      first_name: form.value.first_name,
+      last_name: form.value.last_name,
+      email: form.value.email,
+      username: form.value.username,
+      password: form.value.password ? '***' : '',
+      agent_id: form.value.agent_id,
+      sip_extension: form.value.sip_extension,
+      sip_password: form.value.sip_password ? '***' : ''
+    })
+  }
+})
+
 </script>
