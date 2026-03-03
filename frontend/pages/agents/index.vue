@@ -123,7 +123,8 @@
 
     <!-- Modal crear/editar -->
     <USlideover v-model="isModalOpen" :title="editingId ? 'Editar Agente' : 'Nuevo Agente'" @close="resetForm">
-      <div class="p-4 space-y-6">
+      <div class="flex flex-col h-full">
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
         <!-- Información del Usuario -->
         <div class="space-y-4">
           <h3 class="text-lg font-semibold border-b pb-2">Información del Usuario</h3>
@@ -184,17 +185,19 @@
             <p class="text-xs text-gray-500 ml-6">Graba todas las llamadas del agente</p>
           </div>
         </div>
+        </div>
 
-        <div class="flex gap-2 pt-4 border-t">
+        <div class="flex gap-2 p-4 border-t bg-white dark:bg-gray-900">
           <UButton 
             color="primary" 
             @click="saveAgent" 
             :loading="isSaving"
             :disabled="!isFormValid"
+            class="flex-1"
           >
             {{ editingId ? 'Actualizar' : 'Crear Agente' }}
           </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
+          <UButton color="gray" @click="isModalOpen = false" class="flex-1">
             Cancelar
           </UButton>
         </div>
