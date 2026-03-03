@@ -125,6 +125,17 @@
     <USlideover v-model="isModalOpen" :title="editingId ? 'Editar Agente' : 'Nuevo Agente'" @close="resetForm">
       <div class="flex flex-col h-full">
         <div class="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
+        
+        <!-- Alert de error dentro del modal -->
+        <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }" @close="error = null">
+          <template #title>
+            Error al guardar
+          </template>
+          <template #description>
+            {{ error }}
+          </template>
+        </UAlert>
+
         <!-- Información del Usuario -->
         <div class="space-y-4">
           <h3 class="text-lg font-semibold border-b pb-2">Información del Usuario</h3>
@@ -301,6 +312,7 @@ const getStatusLabel = (status: string) => {
 
 const openCreateModal = () => {
   resetForm()
+  error.value = null
   isModalOpen.value = true
 }
 
@@ -400,7 +412,33 @@ const saveAgent = async () => {
       result = await updateAgent(editingId.value, updateData)
       
       if (result.error) {
-        throw new Error('Error al actualizar el agente')
+        // Procesar error del servidor
+        let errorMsg = 'Error al actualizar el agente'
+        
+        if (result.error.data) {
+          if (result.error.data.detail) {
+            errorMsg = result.error.data.detail
+          } else if (result.error.data.message) {
+            errorMsg = result.error.data.message
+          } else if (typeof result.error.data === 'object') {
+            // Errores de validación por campo
+            const fieldErrors = []
+            for (const [field, messages] of Object.entries(result.error.data)) {
+              if (Array.isArray(messages)) {
+                fieldErrors.push(`${messages.join(', ')}`)
+              } else {
+                fieldErrors.push(`${messages}`)
+              }
+            }
+            if (fieldErrors.length > 0) {
+              errorMsg = fieldErrors.join('. ')
+            }
+          }
+        } else if (result.error.message) {
+          errorMsg = result.error.message
+        }
+        
+        throw new Error(errorMsg)
       }
       
       toast.add({
@@ -413,7 +451,33 @@ const saveAgent = async () => {
       result = await createAgent(form.value)
       
       if (result.error) {
-        throw new Error('Error al crear el agente')
+        // Procesar error del servidor
+        let errorMsg = 'Error al crear el agente'
+        
+        if (result.error.data) {
+          if (result.error.data.detail) {
+            errorMsg = result.error.data.detail
+          } else if (result.error.data.message) {
+            errorMsg = result.error.data.message
+          } else if (typeof result.error.data === 'object') {
+            // Errores de validación por campo
+            const fieldErrors = []
+            for (const [field, messages] of Object.entries(result.error.data)) {
+              if (Array.isArray(messages)) {
+                fieldErrors.push(`${messages.join(', ')}`)
+              } else {
+                fieldErrors.push(`${messages}`)
+              }
+            }
+            if (fieldErrors.length > 0) {
+              errorMsg = fieldErrors.join('. ')
+            }
+          }
+        } else if (result.error.message) {
+          errorMsg = result.error.message
+        }
+        
+        throw new Error(errorMsg)
       }
       
       toast.add({
@@ -428,7 +492,35 @@ const saveAgent = async () => {
     isModalOpen.value = false
     resetForm()
   } catch (err: any) {
-    error.value = err.message || 'Error al guardar el agente. Verifique que el usuario, ID de agente y extensión SIP no estén duplicados.'
+    // Extraer mensaje de error más detallado
+    let errorMessage = 'Error al guardar el agente'
+    
+    if (err.message) {
+      errorMessage = err.message
+    } else if (err.data) {
+      if (typeof err.data === 'string') {
+        errorMessage = err.data
+      } else if (err.data.detail) {
+        errorMessage = err.data.detail
+      } else if (err.data.message) {
+        errorMessage = err.data.message
+      } else if (typeof err.data === 'object') {
+        // Errores de validación por campo de Django REST Framework
+        const fieldErrors = []
+        for (const [field, messages] of Object.entries(err.data)) {
+          if (Array.isArray(messages)) {
+            fieldErrors.push(`${field}: ${messages.join(', ')}`)
+          } else {
+            fieldErrors.push(`${field}: ${messages}`)
+          }
+        }
+        if (fieldErrors.length > 0) {
+          errorMessage = fieldErrors.join('; ')
+        }
+      }
+    }
+    
+    error.value = errorMessage
     console.error('Error saving agent:', err)
   } finally {
     isSaving.value = false
@@ -462,6 +554,7 @@ const resetForm = () => {
     recording_enabled: true
   }
   editingId.value = null
+  error.value = null
 }
 
 onMounted(() => loadAgents())

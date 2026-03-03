@@ -62,6 +62,8 @@ class AgentSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
+        from django.db import IntegrityError
+        
         # Extraer datos de usuario
         username = validated_data.pop('username', None)
         password = validated_data.pop('password', None)
@@ -70,25 +72,71 @@ class AgentSerializer(serializers.ModelSerializer):
         email = validated_data.pop('email', '')
         sip_password = validated_data.pop('sip_password', None)
         
-        # Crear usuario si se proporcionó username
-        if username:
-            user = User.objects.create_user(
-                username=username,
-                email=email,
-                first_name=first_name,
-                last_name=last_name,
-                password=password or 'changeme123',
-                role='agent',
-                is_active_agent=True
-            )
-            validated_data['user'] = user
-        elif 'user' not in validated_data:
-            raise serializers.ValidationError({
-                'username': 'Debe proporcionar un username o un user existente'
-            })
-        
-        # Crear agente
-        agent = Agent.objects.create(**validated_data)
+        try:
+            # Crear usuario si se proporcionó username
+            if username:
+                # Verificar si el usuario ya existe
+                if User.objects.filter(username=username).exists():
+                    raise serializers.ValidationError({
+                        'username': f'El nombre de usuario "{username}" ya está en uso'
+                    })
+                
+                if email and User.objects.filter(email=email).exists():
+                    raise serializers.ValidationError({
+                        'email': f'El correo electrónico "{email}" ya está en uso'
+                    })
+                
+                user = User.objects.create_user(
+                    username=username,
+                    email=email,
+                    first_name=first_name,
+                    last_name=last_name,
+                    password=password or 'changeme123',
+                    role='agent',
+                    is_active_agent=True
+                )
+                validated_data['user'] = user
+            elif 'user' not in validated_data:
+                raise serializers.ValidationError({
+                    'username': 'Debe proporcionar un username o un user existente'
+                })
+            
+            # Verificar duplicados de agent_id y sip_extension
+            if Agent.objects.filter(agent_id=validated_data.get('agent_id')).exists():
+                raise serializers.ValidationError({
+                    'agent_id': f'El ID de agente "{validated_data.get("agent_id")}" ya está en uso'
+                })
+            
+            if Agent.objects.filter(sip_extension=validated_data.get('sip_extension')).exists():
+                raise serializers.ValidationError({
+                    'sip_extension': f'La extensión SIP "{validated_data.get("sip_extension")}" ya está en uso'
+                })
+            
+            # Crear agente
+            agent = Agent.objects.create(**validated_data)
+            
+        except IntegrityError as e:
+            error_msg = str(e)
+            if 'username' in error_msg:
+                raise serializers.ValidationError({
+                    'username': 'El nombre de usuario ya está en uso'
+                })
+            elif 'email' in error_msg:
+                raise serializers.ValidationError({
+                    'email': 'El correo electrónico ya está en uso'
+                })
+            elif 'agent_id' in error_msg:
+                raise serializers.ValidationError({
+                    'agent_id': 'El ID de agente ya está en uso'
+                })
+            elif 'sip_extension' in error_msg:
+                raise serializers.ValidationError({
+                    'sip_extension': 'La extensión SIP ya está en uso'
+                })
+            else:
+                raise serializers.ValidationError({
+                    'detail': f'Error de integridad: {error_msg}'
+                })
         
         # Crear endpoint PJSIP en Asterisk si se habilitó WebRTC
         if agent.webrtc_enabled and sip_password:

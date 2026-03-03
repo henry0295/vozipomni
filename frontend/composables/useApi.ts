@@ -46,7 +46,29 @@ export const useApi = () => {
     }
 
     const params = { ...defaults, ...options }
-    return await useFetch(url, params)
+    const result = await useFetch(url, params)
+    
+    // Si hay error, intentar extraer el mensaje detallado del servidor
+    if (result.error.value) {
+      const serverError = result.error.value as any
+      let errorData: any = {}
+      
+      // Intentar obtener datos del error del servidor
+      if (serverError.data) {
+        errorData = serverError.data
+      } else if (serverError.response?._data) {
+        errorData = serverError.response._data
+      }
+      
+      // Crear objeto de error enriquecido
+      result.error.value = {
+        ...serverError,
+        data: errorData,
+        message: errorData.detail || errorData.message || serverError.message || 'Error en la solicitud'
+      } as any
+    }
+    
+    return result
   }
 
   return {
