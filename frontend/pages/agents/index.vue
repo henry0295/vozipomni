@@ -261,19 +261,32 @@
         </div>
         </div>
 
-        <div class="flex gap-2 p-4 border-t bg-white dark:bg-gray-900">
-          <UButton 
-            color="primary" 
-            @click="saveAgent" 
-            :loading="isSaving"
-            :disabled="!isFormValid"
-            class="flex-1"
+        <div class="flex flex-col gap-2 p-4 border-t bg-white dark:bg-gray-900">
+          <UAlert 
+            v-if="!isFormValid && !editingId" 
+            color="amber" 
+            icon="i-heroicons-exclamation-triangle"
+            :ui="{ description: 'text-xs' }"
           >
-            {{ editingId ? 'Actualizar' : 'Crear Agente' }}
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false" class="flex-1">
-            Cancelar
-          </UButton>
+            <template #description>
+              Completa todos los campos requeridos: {{ missingFields }}
+            </template>
+          </UAlert>
+          
+          <div class="flex gap-2">
+            <UButton 
+              color="primary" 
+              @click="saveAgent" 
+              :loading="isSaving"
+              :disabled="!isFormValid"
+              class="flex-1"
+            >
+              {{ editingId ? 'Actualizar' : 'Crear Agente' }}
+            </UButton>
+            <UButton color="gray" @click="isModalOpen = false" class="flex-1">
+              Cancelar
+            </UButton>
+          </div>
         </div>
       </div>
     </USlideover>
@@ -350,6 +363,25 @@ const isFormValid = computed(() => {
   const idsAvailable = agentIdStatus.value !== 'unavailable' && extensionStatus.value !== 'unavailable'
   
   return hasRequiredFields && idsAvailable
+})
+
+const missingFields = computed(() => {
+  if (editingId.value) return ''
+  
+  const missing = []
+  if (!form.value.first_name) missing.push('Nombre')
+  if (!form.value.last_name) missing.push('Apellido')
+  if (!form.value.email) missing.push('Email')
+  if (!form.value.username) missing.push('Usuario')
+  if (!form.value.password) missing.push('Contraseña')
+  if (!form.value.agent_id) missing.push('ID de Agente')
+  if (!form.value.sip_extension) missing.push('Extensión SIP')
+  if (!form.value.sip_password) missing.push('Contraseña SIP')
+  
+  if (agentIdStatus.value === 'unavailable') missing.push('ID de Agente (ya en uso)')
+  if (extensionStatus.value === 'unavailable') missing.push('Extensión SIP (ya en uso)')
+  
+  return missing.join(', ')
 })
 
 const filteredAgents = computed(() => {
