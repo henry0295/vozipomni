@@ -733,6 +733,120 @@ configure_firewall() {
     fi
 }
 
+# ─── 6.5. Configuración Automática de HTTPS ────────────────────────────────
+setup_https_automatic() {
+    log_info "Configurando HTTPS automáticamente..."
+    cd "$INSTALL_DIR"
+    
+    # Crear directorio SSL
+    local SSL_DIR="$INSTALL_DIR/docker/nginx/ssl"
+    mkdir -p "$SSL_DIR"
+    
+    # Verificar si ya existen certificados válidos
+    if [ -f "$SSL_DIR/vozipomni.crt" ] && [ -f "$SSL_DIR/vozipomni.key" ]; then
+        log_info "Certificados SSL ya existen, verificando validez..."
+        if openssl x509 -checkend 86400 -noout -in "$SSL_DIR/vozipomni.crt" 2>/dev/null; then
+            log_success "Certificados SSL válidos encontrados, reutilizando..."
+            return 0
+        else
+            log_warning "Certificados existentes expirados o inválidos, regenerando..."
+        fi
+    fi
+    
+    # Generar certificados autofirmados
+    log_info "Generando certificados SSL autofirmados (válidos 365 días)..."
+    
+    # Usar la IP del sistema
+    local SERVER_IP="${VOZIPOMNI_IPV4:-127.0.0.1}"
+    
+    # Generar certificado con OpenSSL
+    if command -v openssl &>/dev/null; then
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout "$SSL_DIR/vozipomni.key" \
+            -out "$SSL_DIR/vozipomni.crt" \
+            -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipOmni/OU=IT/CN=${SERVER_IP}" \
+            -addext "subjectAltName=IP:${SERVER_IP},DNS:localhost,DNS:vozipomni.local" \
+            2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            # Establecer permisos correctos
+            chmod 644 "$SSL_DIR/vozipomni.crt"
+            chmod 600 "$SSL_DIR/vozipomni.key"
+            
+            log_success "✓ Certificados SSL generados"
+            log_info "  Certificado: $SSL_DIR/vozipomni.crt"
+            log_info "  Clave privada: $SSL_DIR/vozipomni.key"
+            log_info "  Válido para: IP:${SERVER_IP}, DNS:localhost"
+        else
+            log_error "Error al generar certificados SSL"
+            return 1
+        fi
+    else
+        log_error "OpenSSL no está instalado. Instalando..."
+        if [ -f /etc/debian_version ]; then
+            apt-get update && apt-get install -y openssl
+        elif [ -f /etc/redhat-release ]; then
+            yum install -y openssl || dnf install -y openssl
+        else
+            log_error "No se pudo instalar OpenSSL automáticamente"
+            return 1
+        fi
+        
+        # Reintentar generación
+        setup_https_automatic
+        return $?
+    fi
+    
+    # Aplicar configuración HTTPS a nginx
+    log_info "Configurando Nginx para HTTPS..."
+    
+    local NGINX_CONF="$INSTALL_DIR/docker/nginx/default.prod.conf"
+    local NGINX_HTTPS_CONF="$INSTALL_DIR/docker/nginx/default.https.conf"
+    
+    if [ -f "$NGINX_HTTPS_CONF" ]; then
+        # Hacer backup de la configuración actual
+        if [ -f "$NGINX_CONF" ]; then
+            cp "$NGINX_CONF" "$NGINX_CONF.backup-$(date +%Y%m%d-%H%M%S)"
+        fi
+        
+        # Aplicar configuración HTTPS
+        cp "$NGINX_HTTPS_CONF" "$NGINX_CONF"
+        log_success "✓ Configuración HTTPS aplicada a Nginx"
+    else
+        log_warning "Archivo de configuración HTTPS no encontrado, usando configuración por defecto"
+    fi
+    
+    # Actualizar variables de entorno para usar HTTPS
+    log_info "Actualizando variables de entorno para HTTPS..."
+    
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        # Actualizar URLs para usar HTTPS/WSS
+        sed -i "s|http://${SERVER_IP}|https://${SERVER_IP}|g" "$INSTALL_DIR/.env" 2>/dev/null || \
+            sed -i '' "s|http://${SERVER_IP}|https://${SERVER_IP}|g" "$INSTALL_DIR/.env" 2>/dev/null
+        
+        sed -i "s|ws://${SERVER_IP}|wss://${SERVER_IP}|g" "$INSTALL_DIR/.env" 2>/dev/null || \
+            sed -i '' "s|ws://${SERVER_IP}|wss://${SERVER_IP}|g" "$INSTALL_DIR/.env" 2>/dev/null
+        
+        log_success "✓ Variables de entorno actualizadas para HTTPS"
+    fi
+    
+    log_success "HTTPS configurado correctamente"
+    log_info ""
+    log_info "╔════════════════════════════════════════════════════════════╗"
+    log_info "║  ⚠️  CERTIFICADO AUTOFIRMADO                               ║"
+    log_info "╚════════════════════════════════════════════════════════════╝"
+    log_info ""
+    log_info "El navegador mostrará advertencia de seguridad."
+    log_info "Esto es NORMAL para certificados autofirmados."
+    log_info ""
+    log_info "Para continuar:"
+    log_info "  1. Click en 'Avanzado'"
+    log_info "  2. Click en 'Continuar a ${SERVER_IP} (sitio no seguro)'"
+    log_info ""
+    log_info "El sistema funcionará normalmente después de aceptar."
+    log_info ""
+}
+
 # ─── 7. Build & Deploy ──────────────────────────────────────────────────────
 deploy_services() {
     log_info "Desplegando servicios..."
@@ -892,6 +1006,14 @@ show_result() {
     echo -e "${BLUE}Accede a tu Contact Center:${NC}"
     echo -e "  → ${GREEN}http://$VOZIPOMNI_IPV4${NC}"
     echo ""
+    echo -e "${YELLOW}⚠️  IMPORTANTE - Seguridad:${NC}"
+    echo -e "  El sistema está usando HTTP (inseguro)"
+    echo -e "  Las contraseñas se transmiten sin cifrar"
+    echo ""
+    echo -e "${BLUE}🔐 Habilitar HTTPS (Recomendado):${NC}"
+    echo -e "  ${GREEN}cd $INSTALL_DIR && chmod +x quick-https.sh && ./quick-https.sh $VOZIPOMNI_IPV4${NC}"
+    echo -e "  Después acceder a: ${GREEN}https://$VOZIPOMNI_IPV4${NC}"
+    echo ""
     echo -e "${BLUE}Credenciales:${NC}"
     echo -e "  Usuario:    ${GREEN}admin${NC}"
     echo -e "  Contraseña: ${GREEN}${ADMIN_PASSWORD}${NC}"
@@ -926,6 +1048,8 @@ main() {
     generate_env
     echo ""
     configure_firewall
+    echo ""
+    setup_https_automatic
     echo ""
     deploy_services
     echo ""
