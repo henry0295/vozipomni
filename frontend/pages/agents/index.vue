@@ -438,7 +438,14 @@ const deleteAgent = async (id: number) => {
   const result = await deleteAgentApi(id)
   if (result.error) {
     error.value = 'Error al eliminar el agente'
-  } username: '',
+  } else {
+    await loadAgents()
+  }
+}
+
+const resetForm = () => {
+  form.value = {
+    username: '',
     password: '',
     first_name: '',
     last_name: '',
@@ -449,14 +456,7 @@ const deleteAgent = async (id: number) => {
     max_concurrent_calls: 1,
     webrtc_enabled: true,
     auto_answer: false,
-    recording_enabled: tru
-const resetForm = () => {
-  form.value = {
-    agent_id: '',
-    sip_extension: '',
-    sip_password: '',
-    max_simultaneous_calls: 1,
-    webrtc_enabled: false
+    recording_enabled: true
   }
   editingId.value = null
 }
