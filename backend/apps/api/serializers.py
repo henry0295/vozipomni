@@ -43,11 +43,121 @@ class AgentSerializer(serializers.ModelSerializer):
     user_details = UserSerializer(source='user', read_only=True)
     is_available = serializers.ReadOnlyField()
     
+    # Campos para crear/actualizar usuario
+    username = serializers.CharField(write_only=True, required=False)
+    password = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
+    first_name = serializers.CharField(write_only=True, required=False)
+    last_name = serializers.CharField(write_only=True, required=False)
+    email = serializers.EmailField(write_only=True, required=False)
+    sip_password = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
+    
     class Meta:
         model = Agent
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at', 'current_calls', 'last_call_time', 
-                            'logged_in_at', 'calls_today', 'talk_time_today']
+                            'logged_in_at', 'calls_today', 'talk_time_today', 'status',
+                            'available_time_today', 'break_time_today', 'oncall_time_today', 'wrapup_time_today']
+        extra_kwargs = {
+            'user': {'required': False}
+        }
+    
+    def create(self, validated_data):
+        # Extraer datos de usuario
+        username = validated_data.pop('username', None)
+        password = validated_data.pop('password', None)
+        first_name = validated_data.pop('first_name', '')
+        last_name = validated_data.pop('last_name', '')
+        email = validated_data.pop('email', '')
+        sip_password = validated_data.pop('sip_password', None)
+        
+        # Crear usuario si se proporcionó username
+        if username:
+            user = User.objects.create_user(
+                username=username,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                password=password or 'changeme123',
+                role='agent',
+                is_active_agent=True
+            )
+            validated_data['user'] = user
+        elif 'user' not in validated_data:
+            raise serializers.ValidationError({
+                'username': 'Debe proporcionar un username o un user existente'
+            })
+        
+        # Crear agente
+        agent = Agent.objects.create(**validated_data)
+        
+        # Crear endpoint PJSIP en Asterisk si se habilitó WebRTC
+        if agent.webrtc_enabled and sip_password:
+            from apps.telephony.asterisk_config import AsteriskConfigGenerator
+            generator = AsteriskConfigGenerator()
+            try:
+                generator.create_pjsip_endpoint(
+                    extension=agent.sip_extension,
+                    password=sip_password,
+                    agent_name=agent.user.get_full_name() or agent.agent_id
+                )
+            except Exception as e:
+                # Log error pero no fallar la creación
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error creando endpoint PJSIP para {agent.sip_extension}: {e}")
+        
+        return agent
+    
+    def update(self, instance, validated_data):
+        # Extraer datos de usuario
+        username = validated_data.pop('username', None)
+        password = validated_data.pop('password', None)
+        first_name = validated_data.pop('first_name', None)
+        last_name = validated_data.pop('last_name', None)
+        email = validated_data.pop('email', None)
+        sip_password = validated_data.pop('sip_password', None)
+        
+        # Actualizar usuario si se proporcionaron datos
+        if instance.user and any([username, password, first_name, last_name, email]):
+            user = instance.user
+            if username:
+                user.username = username
+            if password:
+                user.set_password(password)
+            if first_name is not None:
+                user.first_name = first_name
+            if last_name is not None:
+                user.last_name = last_name
+            if email:
+                user.email = email
+            user.save()
+        
+        # Actualizar extensión PJSIP si cambió
+        old_extension = instance.sip_extension
+        if 'sip_extension' in validated_data and validated_data['sip_extension'] != old_extension:
+            from apps.telephony.asterisk_config import AsteriskConfigGenerator
+            generator = AsteriskConfigGenerator()
+            try:
+                # Eliminar vieja extensión
+                generator.delete_pjsip_endpoint(old_extension)
+                # Crear nueva
+                if sip_password:
+                    generator.create_pjsip_endpoint(
+                        extension=validated_data['sip_extension'],
+                        password=sip_password,
+                        agent_name=instance.user.get_full_name() or instance.agent_id
+                    )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error actualizando endpoint PJSIP: {e}")
+        
+        # Actualizar agente
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        return instance
 
 
 class ContactSerializer(serializers.ModelSerializer):

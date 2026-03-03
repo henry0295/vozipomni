@@ -506,3 +506,121 @@ class AsteriskConfigGenerator:
                 logger.error(f"✗ Error generando {filename}: {e}")
         
         return dynamic_configs
+    
+    def create_pjsip_endpoint(self, extension, password, agent_name=None, context='from-internal'):
+        """
+        Crea un endpoint PJSIP individual para un agente.
+        
+        Args:
+            extension: Número de extensión (ej: 100)
+            password: Contraseña para autenticación SIP
+            agent_name: Nombre del agente (opcional)
+            context: Contexto de dialplan (por defecto 'from-internal')
+        """
+        from apps.telephony.models import Extension
+        
+        # Crear o actualizar la extensión en la base de datos
+        ext, created = Extension.objects.update_or_create(
+            extension=extension,
+            defaults={
+                'name': agent_name or f'Agent {extension}',
+                'extension_type': 'WEBRTC',
+                'context': context,
+                'secret': password,
+                'callerid': f'"{agent_name or extension}" <{extension}>',
+                'is_active': True,
+                'codecs': 'opus,ulaw,alaw',
+                'transport': 'transport-wss',
+                'max_contacts': 3
+            }
+        )
+        
+        # Regenerar archivo de configuración
+        self.write_all_configs()
+        
+        # Recargar PJSIP en Asterisk
+        try:
+            from .asterisk_ami import AsteriskAMI
+            ami = AsteriskAMI()
+            if ami.connect():
+                ami.reload_module('res_pjsip.so')
+                ami.disconnect()
+                logger.info(f"✓ Endpoint PJSIP {extension} {'creado' if created else 'actualizado'} y recargado en Asterisk")
+        except Exception as e:
+            logger.warning(f"Endpoint creado pero no se pudo recargar Asterisk: {e}")
+        
+        return ext
+    
+    def delete_pjsip_endpoint(self, extension):
+        """
+        Elimina un endpoint PJSIP.
+        
+        Args:
+            extension: Número de extensión a eliminar
+        """
+        from apps.telephony.models import Extension
+        
+        try:
+            ext = Extension.objects.get(extension=extension)
+            ext.is_active = False
+            ext.save()
+            
+            # Regenerar configuración
+            self.write_all_configs()
+            
+            # Recargar PJSIP
+            try:
+                from .asterisk_ami import AsteriskAMI
+                ami = AsteriskAMI()
+                if ami.connect():
+                    ami.reload_module('res_pjsip.so')
+                    ami.disconnect()
+                    logger.info(f"✓ Endpoint PJSIP {extension} desactivado")
+            except Exception as e:
+                logger.warning(f"Endpoint desactivado pero no se pudo recargar Asterisk: {e}")
+            
+            return True
+        except Extension.DoesNotExist:
+            logger.warning(f"Extensión {extension} no existe")
+            return False
+    
+    def update_pjsip_endpoint(self, extension, password=None, agent_name=None):
+        """
+        Actualiza un endpoint PJSIP existente.
+        
+        Args:
+            extension: Número de extensión
+            password: Nueva contraseña (opcional)
+            agent_name: Nuevo nombre (opcional)
+        """
+        from apps.telephony.models import Extension
+        
+        try:
+            ext = Extension.objects.get(extension=extension)
+            
+            if password:
+                ext.secret = password
+            if agent_name:
+                ext.name = agent_name
+                ext.callerid = f'"{agent_name}" <{extension}>'
+            
+            ext.save()
+            
+            # Regenerar configuración
+            self.write_all_configs()
+            
+            # Recargar PJSIP
+            try:
+                from .asterisk_ami import AsteriskAMI
+                ami = AsteriskAMI()
+                if ami.connect():
+                    ami.reload_module('res_pjsip.so')
+                    ami.disconnect()
+                    logger.info(f"✓ Endpoint PJSIP {extension} actualizado")
+            except Exception as e:
+                logger.warning(f"Endpoint actualizado pero no se pudo recargar Asterisk: {e}")
+            
+            return ext
+        except Extension.DoesNotExist:
+            logger.error(f"Extensión {extension} no existe")
+            return None

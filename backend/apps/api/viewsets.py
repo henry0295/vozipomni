@@ -63,19 +63,44 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
 
 class AgentViewSet(viewsets.ModelViewSet):
-    queryset = Agent.objects.all()
+    queryset = Agent.objects.select_related('user').prefetch_related('campaigns')
     serializer_class = serializers.AgentSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, SearchFilter]
-    search_fields = ['agent_id', 'sip_extension', 'user__username']
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['agent_id', 'sip_extension', 'user__username', 'user__first_name', 'user__last_name', 'user__email']
     filterset_fields = ['status', 'webrtc_enabled']
+    ordering_fields = ['created_at', 'agent_id', 'status', 'calls_today']
+    ordering = ['-created_at']
+    
+    def perform_destroy(self, instance):
+        """Al eliminar un agente, desactivar su endpoint PJSIP"""
+        try:
+            from apps.telephony.asterisk_config import AsteriskConfigGenerator
+            generator = AsteriskConfigGenerator()
+            generator.delete_pjsip_endpoint(instance.sip_extension)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error eliminando endpoint PJSIP al borrar agente: {e}")
+        
+        # Desactivar usuario también
+        if instance.user:
+            instance.user.is_active = False
+            instance.user.is_active_agent = False
+            instance.user.save()
+        
+        instance.delete()
     
     @action(detail=True, methods=['post'])
     def login(self, request, pk=None):
         """Marcar agente como conectado"""
         agent = self.get_object()
         agent.login()
-        return Response({'status': 'logged in'})
+        return Response({
+            'status': 'logged in',
+            'agent_id': agent.agent_id,
+            'sip_extension': agent.sip_extension
+        })
     
     @action(detail=True, methods=['post'])
     def logout(self, request, pk=None):
@@ -92,8 +117,60 @@ class AgentViewSet(viewsets.ModelViewSet):
         if new_status in dict(Agent.STATUS_CHOICES):
             agent.status = new_status
             agent.save()
-            return Response({'status': 'updated'})
-        return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'status': 'updated',
+                'new_status': new_status
+            })
+        return Response(
+            {'error': 'Invalid status', 'valid_statuses': [s[0] for s in Agent.STATUS_CHOICES]}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    @action(detail=True, methods=['get'])
+    def stats(self, request, pk=None):
+        """Obtener estadísticas del agente"""
+        agent = self.get_object()
+        return Response({
+            'agent_id': agent.agent_id,
+            'status': agent.status,
+            'is_available': agent.is_available,
+            'calls_today': agent.calls_today,
+            'talk_time_today': agent.talk_time_today,
+            'available_time_today': agent.available_time_today,
+            'break_time_today': agent.break_time_today,
+            'oncall_time_today': agent.oncall_time_today,
+            'wrapup_time_today': agent.wrapup_time_today,
+            'session_duration': agent.session_duration,
+            'occupancy': agent.occupancy,
+            'logged_in_at': agent.logged_in_at
+        })
+    
+    @action(detail=True, methods=['post'])
+    def start_break(self, request, pk=None):
+        """Iniciar descanso del agente"""
+        agent = self.get_object()
+        reason = request.data.get('reason', 'personal')
+        
+        agent.status = 'break'
+        agent.save()
+        
+        return Response({
+            'status': 'break started',
+            'reason': reason
+        })
+    
+    @action(detail=True, methods=['post'])
+    def end_break(self, request, pk=None):
+        """Finalizar descanso del agente"""
+        agent = self.get_object()
+        
+        agent.status = 'available'
+        agent.save()
+        
+        return Response({
+            'status': 'break ended',
+            'new_status': 'available'
+        })
 
 
 class ContactViewSet(viewsets.ModelViewSet):
