@@ -98,69 +98,105 @@
         <!-- Columna central -->
         <div class="console-center">
           <div class="space-y-4">
-            <!-- Campaña activa y script -->
-            <AgentCampaignsPanel ref="campaignsPanel" />
+            <!-- Tabs de navegación -->
+            <UTabs v-model="activeTab" :items="tabs" class="w-full">
+              <!-- Tab: Campaña -->
+              <template #campaign>
+                <div class="space-y-4 py-4">
+                  <AgentCampaignsPanel ref="campaignsPanel" />
 
-            <!-- Información del contacto actual (durante llamada) -->
-            <UCard v-if="agentStore.currentCall">
-              <template #header>
-                <h3 class="text-lg font-semibold">Información del Contacto</h3>
-              </template>
+                  <!-- Información del contacto actual (durante llamada) -->
+                  <UCard v-if="agentStore.currentCall">
+                    <template #header>
+                      <h3 class="text-lg font-semibold">Información del Contacto</h3>
+                    </template>
 
-              <div class="space-y-3">
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <p class="text-sm text-gray-600">Nombre</p>
-                    <p class="font-semibold">{{ currentContact.name || 'Desconocido' }}</p>
-                  </div>
-                  <div>
-                    <p class="text-sm text-gray-600">Teléfono</p>
-                    <p class="font-semibold">{{ currentContact.phone }}</p>
-                  </div>
-                  <div>
-                    <p class="text-sm text-gray-600">Email</p>
-                    <p class="font-semibold">{{ currentContact.email || 'N/A' }}</p>
-                  </div>
-                  <div>
-                    <p class="text-sm text-gray-600">Empresa</p>
-                    <p class="font-semibold">{{ currentContact.company || 'N/A' }}</p>
-                  </div>
-                </div>
-
-                <!-- Historial de llamadas del contacto -->
-                <div class="pt-3 border-t">
-                  <p class="text-sm font-medium text-gray-700 mb-2">Historial de Llamadas</p>
-                  <div class="space-y-2 max-h-40 overflow-y-auto">
-                    <div
-                      v-for="call in currentContact.callHistory"
-                      :key="call.id"
-                      class="text-xs p-2 bg-gray-50 rounded"
-                    >
-                      <div class="flex justify-between">
-                        <span class="font-medium">{{ call.date }}</span>
-                        <UBadge :color="call.disposition === 'CONNECTED' ? 'green' : 'gray'" size="xs">
-                          {{ call.disposition }}
-                        </UBadge>
+                    <div class="space-y-3">
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <p class="text-sm text-gray-600">Nombre</p>
+                          <p class="font-semibold">{{ currentContact.name || 'Desconocido' }}</p>
+                        </div>
+                        <div>
+                          <p class="text-sm text-gray-600">Teléfono</p>
+                          <p class="font-semibold">{{ currentContact.phone }}</p>
+                        </div>
+                        <div>
+                          <p class="text-sm text-gray-600">Email</p>
+                          <p class="font-semibold">{{ currentContact.email || 'N/A' }}</p>
+                        </div>
+                        <div>
+                          <p class="text-sm text-gray-600">Empresa</p>
+                          <p class="font-semibold">{{ currentContact.company || 'N/A' }}</p>
+                        </div>
                       </div>
-                      <p class="text-gray-600 mt-1">{{ call.notes }}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </UCard>
 
-            <!-- Panel de notas rápidas -->
-            <UCard>
-              <template #header>
-                <h3 class="text-lg font-semibold">Notas Rápidas</h3>
+                      <!-- Historial de llamadas del contacto -->
+                      <div class="pt-3 border-t">
+                        <p class="text-sm font-medium text-gray-700 mb-2">Historial de Llamadas</p>
+                        <div class="space-y-2 max-h-40 overflow-y-auto">
+                          <div
+                            v-for="call in currentContact.callHistory"
+                            :key="call.id"
+                            class="text-xs p-2 bg-gray-50 rounded"
+                          >
+                            <div class="flex justify-between">
+                              <span class="font-medium">{{ call.date }}</span>
+                              <UBadge :color="call.disposition === 'CONNECTED' ? 'green' : 'gray'" size="xs">
+                                {{ call.disposition }}
+                              </UBadge>
+                            </div>
+                            <p class="text-gray-600 mt-1">{{ call.notes }}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </UCard>
+
+                  <!-- Panel de notas rápidas -->
+                  <UCard>
+                    <template #header>
+                      <h3 class="text-lg font-semibold">Notas Rápidas</h3>
+                    </template>
+
+                    <UTextarea
+                      v-model="quickNotes"
+                      :rows="6"
+                      placeholder="Escriba notas importantes durante la llamada..."
+                    />
+                  </UCard>
+                </div>
               </template>
 
-              <UTextarea
-                v-model="quickNotes"
-                :rows="6"
-                placeholder="Escriba notas importantes durante la llamada..."
-              />
-            </UCard>
+              <!-- Tab: Dialer -->
+              <template #dialer>
+                <div class="py-4">
+                  <AgentDialerPanel
+                    :campaign-id="currentCampaignId"
+                    @call-contact="handleCallFromDialer"
+                    @skip-contact="handleSkipContact"
+                  />
+                </div>
+              </template>
+
+              <!-- Tab: Contactos -->
+              <template #contacts>
+                <div class="py-4">
+                  <AgentContactsList
+                    :campaign-id="currentCampaignId"
+                    @call-contact="handleCallFromContacts"
+                    @open-whats-app="handleOpenWhatsApp"
+                  />
+                </div>
+              </template>
+
+              <!-- Tab: WhatsApp -->
+              <template #whatsapp>
+                <div class="py-4">
+                  <AgentWhatsAppPanel />
+                </div>
+              </template>
+            </UTabs>
           </div>
         </div>
 
@@ -199,6 +235,31 @@ const isLoggingIn = ref(false)
 const currentDateTime = ref('')
 const quickNotes = ref('')
 const campaignsPanel = ref<any>(null)
+const activeTab = ref(0)
+
+// Tabs de navegación
+const tabs = [
+  {
+    key: 'campaign',
+    label: 'Campaña',
+    icon: 'i-heroicons-megaphone'
+  },
+  {
+    key: 'dialer',
+    label: 'Dialer',
+    icon: 'i-heroicons-phone-arrow-up-right'
+  },
+  {
+    key: 'contacts',
+    label: 'Contactos',
+    icon: 'i-heroicons-user-group'
+  },
+  {
+    key: 'whatsapp',
+    label: 'WhatsApp',
+    icon: 'i-heroicons-chat-bubble-left-right'
+  }
+]
 
 // Información del contacto actual (mock)
 const currentContact = ref({
@@ -279,6 +340,49 @@ const handleDispositionSaved = (data: any) => {
     company: '',
     callHistory: []
   }
+}
+
+const handleCallFromDialer = (contact: any) => {
+  console.log('Calling from dialer:', contact)
+  // Actualizar información del contacto
+  currentContact.value = {
+    name: contact.name,
+    phone: contact.phone,
+    email: contact.email,
+    company: contact.company,
+    callHistory: contact.call_history || []
+  }
+  
+  // Realizar llamada a través del WebRTC
+  const { call } = useWebRTC()
+  call(contact.phone)
+}
+
+const handleCallFromContacts = (contact: any) => {
+  console.log('Calling from contacts list:', contact)
+  // Actualizar información del contacto
+  currentContact.value = {
+    name: contact.name,
+    phone: contact.phone,
+    email: contact.email,
+    company: contact.company,
+    callHistory: contact.call_history || []
+  }
+  
+  // Realizar llamada a través del WebRTC
+  const { call } = useWebRTC()
+  call(contact.phone)
+}
+
+const handleSkipContact = (contactId: number) => {
+  console.log('Skipping contact:', contactId)
+  // Lógica para marcar contacto como saltado
+}
+
+const handleOpenWhatsApp = (contact: any) => {
+  console.log('Opening WhatsApp for:', contact)
+  // Cambiar al tab de WhatsApp
+  activeTab.value = 3
 }
 
 const formatDuration = (seconds: number) => {
