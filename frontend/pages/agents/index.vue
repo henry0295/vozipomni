@@ -165,12 +165,75 @@
         <div class="space-y-4">
           <h3 class="text-lg font-semibold border-b pb-2">Configuración de Agente</h3>
           
-          <UFormGroup label="ID de Agente" required help="Identificador único del agente (ej: AGT001)">
-            <UInput v-model="form.agent_id" placeholder="Ej: AGT001" />
+          <UFormGroup label="ID de Agente" required :help="!editingId ? 'Auto-generado (editable)' : 'Identificador único del agente'">
+            <div class="flex gap-2">
+              <div class="flex-1 relative">
+                <UInput 
+                  v-model="form.agent_id" 
+                  placeholder="Ej: AGT001"
+                  @input="onAgentIdChange"
+                  :disabled="editingId !== null"
+                />
+                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none gap-2">
+                  <span v-if="agentIdStatus === 'checking' && !editingId" class="text-xs text-gray-500">
+                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+                  </span>
+                  <span v-else-if="agentIdStatus === 'available' && !editingId" class="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <UIcon name="i-heroicons-check-circle" class="w-4 h-4" />
+                    <span class="hidden sm:inline">OK</span>
+                  </span>
+                  <span v-else-if="agentIdStatus === 'unavailable' && !editingId" class="text-xs text-red-600 font-medium flex items-center gap-1">
+                    <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
+                    <span class="hidden sm:inline">En uso</span>
+                  </span>
+                </div>
+              </div>
+              <UButton 
+                v-if="!editingId"
+                icon="i-heroicons-arrow-path"
+                size="sm"
+                color="gray"
+                variant="outline"
+                @click="regenerateAgentId"
+                title="Regenerar ID"
+              />
+            </div>
           </UFormGroup>
 
-          <UFormGroup label="Extensión SIP" required help="Número de extensión telefónica (ej: 100)">
-            <UInput v-model="form.sip_extension" placeholder="Ej: 100" type="number" />
+          <UFormGroup label="Extensión SIP" required :help="!editingId ? 'Auto-generada (editable)' : 'Número de extensión telefónica'">
+            <div class="flex gap-2">
+              <div class="flex-1 relative">
+                <UInput 
+                  v-model="form.sip_extension" 
+                  placeholder="Ej: 100" 
+                  type="text"
+                  @input="onExtensionChange"
+                  :disabled="editingId !== null"
+                />
+                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none gap-2">
+                  <span v-if="extensionStatus === 'checking' && !editingId" class="text-xs text-gray-500">
+                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+                  </span>
+                  <span v-else-if="extensionStatus === 'available' && !editingId" class="text-xs text-green-600 font-medium flex items-center gap-1">
+                    <UIcon name="i-heroicons-check-circle" class="w-4 h-4" />
+                    <span class="hidden sm:inline">OK</span>
+                  </span>
+                  <span v-else-if="extensionStatus === 'unavailable' && !editingId" class="text-xs text-red-600 font-medium flex items-center gap-1">
+                    <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
+                    <span class="hidden sm:inline">En uso</span>
+                  </span>
+                </div>
+              </div>
+              <UButton 
+                v-if="!editingId"
+                icon="i-heroicons-arrow-path"
+                size="sm"
+                color="gray"
+                variant="outline"
+                @click="regenerateExtension"
+                title="Regenerar extensión"
+              />
+            </div>
           </UFormGroup>
 
           <UFormGroup label="Contraseña SIP" :required="!editingId" help="Contraseña para autenticación SIP/WebRTC">
@@ -263,13 +326,18 @@ const form = ref({
   recording_enabled: true
 })
 
+// Validación en tiempo real
+const agentIdStatus = ref<'idle' | 'checking' | 'available' | 'unavailable'>('idle')
+const extensionStatus = ref<'idle' | 'checking' | 'available' | 'unavailable'>('idle')
+const checkingTimeout = ref<any>(null)
+
 const isFormValid = computed(() => {
   if (editingId.value) {
     // En edición, solo verificar campos básicos de agente
     return form.value.agent_id && form.value.sip_extension
   }
   // En creación, todos los campos de usuario son requeridos
-  return form.value.username &&
+  const hasRequiredFields = form.value.username &&
     form.value.password &&
     form.value.first_name &&
     form.value.last_name &&
@@ -277,6 +345,11 @@ const isFormValid = computed(() => {
     form.value.agent_id &&
     form.value.sip_extension &&
     form.value.sip_password
+  
+  // Verificar que no haya campos no disponibles
+  const idsAvailable = agentIdStatus.value !== 'unavailable' && extensionStatus.value !== 'unavailable'
+  
+  return hasRequiredFields && idsAvailable
 })
 
 const filteredAgents = computed(() => {
@@ -310,9 +383,102 @@ const getStatusLabel = (status: string) => {
   return labels[status] || status
 }
 
-const openCreateModal = () => {
+// Auto-generar siguiente ID y extensión disponibles
+const loadNextAvailable = async () => {
+  const { getNextAvailable } = useAgents()
+  const result = await getNextAvailable()
+  
+  if (result.data && !editingId.value) {
+    form.value.agent_id = result.data.agent_id
+    form.value.sip_extension = result.data.sip_extension
+    agentIdStatus.value = 'available'
+    extensionStatus.value = 'available'
+  }
+}
+
+// Regenerar ID de agente
+const regenerateAgentId = async () => {
+  const { getNextAvailable } = useAgents()
+  const result = await getNextAvailable()
+  
+  if (result.data) {
+    form.value.agent_id = result.data.agent_id
+    agentIdStatus.value = 'available'
+  }
+}
+
+// Regenerar extensión SIP
+const regenerateExtension = async () => {
+  const { getNextAvailable } = useAgents()
+  const result = await getNextAvailable()
+  
+  if (result.data) {
+    form.value.sip_extension = result.data.sip_extension
+    extensionStatus.value = 'available'
+  }
+}
+
+// Validar disponibilidad de agent_id
+const checkAgentIdAvailability = async (agentId: string) => {
+  if (!agentId || editingId.value) {
+    agentIdStatus.value = 'idle'
+    return
+  }
+  
+  agentIdStatus.value = 'checking'
+  const { checkAvailability } = useAgents()
+  const result = await checkAvailability({ agent_id: agentId })
+  
+  if (result.data) {
+    agentIdStatus.value = result.data.agent_id_available ? 'available' : 'unavailable'
+  } else {
+    agentIdStatus.value = 'idle'
+  }
+}
+
+// Validar disponibilidad de extensión
+const checkExtensionAvailability = async (extension: string) => {
+  if (!extension || editingId.value) {
+    extensionStatus.value = 'idle'
+    return
+  }
+  
+  extensionStatus.value = 'checking'
+  const { checkAvailability } = useAgents()
+  const result = await checkAvailability({ sip_extension: extension })
+  
+  if (result.data) {
+    extensionStatus.value = result.data.sip_extension_available ? 'available' : 'unavailable'
+  } else {
+    extensionStatus.value = 'idle'
+  }
+}
+
+// Validación con debounce
+const onAgentIdChange = () => {
+  if (checkingTimeout.value) {
+    clearTimeout(checkingTimeout.value)
+  }
+  
+  checkingTimeout.value = setTimeout(() => {
+    checkAgentIdAvailability(form.value.agent_id)
+  }, 500)
+}
+
+const onExtensionChange = () => {
+  if (checkingTimeout.value) {
+    clearTimeout(checkingTimeout.value)
+  }
+  
+  checkingTimeout.value = setTimeout(() => {
+    checkExtensionAvailability(form.value.sip_extension)
+  }, 500)
+}
+
+const openCreateModal = async () => {
   resetForm()
   error.value = null
+  await loadNextAvailable()
   isModalOpen.value = true
 }
 
@@ -555,6 +721,11 @@ const resetForm = () => {
   }
   editingId.value = null
   error.value = null
+  agentIdStatus.value = 'idle'
+  extensionStatus.value = 'idle'
+  if (checkingTimeout.value) {
+    clearTimeout(checkingTimeout.value)
+  }
 }
 
 onMounted(() => loadAgents())

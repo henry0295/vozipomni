@@ -171,6 +171,71 @@ class AgentViewSet(viewsets.ModelViewSet):
             'status': 'break ended',
             'new_status': 'available'
         })
+    
+    @action(detail=False, methods=['get'])
+    def next_available(self, request):
+        """Obtener siguiente ID de agente y extensión SIP disponibles"""
+        # Obtener último agent_id
+        last_agent = Agent.objects.order_by('-agent_id').first()
+        if last_agent and last_agent.agent_id:
+            # Extraer el número del ID (ej: AGT001 -> 001)
+            import re
+            match = re.search(r'(\d+)$', last_agent.agent_id)
+            if match:
+                number = int(match.group(1))
+                next_number = number + 1
+                # Mantener el mismo formato con ceros a la izquierda
+                prefix = last_agent.agent_id[:match.start()]
+                next_agent_id = f"{prefix}{next_number:03d}"
+            else:
+                next_agent_id = "AGT001"
+        else:
+            next_agent_id = "AGT001"
+        
+        # Verificar que no exista (por si fue eliminado uno intermedio)
+        while Agent.objects.filter(agent_id=next_agent_id).exists():
+            match = re.search(r'(\d+)$', next_agent_id)
+            if match:
+                number = int(match.group(1))
+                prefix = next_agent_id[:match.start()]
+                next_agent_id = f"{prefix}{number + 1:03d}"
+            else:
+                break
+        
+        # Obtener última extensión
+        last_extension = Agent.objects.order_by('-sip_extension').first()
+        if last_extension and last_extension.sip_extension:
+            try:
+                next_extension = str(int(last_extension.sip_extension) + 1)
+            except (ValueError, TypeError):
+                next_extension = "100"
+        else:
+            next_extension = "100"
+        
+        # Verificar que la extensión no exista (buscar huecos)
+        while Agent.objects.filter(sip_extension=next_extension).exists():
+            next_extension = str(int(next_extension) + 1)
+        
+        return Response({
+            'agent_id': next_agent_id,
+            'sip_extension': next_extension
+        })
+    
+    @action(detail=False, methods=['post'])
+    def check_availability(self, request):
+        """Verificar disponibilidad de agent_id o sip_extension"""
+        agent_id = request.data.get('agent_id')
+        sip_extension = request.data.get('sip_extension')
+        
+        result = {}
+        
+        if agent_id:
+            result['agent_id_available'] = not Agent.objects.filter(agent_id=agent_id).exists()
+        
+        if sip_extension:
+            result['sip_extension_available'] = not Agent.objects.filter(sip_extension=sip_extension).exists()
+        
+        return Response(result)
 
 
 class ContactViewSet(viewsets.ModelViewSet):

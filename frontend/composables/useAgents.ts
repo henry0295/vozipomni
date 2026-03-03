@@ -70,6 +70,21 @@ export const useAgents = () => {
     return { data: data.value, error: error.value }
   }
 
+  // Obtener siguiente ID y extensión disponibles
+  const getNextAvailable = async () => {
+    const { data, error } = await apiFetch('/agents/next_available/')
+    return { data: data.value, error: error.value }
+  }
+
+  // Verificar disponibilidad de agent_id o sip_extension
+  const checkAvailability = async (params: { agent_id?: string, sip_extension?: string }) => {
+    const { data, error } = await apiFetch('/agents/check_availability/', {
+      method: 'POST',
+      body: params
+    })
+    return { data: data.value, error: error.value }
+  }
+
   return {
     getAgents,
     getAgent,
@@ -78,6 +93,8 @@ export const useAgents = () => {
     deleteAgent,
     loginAgent,
     logoutAgent,
-    changeAgentStatus
+    changeAgentStatus,
+    getNextAvailable,
+    checkAvailability
   }
 }
