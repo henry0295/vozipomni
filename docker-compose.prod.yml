@@ -360,7 +360,7 @@ services:
       frontend:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost/health || exit 1"]
       <<: *healthcheck-http
       start_period: 30s
     <<: *restart-policy
