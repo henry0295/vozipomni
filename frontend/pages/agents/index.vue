@@ -659,6 +659,10 @@ const saveAgent = async () => {
     resetForm()
   } catch (err: any) {
     // Extraer mensaje de error más detallado
+    console.error('Error completo al guardar agente:', err)
+    console.error('Error data:', err.data)
+    console.error('Error message:', err.message)
+    
     let errorMessage = 'Error al guardar el agente'
     
     if (err.message) {
@@ -687,6 +691,17 @@ const saveAgent = async () => {
     }
     
     error.value = errorMessage
+    
+    // Mostrar toast de error también para mayor visibilidad
+    const toast = useToast()
+    toast.add({
+      title: 'Error al guardar agente',
+      description: errorMessage,
+      color: 'red',
+      timeout: 8000,
+      icon: 'i-heroicons-exclamation-triangle'
+    })
+    
     console.error('Error saving agent:', err)
   } finally {
     isSaving.value = false

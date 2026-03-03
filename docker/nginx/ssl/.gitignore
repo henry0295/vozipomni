@@ -1,0 +1,10 @@
+# Certificados SSL
+*.crt
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Excepto archivos de ejemplo
+!*.example.crt
+!*.example.key

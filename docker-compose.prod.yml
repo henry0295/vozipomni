@@ -352,7 +352,7 @@ services:
     volumes:
       - static_volume:/app/static
       - media_volume:/app/media
-      - ./ssl:/etc/ssl/certs/vozipomni:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
       - ./logs/nginx:/var/log/nginx
     depends_on:
       backend:
