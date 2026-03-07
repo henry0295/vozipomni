@@ -56,6 +56,12 @@ app.conf.beat_schedule = {
         'task': 'apps.agents.tasks.reset_daily_agent_metrics',
         'schedule': crontab(hour=0, minute=0),  # 00:00 diario
     },
+    
+    # Actualizar métricas de Prometheus cada minuto
+    'update-prometheus-metrics': {
+        'task': 'apps.agents.tasks.update_prometheus_metrics',
+        'schedule': 60.0,  # cada minuto
+    },
 }
 
 @app.task(bind=True, ignore_result=True)

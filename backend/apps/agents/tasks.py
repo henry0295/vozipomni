@@ -7,6 +7,22 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
+def update_prometheus_metrics():
+    """
+    Actualizar todas las métricas de Prometheus
+    Se ejecuta cada minuto
+    """
+    from core.metrics import update_all_metrics
+    
+    try:
+        update_all_metrics()
+        return "Metrics updated successfully"
+    except Exception as e:
+        logger.error(f"Error updating Prometheus metrics: {e}")
+        return f"Error: {str(e)}"
+
+
+@shared_task
 def update_agent_statistics():
     """
     Actualizar estadísticas de agentes basándose en el historial

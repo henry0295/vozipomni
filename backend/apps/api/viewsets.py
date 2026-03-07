@@ -55,7 +55,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 examples=[
                     OpenApiExample(
                         'Success',
-                        value={'status': 'campaign started', 'campaign_id': 123},
+                        value={'success': True, 'campaign_id': 123, 'campaign_name': 'Test Campaign', 'status': 'active'},
                     )
                 ]
             ),
@@ -77,49 +77,67 @@ class CampaignViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
-        """Iniciar campaña"""
-        campaign = self.get_object()
+        """Iniciar campaña usando capa de servicio"""
+        from apps.campaigns.services import CampaignService
+        from core.exceptions import (
+            CampaignAlreadyActiveError,
+            NoContactsError,
+            CampaignNotFoundError
+        )
         
-        # Validaciones
-        if campaign.status == 'active':
+        try:
+            result = CampaignService.start_campaign(pk, request.user)
+            return Response(result)
+        except CampaignAlreadyActiveError as e:
             return Response(
-                {'error': 'Campaign is already active'},
+                {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        if not campaign.contact_list or campaign.contact_list.total_contacts == 0:
+        except NoContactsError as e:
             return Response(
-                {'error': 'Campaign has no contacts'},
+                {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        campaign.status = 'active'
-        campaign.save()
-        
-        return Response({
-            'status': 'campaign started',
-            'campaign_id': campaign.id,
-            'name': campaign.name
-        })
+        except CampaignNotFoundError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
     
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
-        """Pausar campaña"""
-        campaign = self.get_object()
-        campaign.status = 'paused'
-        campaign.save()
-        return Response({'status': 'campaign paused'})
+        """Pausar campaña usando capa de servicio"""
+        from apps.campaigns.services import CampaignService
+        from core.exceptions import InvalidCampaignStateError, CampaignNotFoundError
+        
+        try:
+            result = CampaignService.pause_campaign(pk, request.user)
+            return Response(result)
+        except InvalidCampaignStateError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except CampaignNotFoundError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
     
     @action(detail=True, methods=['get'])
     def stats(self, request, pk=None):
-        """Obtener estadísticas de campaña"""
-        campaign = self.get_object()
-        return Response({
-            'total_contacts': campaign.total_contacts,
-            'contacted': campaign.contacted,
-            'successful': campaign.successful,
-            'success_rate': campaign.success_rate
-        })
+        """Obtener estadísticas detalladas de campaña"""
+        from apps.campaigns.services import CampaignService
+        from core.exceptions import CampaignNotFoundError
+        
+        try:
+            stats = CampaignService.get_campaign_statistics(pk)
+            return Response(stats)
+        except CampaignNotFoundError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 class AgentViewSet(viewsets.ModelViewSet):

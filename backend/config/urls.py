@@ -8,6 +8,9 @@ urlpatterns = [
     # Admin
     path('admin/', admin.site.urls),
     
+    # Prometheus metrics
+    path('', include('django_prometheus.urls')),
+    
     # API Documentation
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
