@@ -321,6 +321,17 @@ LOGGING = {
     },
 }
 
+# Field Encryption Key (for EncryptedCharField)
+# Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default=None)
+
+if not FIELD_ENCRYPTION_KEY and not DEBUG:
+    import warnings
+    warnings.warn(
+        "FIELD_ENCRYPTION_KEY not set. Encrypted fields will not work properly. "
+        "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    )
+
 # Security Settings for Production
 if not DEBUG:
     # Solo activar SSL redirect si hay HTTPS configurado

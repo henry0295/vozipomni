@@ -14,6 +14,27 @@ from panoramisk.manager import Manager as AMIManager
 import os
 import json
 
+# Custom exceptions
+class DialerException(Exception):
+    """Base exception for dialer errors"""
+    pass
+
+class AMIConnectionError(DialerException):
+    """AMI connection failed"""
+    pass
+
+class CampaignNotFoundError(DialerException):
+    """Campaign not found"""
+    pass
+
+class InvalidContactError(DialerException):
+    """Invalid contact data"""
+    pass
+
+class CallOriginationError(DialerException):
+    """Failed to originate call"""
+    pass
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -56,25 +77,33 @@ class DialerEngine:
         
     async def initialize(self):
         """Inicializar conexiones"""
-        # Redis
-        self.redis_client = await aioredis.from_url(
-            self.redis_url,
-            encoding="utf-8",
-            decode_responses=True
-        )
-        logger.info("Conectado a Redis")
+        try:
+            # Redis
+            self.redis_client = await aioredis.from_url(
+                self.redis_url,
+                encoding="utf-8",
+                decode_responses=True
+            )
+            logger.info("Conectado a Redis")
+        except Exception as e:
+            logger.error(f"Error conectando a Redis: {e}")
+            raise AMIConnectionError(f"Redis connection failed: {e}")
         
-        # Asterisk AMI
-        self.ami_client = AMIManager(
-            host=self.asterisk_host,
-            port=self.asterisk_ami_port,
-            username=self.asterisk_ami_user,
-            secret=self.asterisk_ami_password,
-            ping_delay=10
-        )
-        
-        await self.ami_client.connect()
-        logger.info(f"Conectado a Asterisk AMI en {self.asterisk_host}")
+        try:
+            # Asterisk AMI
+            self.ami_client = AMIManager(
+                host=self.asterisk_host,
+                port=self.asterisk_ami_port,
+                username=self.asterisk_ami_user,
+                secret=self.asterisk_ami_password,
+                ping_delay=10
+            )
+            
+            await self.ami_client.connect()
+            logger.info(f"Conectado a Asterisk AMI en {self.asterisk_host}")
+        except Exception as e:
+            logger.error(f"Error conectando a Asterisk AMI: {e}")
+            raise AMIConnectionError(f"AMI connection failed: {e}")
         
         # Registrar event listeners
         self.ami_client.register_event('Newchannel', self.on_new_channel)
@@ -230,6 +259,9 @@ class DialerEngine:
         
     async def originate_call(self, campaign_id: int, contact: Dict, agent: Optional[Dict] = None):
         """Originar llamada usando Asterisk AMI"""
+        if not contact or 'phone_number' not in contact:
+            raise InvalidContactError(f"Invalid contact data: {contact}")
+        
         try:
             config = self.active_campaigns[campaign_id]['config']
             trunk = config.get('trunk', 'default_trunk')
@@ -270,27 +302,47 @@ class DialerEngine:
             
             if response.success:
                 call_id = response.headers.get('ActionID')
+                uniqueid = response.headers.get('Uniqueid', call_id)
+                
                 self.active_calls[call_id] = {
                     'campaign_id': campaign_id,
                     'contact': contact,
                     'agent': agent,
                     'status': CallStatus.DIALING.value,
-                    'started_at': datetime.now()
+                    'started_at': datetime.now(),
+                    'uniqueid': uniqueid
                 }
                 
-                # Guardar en Redis
+                # Guardar en Redis con múltiples referencias para búsqueda
                 await self.redis_client.setex(
                     f'call:{call_id}',
                     3600,
                     json.dumps(self.active_calls[call_id], default=str)
                 )
                 
-                logger.info(f"Llamada originada: {call_id} -> {destination}")
-            else:
-                logger.error(f"Error originando llamada: {response}")
+                # Guardar referencias para mapeo en eventos
+                channel = f'SIP/{trunk}/{destination}'
+                await self.redis_client.setex(f'channel:{channel}:call_id', 3600, call_id)
+                await self.redis_client.setex(f'uniqueid:{uniqueid}:call_id', 3600, call_id)
                 
+                logger.info(f"Llamada originada: {call_id} -> {destination} (uniqueid: {uniqueid})")
+            else:
+                error_msg = f"AMI originate failed: {response}"
+                logger.error(error_msg)
+                raise CallOriginationError(error_msg)
+                
+        except InvalidContactError:
+            raise
+        except CallOriginationError:
+            raise
+        except KeyError as e:
+            error_msg = f"Missing campaign configuration: {e}"
+            logger.error(error_msg)
+            raise CampaignNotFoundError(error_msg)
         except Exception as e:
-            logger.error(f"Error al originar llamada: {e}")
+            error_msg = f"Unexpected error originating call: {e}"
+            logger.exception(error_msg)
+            raise CallOriginationError(error_msg)
             
     async def originate_call_blasting(self, campaign_id: int, contact: Dict, config: Dict):
         """Originar llamada para call blasting (sin agente)"""
@@ -393,11 +445,89 @@ class DialerEngine:
     async def on_hangup(self, manager, event):
         """Manejar evento de cuelgue"""
         channel = event.get('Channel')
+        uniqueid = event.get('Uniqueid')
         cause = event.get('Cause')
-        logger.info(f"Hangup: {channel} - Causa: {cause}")
+        cause_txt = event.get('Cause-txt', '')
         
-        # Actualizar estadísticas
-        # TODO: Mapear el canal al call_id y actualizar Redis
+        logger.info(f"Hangup: {channel} - Causa: {cause} ({cause_txt})")
+        
+        # Buscar call_id por uniqueid o channel
+        call_id = await self.redis_client.get(f'channel:{channel}:call_id')
+        if not call_id:
+            call_id = await self.redis_client.get(f'uniqueid:{uniqueid}:call_id')
+        
+        if not call_id:
+            logger.warning(f"No call_id found for channel {channel} or uniqueid {uniqueid}")
+            return
+        
+        if call_id not in self.active_calls:
+            logger.warning(f"Call {call_id} not in active_calls")
+            return
+        
+        call_data = self.active_calls[call_id]
+        campaign_id = call_data.get('campaign_id')
+        
+        if campaign_id not in self.active_campaigns:
+            logger.warning(f"Campaign {campaign_id} not in active_campaigns")
+            del self.active_calls[call_id]
+            return
+        
+        campaign = self.active_campaigns[campaign_id]
+        
+        # Actualizar estadísticas según la causa del hangup
+        # Causas normales: 16 (Normal Clearing), 17 (User busy)
+        # Causas de no respuesta: 19 (No answer), 21 (Call rejected)
+        if cause in ['16', '17']:  # Normal clearing o busy
+            if call_data.get('status') == CallStatus.ANSWERED.value:
+                campaign['calls_answered'] += 1
+                logger.info(f"Call {call_id} answered and completed normally")
+            else:
+                campaign['calls_abandoned'] += 1
+                logger.info(f"Call {call_id} abandoned (cause: {cause})")
+        elif cause in ['19', '21']:  # No answer o rejected
+            logger.info(f"Call {call_id} not answered (cause: {cause})")
+        else:
+            logger.info(f"Call {call_id} ended with cause: {cause}")
+        
+        # Guardar registro de llamada en Redis para procesamiento posterior
+        call_record = {
+            'call_id': call_id,
+            'campaign_id': campaign_id,
+            'contact': call_data.get('contact'),
+            'agent': call_data.get('agent'),
+            'status': call_data.get('status'),
+            'started_at': str(call_data.get('started_at')),
+            'ended_at': str(datetime.now()),
+            'hangup_cause': cause,
+            'hangup_cause_txt': cause_txt,
+            'channel': channel,
+            'uniqueid': uniqueid
+        }
+        
+        # Guardar en cola de procesamiento
+        await self.redis_client.rpush(
+            'calls:completed',
+            json.dumps(call_record, default=str)
+        )
+        
+        # Actualizar estadísticas en Redis
+        await self.redis_client.hset(
+            f'campaign:{campaign_id}:stats',
+            mapping={
+                'calls_made': campaign['calls_made'],
+                'calls_answered': campaign['calls_answered'],
+                'calls_abandoned': campaign['calls_abandoned']
+            }
+        )
+        
+        # Limpiar referencias
+        await self.redis_client.delete(f'channel:{channel}:call_id')
+        await self.redis_client.delete(f'uniqueid:{uniqueid}:call_id')
+        
+        # Remover de llamadas activas
+        del self.active_calls[call_id]
+        
+        logger.info(f"Call {call_id} processed and removed from active calls")
         
     async def on_agent_connect(self, manager, event):
         """Agente conectado a llamada"""

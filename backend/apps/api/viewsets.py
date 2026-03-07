@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse
 
 from apps.users.models import User
 from apps.campaigns.models import Campaign
@@ -27,20 +28,79 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
-    queryset = Campaign.objects.all()
+    queryset = Campaign.objects.select_related(
+        'queue', 'contact_list', 'created_by', 'current_campaign'
+    ).prefetch_related(
+        'dispositions', 'agents', 'calls'
+    )
     serializer_class = serializers.CampaignSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
     filterset_fields = ['campaign_type', 'status', 'dialer_type']
     
+    @extend_schema(
+        summary="Iniciar campaña",
+        description="""
+        Activa una campaña y comienza el proceso de discado automático.
+        
+        La campaña debe estar en estado 'draft' o 'paused' para poder iniciarla.
+        Se validará que tenga contactos y configuración válida antes de iniciar.
+        """,
+        request=None,
+        responses={
+            200: OpenApiResponse(
+                response={'type': 'object'},
+                description='Campaña iniciada exitosamente',
+                examples=[
+                    OpenApiExample(
+                        'Success',
+                        value={'status': 'campaign started', 'campaign_id': 123},
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description='Error al iniciar campaña',
+                examples=[
+                    OpenApiExample(
+                        'Already Active',
+                        value={'error': 'Campaign is already active'},
+                    ),
+                    OpenApiExample(
+                        'No Contacts',
+                        value={'error': 'Campaign has no contacts'},
+                    )
+                ]
+            ),
+        },
+        tags=['campaigns']
+    )
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):
         """Iniciar campaña"""
         campaign = self.get_object()
+        
+        # Validaciones
+        if campaign.status == 'active':
+            return Response(
+                {'error': 'Campaign is already active'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not campaign.contact_list or campaign.contact_list.total_contacts == 0:
+            return Response(
+                {'error': 'Campaign has no contacts'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         campaign.status = 'active'
         campaign.save()
-        return Response({'status': 'campaign started'})
+        
+        return Response({
+            'status': 'campaign started',
+            'campaign_id': campaign.id,
+            'name': campaign.name
+        })
     
     @action(detail=True, methods=['post'])
     def pause(self, request, pk=None):
@@ -239,7 +299,7 @@ class AgentViewSet(viewsets.ModelViewSet):
 
 
 class ContactViewSet(viewsets.ModelViewSet):
-    queryset = Contact.objects.all()
+    queryset = Contact.objects.select_related('contact_list').prefetch_related('notes')
     serializer_class = serializers.ContactSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -346,7 +406,9 @@ class QueueViewSet(viewsets.ModelViewSet):
 
 
 class CallViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Call.objects.all()
+    queryset = Call.objects.select_related(
+        'agent__user', 'campaign', 'contact', 'queue', 'disposition'
+    ).order_by('-start_time')
     serializer_class = serializers.CallSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

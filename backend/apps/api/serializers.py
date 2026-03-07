@@ -37,6 +37,56 @@ class CampaignSerializer(serializers.ModelSerializer):
         model = Campaign
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at', 'total_contacts', 'contacted', 'successful']
+    
+    def validate(self, attrs):
+        """Validar datos de campaña"""
+        # Validar fechas
+        if attrs.get('end_date') and attrs.get('start_date'):
+            if attrs['end_date'] <= attrs['start_date']:
+                raise serializers.ValidationError({
+                    'end_date': 'La fecha de fin debe ser posterior a la fecha de inicio'
+                })
+        
+        # Validar horarios
+        if attrs.get('schedule_end_time') and attrs.get('schedule_start_time'):
+            if attrs['schedule_end_time'] <= attrs['schedule_start_time']:
+                raise serializers.ValidationError({
+                    'schedule_end_time': 'La hora de fin debe ser posterior a la hora de inicio'
+                })
+        
+        # Validar reintentos
+        max_retries = attrs.get('max_retries', 0)
+        if max_retries < 0:
+            raise serializers.ValidationError({
+                'max_retries': 'Los reintentos no pueden ser negativos'
+            })
+        if max_retries > 10:
+            raise serializers.ValidationError({
+                'max_retries': 'Máximo 10 reintentos permitidos'
+            })
+        
+        # Validar timeout
+        call_timeout = attrs.get('call_timeout', 30)
+        if call_timeout < 10 or call_timeout > 300:
+            raise serializers.ValidationError({
+                'call_timeout': 'El timeout debe estar entre 10 y 300 segundos'
+            })
+        
+        # Validar max_calls_per_agent
+        max_calls = attrs.get('max_calls_per_agent', 1)
+        if max_calls < 1 or max_calls > 5:
+            raise serializers.ValidationError({
+                'max_calls_per_agent': 'Debe estar entre 1 y 5 llamadas por agente'
+            })
+        
+        # Validar que campaña saliente tenga lista de contactos
+        if attrs.get('campaign_type') in ['outbound', 'preview']:
+            if not attrs.get('contact_list') and not self.instance:
+                raise serializers.ValidationError({
+                    'contact_list': 'Las campañas salientes requieren una lista de contactos'
+                })
+        
+        return attrs
 
 
 class AgentSerializer(serializers.ModelSerializer):
@@ -215,6 +265,66 @@ class ContactSerializer(serializers.ModelSerializer):
         model = Contact
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at', 'attempts', 'last_attempt']
+    
+    def validate_phone(self, value):
+        """Validar formato de número telefónico"""
+        import re
+        import phonenumbers
+        
+        if not value:
+            raise serializers.ValidationError('El número de teléfono es requerido')
+        
+        # Limpiar el número
+        cleaned = re.sub(r'[^\d+]', '', value)
+        
+        # Validar longitud mínima
+        if len(cleaned) < 7:
+            raise serializers.ValidationError('Número de teléfono demasiado corto')
+        
+        # Intentar validar con phonenumbers
+        try:
+            # Obtener país del contacto o usar default
+            country = self.initial_data.get('country', 'CO')
+            parsed = phonenumbers.parse(cleaned, country)
+            
+            if not phonenumbers.is_valid_number(parsed):
+                raise serializers.ValidationError('Número de teléfono inválido')
+            
+            # Retornar en formato E164
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+        except phonenumbers.NumberParseException:
+            # Si falla, validar formato básico
+            if not re.match(r'^\+?[1-9]\d{6,14}$', cleaned):
+                raise serializers.ValidationError(
+                    'Formato de número inválido. Use formato internacional (+57...) o local'
+                )
+            return cleaned
+    
+    def validate_email(self, value):
+        """Validar formato de email"""
+        if value:
+            import re
+            email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(email_regex, value):
+                raise serializers.ValidationError('Formato de email inválido')
+        return value
+    
+    def validate(self, attrs):
+        """Validaciones adicionales"""
+        # Validar que al menos un teléfono esté presente
+        if not any([attrs.get('phone'), attrs.get('phone2'), attrs.get('phone3')]):
+            raise serializers.ValidationError({
+                'phone': 'Debe proporcionar al menos un número de teléfono'
+            })
+        
+        # Validar prioridad
+        priority = attrs.get('priority', 0)
+        if priority < 0 or priority > 10:
+            raise serializers.ValidationError({
+                'priority': 'La prioridad debe estar entre 0 y 10'
+            })
+        
+        return attrs
 
 
 class ContactListSerializer(serializers.ModelSerializer):

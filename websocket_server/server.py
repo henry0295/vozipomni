@@ -95,6 +95,13 @@ class WebSocketServer:
             elif action == 'asterisk_config_request':
                 # Asterisk solicita configuración
                 config_key = message.get('config_key')
+                if not config_key:
+                    await ws.send_json({
+                        'action': 'error',
+                        'message': 'config_key is required'
+                    })
+                    return
+                
                 config_data = await self.get_asterisk_config(config_key)
                 await ws.send_json({
                     'action': 'asterisk_config_response',
@@ -104,19 +111,58 @@ class WebSocketServer:
                 
             elif action == 'generate_report':
                 # Solicitud de generación de reporte
-                await self.queue_report_generation(message.get('report_data'))
+                report_data = message.get('report_data')
+                if not report_data:
+                    await ws.send_json({
+                        'action': 'error',
+                        'message': 'report_data is required'
+                    })
+                    return
+                
+                await self.queue_report_generation(report_data)
                 await ws.send_json({'action': 'report_queued', 'status': 'processing'})
                 
             elif action == 'subscribe_campaign':
                 # Suscribirse a actualizaciones de campaña
                 campaign_id = message.get('campaign_id')
+                if not campaign_id:
+                    await ws.send_json({
+                        'action': 'error',
+                        'message': 'campaign_id is required'
+                    })
+                    return
+                
                 # Guardar suscripción en Redis para tracking
                 await self.redis_client.sadd(f'campaign:{campaign_id}:subscribers', client_id)
+                await ws.send_json({
+                    'action': 'subscribed',
+                    'campaign_id': campaign_id
+                })
+            
+            else:
+                await ws.send_json({
+                    'action': 'error',
+                    'message': f'Unknown action: {action}'
+                })
                 
-        except json.JSONDecodeError:
-            logger.error(f"Error decoding JSON: {data}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Error decoding JSON from {client_id}: {e}")
+            await ws.send_json({
+                'action': 'error',
+                'message': 'Invalid JSON format'
+            })
+        except KeyError as e:
+            logger.error(f"Missing required field from {client_id}: {e}")
+            await ws.send_json({
+                'action': 'error',
+                'message': f'Missing required field: {e}'
+            })
         except Exception as e:
-            logger.error(f"Error handling message: {e}")
+            logger.exception(f"Unexpected error handling message from {client_id}: {e}")
+            await ws.send_json({
+                'action': 'error',
+                'message': 'Internal server error'
+            })
             
     async def get_asterisk_config(self, config_key):
         """Obtener configuración de Asterisk desde Redis"""
