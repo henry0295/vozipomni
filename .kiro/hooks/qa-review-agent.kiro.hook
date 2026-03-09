@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "QA Review Agent",
+  "description": "Automatically reviews code changes for quality standards, security issues, performance concerns, and adherence to project guidelines before write operations",
+  "version": "1",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": [
+      "write"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Review this code change for:\n1. Code quality (PEP 8 for Python, TypeScript standards for frontend)\n2. Security vulnerabilities (input validation, SQL injection, XSS, hardcoded secrets)\n3. Performance issues (N+1 queries, missing indexes, inefficient algorithms)\n4. Testing requirements (are tests needed for this change?)\n5. Error handling (proper exception handling and logging)\n6. Documentation (docstrings, comments for complex logic)\n7. Best practices from project guidelines (Django ORM usage, Vue 3 patterns)\n\nIf issues are found, suggest improvements. If the change looks good, approve it briefly."
+  }
+}
