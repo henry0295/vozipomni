@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "name": "Code Quality Analyzer",
-  "description": "Analyzes modified source code files for potential improvements including code smells, design patterns, best practices, readability, maintainability, and performance optimizations",
+  "name": "Analizador de Calidad de Código",
+  "description": "Analiza archivos de código fuente modificados en busca de mejoras potenciales incluyendo code smells, patrones de diseño, mejores prácticas, legibilidad, mantenibilidad y optimizaciones de rendimiento",
   "version": "1",
   "when": {
     "type": "fileEdited",
@@ -16,6 +16,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Analyze the modified code in the changed file for potential improvements. Focus on:\n1. Code smells and anti-patterns\n2. Design pattern opportunities\n3. Best practices for the language/framework\n4. Readability and maintainability improvements\n5. Performance optimizations\n6. Security considerations\n7. Error handling improvements\n\nProvide specific, actionable suggestions while maintaining existing functionality. Keep suggestions concise and prioritize high-impact improvements."
+    "prompt": "Analiza el código modificado en el archivo cambiado en busca de mejoras potenciales. Enfócate en:\n1. Code smells y anti-patrones\n2. Oportunidades para aplicar patrones de diseño\n3. Mejores prácticas para el lenguaje/framework\n4. Mejoras de legibilidad y mantenibilidad\n5. Optimizaciones de rendimiento\n6. Consideraciones de seguridad\n7. Mejoras en el manejo de errores\n\nProvee sugerencias específicas y accionables manteniendo la funcionalidad existente. Mantén las sugerencias concisas y prioriza mejoras de alto impacto."
   }
 }

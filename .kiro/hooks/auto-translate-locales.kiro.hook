@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "name": "Auto-Translate Localization Files",
-  "description": "Monitors changes to localization files (.json, .yaml, .yml) and automatically generates translations for all configured target languages while maintaining context and locale-specific conventions",
+  "name": "Auto-Traducción de Archivos de Localización",
+  "description": "Monitorea cambios en archivos de localización (.json, .yaml, .yml) y genera automáticamente traducciones para todos los idiomas objetivo configurados, manteniendo el contexto y las convenciones específicas de cada locale",
   "version": "1",
   "when": {
     "type": "fileEdited",
@@ -17,6 +17,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "A localization file has been modified. Please:\n1. Identify the new or modified text entries in the changed file\n2. Determine the source language from the file path or content\n3. Identify all target languages that need translations (check for sibling locale files or configuration)\n4. Generate accurate translations for each target language, maintaining:\n   - Proper context and meaning\n   - Locale-specific conventions (date formats, number formats, etc.)\n   - Consistent terminology across the application\n   - Appropriate formality level\n5. Update the corresponding locale files with the new translations\n6. Preserve the file structure and formatting (JSON/YAML syntax)\n\nIf this is not a localization file or doesn't contain translatable content, skip the translation process."
+    "prompt": "Se ha modificado un archivo de localización. Por favor:\n1. Identifica las entradas de texto nuevas o modificadas en el archivo cambiado\n2. Determina el idioma de origen desde la ruta del archivo o su contenido\n3. Identifica todos los idiomas objetivo que necesitan traducciones (verifica archivos de locale hermanos o configuración)\n4. Genera traducciones precisas para cada idioma objetivo, manteniendo:\n   - Contexto y significado apropiados\n   - Convenciones específicas del locale (formatos de fecha, números, etc.)\n   - Terminología consistente en toda la aplicación\n   - Nivel de formalidad apropiado\n5. Actualiza los archivos de locale correspondientes con las nuevas traducciones\n6. Preserva la estructura y formato del archivo (sintaxis JSON/YAML)\n\nSi este no es un archivo de localización o no contiene contenido traducible, omite el proceso de traducción."
   }
 }

@@ -1,7 +1,7 @@
 {
   "enabled": true,
-  "name": "QA Review Agent",
-  "description": "Automatically reviews code changes for quality standards, security issues, performance concerns, and adherence to project guidelines before write operations",
+  "name": "Agente de Revisión QA",
+  "description": "Revisa automáticamente los cambios de código en busca de estándares de calidad, problemas de seguridad, preocupaciones de rendimiento y adherencia a las guías del proyecto antes de operaciones de escritura",
   "version": "1",
   "when": {
     "type": "preToolUse",
@@ -11,6 +11,6 @@
   },
   "then": {
     "type": "askAgent",
-    "prompt": "Review this code change for:\n1. Code quality (PEP 8 for Python, TypeScript standards for frontend)\n2. Security vulnerabilities (input validation, SQL injection, XSS, hardcoded secrets)\n3. Performance issues (N+1 queries, missing indexes, inefficient algorithms)\n4. Testing requirements (are tests needed for this change?)\n5. Error handling (proper exception handling and logging)\n6. Documentation (docstrings, comments for complex logic)\n7. Best practices from project guidelines (Django ORM usage, Vue 3 patterns)\n\nIf issues are found, suggest improvements. If the change looks good, approve it briefly."
+    "prompt": "Revisa este cambio de código en busca de:\n1. Calidad de código (PEP 8 para Python, estándares TypeScript para frontend)\n2. Vulnerabilidades de seguridad (validación de entrada, inyección SQL, XSS, secretos hardcodeados)\n3. Problemas de rendimiento (consultas N+1, índices faltantes, algoritmos ineficientes)\n4. Requisitos de testing (¿se necesitan tests para este cambio?)\n5. Manejo de errores (manejo apropiado de excepciones y logging)\n6. Documentación (docstrings, comentarios para lógica compleja)\n7. Mejores prácticas de las guías del proyecto (uso de Django ORM, patrones Vue 3)\n\nSi se encuentran problemas, sugiere mejoras. Si el cambio se ve bien, apruébalo brevemente."
   }
 }

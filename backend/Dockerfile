@@ -31,12 +31,14 @@ RUN pip install --upgrade pip && \
 # Copiar código de la aplicación
 COPY . .
 
-# Crear directorios necesarios
-RUN mkdir -p static media recordings logs
+# Crear directorios necesarios con permisos correctos
+RUN mkdir -p static media recordings logs && \
+    chmod 755 static media recordings logs
 
 # Crear usuario no-root para ejecutar la aplicación
 RUN useradd -m -u 1000 vozipomni && \
-    chown -R vozipomni:vozipomni /app
+    chown -R vozipomni:vozipomni /app && \
+    chmod -R 755 /app/logs
 
 USER vozipomni
 
