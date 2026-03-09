@@ -97,3 +97,6 @@ logs/
 #ignore kiro
 .kiro
 kiro
+/.kiro/*
+/.kiro/**/*
+/.kiro
