@@ -145,6 +145,7 @@ services:
       <<: *django-env
     volumes:
       - ./backend:/app
+      - ./logs:/app/logs
       - static_volume:/app/static
       - media_volume:/app/media
       - recordings_volume:/app/recordings
@@ -182,6 +183,7 @@ services:
       <<: *django-env
     volumes:
       - ./backend:/app
+      - ./logs:/app/logs
       - recordings_volume:/app/recordings
       - ./docker/asterisk/configs:/etc/asterisk
       - asterisk_dynamic:/var/lib/asterisk/dynamic
@@ -210,6 +212,7 @@ services:
       <<: *django-env
     volumes:
       - ./backend:/app
+      - ./logs:/app/logs
     depends_on:
       postgres:
         condition: service_healthy

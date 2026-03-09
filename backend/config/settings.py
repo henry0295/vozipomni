@@ -293,12 +293,26 @@ LOGGING = get_logging_config(
 # Generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default=None)
 
-if not FIELD_ENCRYPTION_KEY and not DEBUG:
-    import warnings
-    warnings.warn(
-        "FIELD_ENCRYPTION_KEY not set. Encrypted fields will not work properly. "
-        "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
-    )
+# Si no hay clave configurada, generar una temporal para desarrollo/migraciones
+# NOTA: En producción, SIEMPRE configure FIELD_ENCRYPTION_KEY en .env
+if not FIELD_ENCRYPTION_KEY:
+    import sys
+    # Solo mostrar advertencia si es el servidor principal (no migraciones/comandos)
+    is_management_command = len(sys.argv) > 1 and sys.argv[1] in [
+        'migrate', 'makemigrations', 'collectstatic', 'shell', 'check', 
+        'showmigrations', 'dbshell', 'createsuperuser', 'flush'
+    ]
+    
+    if not DEBUG and not is_management_command:
+        import warnings
+        warnings.warn(
+            "FIELD_ENCRYPTION_KEY not set. Encrypted fields will not work properly. "
+            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
+    
+    # Generar clave temporal para que las operaciones no fallen
+    from cryptography.fernet import Fernet
+    FIELD_ENCRYPTION_KEY = Fernet.generate_key().decode()
 
 # Security Settings for Production
 if not DEBUG:

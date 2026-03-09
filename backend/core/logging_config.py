@@ -58,13 +58,17 @@ def get_logging_config(log_level='INFO', log_file=None):
         import os
         log_dir = os.path.dirname(log_file)
         
+        # Intentar crear el directorio si no existe
+        if log_dir and not os.path.exists(log_dir):
+            try:
+                os.makedirs(log_dir, exist_ok=True)
+            except (OSError, PermissionError):
+                pass  # Silenciosamente ignorar - usaremos solo consola
+        
         # Verificar si el directorio existe y es escribible
         if log_dir and (not os.path.exists(log_dir) or not os.access(log_dir, os.W_OK)):
-            import warnings
-            warnings.warn(
-                f"El directorio de logs '{log_dir}' no existe o no es escribible. "
-                f"Logging a archivo deshabilitado. Los logs solo irán a consola."
-            )
+            # Silenciosamente deshabilitar logging a archivo - solo consola
+            pass
         else:
             handlers['file'] = {
                 'class': 'logging.handlers.RotatingFileHandler',
