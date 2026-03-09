@@ -68,5 +68,10 @@ export default defineNuxtConfig({
     }
   },
 
-  compatibilityDate: '2024-02-09'
+  compatibilityDate: '2024-02-09',
+
+  // Registrar plugins
+  plugins: [
+    '~/plugins/api.ts'
+  ]
 })

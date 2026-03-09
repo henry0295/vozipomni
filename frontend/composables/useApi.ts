@@ -60,11 +60,22 @@ export const useApi = () => {
         errorData = serverError.response._data
       }
       
+      // Log detallado del error para debugging
+      if (process.dev) {
+        console.error('[useApi] Error completo:', {
+          url,
+          status: serverError.statusCode || serverError.status,
+          serverError,
+          errorData
+        })
+      }
+      
       // Crear objeto de error enriquecido
       result.error.value = {
         ...serverError,
         data: errorData,
-        message: errorData.detail || errorData.message || serverError.message || 'Error en la solicitud'
+        message: errorData.detail || errorData.message || serverError.message || 'Error en la solicitud',
+        statusCode: serverError.statusCode || serverError.status
       } as any
     }
     
