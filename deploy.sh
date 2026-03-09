@@ -977,6 +977,72 @@ wait_for_env() {
     return 1
 }
 
+# ─── 8.5. Preparar entorno antes de migraciones ────────────────────────────
+prepare_environment() {
+    log_info "Preparando entorno de aplicación..."
+    cd "$INSTALL_DIR"
+    
+    # ─── 1. Crear directorio de logs ────────────────────────────────────────
+    log_info "Creando directorio de logs..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend mkdir -p /app/logs 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend chmod 755 /app/logs 2>/dev/null || true
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend chown -R 1000:1000 /app/logs 2>/dev/null || true
+    log_success "✓ Directorio de logs creado"
+    
+    # ─── 2. Generar clave de encriptación ───────────────────────────────────
+    log_info "Generando clave de encriptación para contraseñas SIP..."
+    local ENCRYPTION_KEY=""
+    
+    # Intentar generar dentro del contenedor
+    ENCRYPTION_KEY=$($COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || echo "")
+    
+    # Si falla, intentar localmente
+    if [ -z "$ENCRYPTION_KEY" ]; then
+        log_info "Generando clave localmente..."
+        if command -v python3 &>/dev/null; then
+            python3 -c "from cryptography.fernet import Fernet" 2>/dev/null || \
+                pip3 install -q cryptography 2>/dev/null || true
+            ENCRYPTION_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null || echo "")
+        fi
+    fi
+    
+    if [ -n "$ENCRYPTION_KEY" ]; then
+        # Agregar a .env principal si no existe
+        if ! grep -q "FIELD_ENCRYPTION_KEY" "$INSTALL_DIR/.env"; then
+            echo "" >> "$INSTALL_DIR/.env"
+            echo "# Encriptación de contraseñas SIP" >> "$INSTALL_DIR/.env"
+            echo "FIELD_ENCRYPTION_KEY=$ENCRYPTION_KEY" >> "$INSTALL_DIR/.env"
+            log_success "✓ Clave de encriptación agregada a .env"
+        else
+            log_info "Clave de encriptación ya existe en .env"
+        fi
+        
+        # Agregar a backend/.env
+        if [ -f "$INSTALL_DIR/backend/.env" ]; then
+            if ! grep -q "FIELD_ENCRYPTION_KEY" "$INSTALL_DIR/backend/.env"; then
+                echo "FIELD_ENCRYPTION_KEY=$ENCRYPTION_KEY" >> "$INSTALL_DIR/backend/.env"
+                log_success "✓ Clave de encriptación agregada a backend/.env"
+            fi
+        fi
+        
+        # Reiniciar backend para cargar la nueva variable
+        log_info "Reiniciando backend para cargar configuración..."
+        $COMPOSE_CMD -f docker-compose.prod.yml restart backend 2>&1 | grep -v "Container" || true
+        sleep 10
+    else
+        log_warning "No se pudo generar clave de encriptación automáticamente"
+        log_info "Genere manualmente después con:"
+        log_info "  docker compose -f docker-compose.prod.yml exec backend python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+    fi
+    
+    # ─── 3. Crear migraciones pendientes ────────────────────────────────────
+    log_info "Verificando migraciones pendientes..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py makemigrations 2>&1 | \
+        grep -v "No changes detected" || log_info "Migraciones creadas"
+    
+    log_success "Entorno preparado correctamente"
+}
+
 # ─── 9. Post-deploy ─────────────────────────────────────────────────────────
 post_deploy() {
     log_info "Ejecutando migraciones..."
@@ -1227,6 +1293,8 @@ main() {
     deploy_services
     echo ""
     wait_for_env 600 || true
+    echo ""
+    prepare_environment
     echo ""
     post_deploy
     echo ""
