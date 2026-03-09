@@ -94,3 +94,6 @@ logs/
 # ps1 ignore
 *.ps1
 
+#ignore kiro
+.kiro
+kiro
