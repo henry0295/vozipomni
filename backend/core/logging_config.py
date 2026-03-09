@@ -1,5 +1,5 @@
 """
-Structured logging configuration for VoziPOmni
+Configuración de logging estructurado para VoziPOmni
 """
 import logging
 import json
@@ -9,40 +9,40 @@ from pythonjsonlogger import jsonlogger
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
     """
-    Custom JSON formatter with additional fields
+    Formateador JSON personalizado con campos adicionales
     """
     
     def add_fields(self, log_record, record, message_dict):
         super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
         
-        # Add timestamp
+        # Agregar timestamp
         if not log_record.get('timestamp'):
             log_record['timestamp'] = datetime.utcnow().isoformat()
         
-        # Add level name
+        # Agregar nombre del nivel
         if log_record.get('level'):
             log_record['level'] = log_record['level'].upper()
         else:
             log_record['level'] = record.levelname
         
-        # Add service name
+        # Agregar nombre del servicio
         log_record['service'] = 'vozipomni'
         
-        # Add environment
+        # Agregar entorno
         import os
         log_record['environment'] = os.getenv('ENVIRONMENT', 'development')
 
 
 def get_logging_config(log_level='INFO', log_file=None):
     """
-    Get logging configuration dictionary
+    Obtener diccionario de configuración de logging
     
     Args:
-        log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        log_file: Path to log file (optional)
+        log_level: Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        log_file: Ruta al archivo de log (opcional)
     
     Returns:
-        dict: Logging configuration
+        dict: Configuración de logging
     """
     
     handlers = {
@@ -53,15 +53,27 @@ def get_logging_config(log_level='INFO', log_file=None):
         },
     }
     
+    # Solo agregar manejador de archivo si log_file está especificado y el directorio existe/es escribible
     if log_file:
-        handlers['file'] = {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': log_file,
-            'maxBytes': 10485760,  # 10MB
-            'backupCount': 5,
-            'formatter': 'json',
-            'level': log_level,
-        }
+        import os
+        log_dir = os.path.dirname(log_file)
+        
+        # Verificar si el directorio existe y es escribible
+        if log_dir and (not os.path.exists(log_dir) or not os.access(log_dir, os.W_OK)):
+            import warnings
+            warnings.warn(
+                f"El directorio de logs '{log_dir}' no existe o no es escribible. "
+                f"Logging a archivo deshabilitado. Los logs solo irán a consola."
+            )
+        else:
+            handlers['file'] = {
+                'class': 'logging.handlers.RotatingFileHandler',
+                'filename': log_file,
+                'maxBytes': 10485760,  # 10MB
+                'backupCount': 5,
+                'formatter': 'json',
+                'level': log_level,
+            }
     
     config = {
         'version': 1,
@@ -142,7 +154,7 @@ def get_logging_config(log_level='INFO', log_file=None):
 
 class StructuredLogger:
     """
-    Helper class for structured logging
+    Clase auxiliar para logging estructurado
     """
     
     def __init__(self, name):
@@ -150,12 +162,12 @@ class StructuredLogger:
     
     def log(self, level, message, **kwargs):
         """
-        Log with structured data
+        Registrar con datos estructurados
         
         Args:
-            level: Log level (debug, info, warning, error, critical)
-            message: Log message
-            **kwargs: Additional structured data
+            level: Nivel de log (debug, info, warning, error, critical)
+            message: Mensaje de log
+            **kwargs: Datos estructurados adicionales
         """
         extra = {'extra_data': kwargs}
         getattr(self.logger, level)(message, extra=extra)
@@ -176,33 +188,33 @@ class StructuredLogger:
         self.log('critical', message, **kwargs)
     
     def exception(self, message, **kwargs):
-        """Log exception with traceback"""
+        """Registrar excepción con traceback"""
         extra = {'extra_data': kwargs}
         self.logger.exception(message, extra=extra)
 
 
-# Convenience function
+# Función de conveniencia
 def get_logger(name):
-    """Get a structured logger instance"""
+    """Obtener una instancia de logger estructurado"""
     return StructuredLogger(name)
 
 
-# Example usage:
+# Ejemplo de uso:
 """
 from core.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 logger.info(
-    "Campaign started",
+    "Campaña iniciada",
     campaign_id=123,
-    campaign_name="Test Campaign",
+    campaign_name="Campaña de Prueba",
     user_id=456,
     contacts_count=1000
 )
 
 logger.error(
-    "Failed to originate call",
+    "Fallo al originar llamada",
     campaign_id=123,
     contact_id=789,
     error_code="AMI_CONNECTION_ERROR",
