@@ -286,7 +286,6 @@ banner() {
     echo -e "${BLUE}║                                                            ║${NC}"
     echo -e "${BLUE}║   Django · Nuxt 3 · Asterisk · Kamailio · RTPEngine      ║${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
-    echo -e "${BLUE}║   ✨ Incluye todas las mejoras v3.0.0 (20/20)            ║${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
@@ -1028,7 +1027,17 @@ prepare_environment() {
         # Reiniciar backend para cargar la nueva variable
         log_info "Reiniciando backend para cargar configuración..."
         $COMPOSE_CMD -f docker-compose.prod.yml restart backend 2>&1 | grep -v "Container" || true
-        sleep 10
+        
+        # Esperar a que backend esté completamente listo (más tiempo)
+        log_info "Esperando a que backend cargue la configuración..."
+        sleep 5
+        for i in {1..30}; do
+            if $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python -c "import os; exit(0 if os.getenv('FIELD_ENCRYPTION_KEY') else 1)" 2>/dev/null; then
+                log_success "✓ Backend cargó la configuración correctamente"
+                break
+            fi
+            sleep 2
+        done
     else
         log_warning "No se pudo generar clave de encriptación automáticamente"
         log_info "Genere manualmente después con:"
@@ -1189,8 +1198,9 @@ ENVCONFIG
     fi
     
     # Verificar métricas Prometheus
-    local metrics_check=$(curl -s "http://localhost:8000/metrics" 2>/dev/null | grep -c "campaign_" || echo "0")
-    if [ "$metrics_check" -gt 0 ]; then
+    local metrics_check=$(curl -s "http://localhost:8000/metrics" 2>/dev/null | grep -c "campaign_" 2>/dev/null || echo "0")
+    metrics_check=$(echo "$metrics_check" | tr -d ' \n\r')
+    if [ -n "$metrics_check" ] && [ "$metrics_check" -gt 0 ] 2>/dev/null; then
         log_success "✓ Métricas Prometheus activas ($metrics_check métricas de campaña)"
     else
         log_info "Métricas Prometheus: Verificar después"
