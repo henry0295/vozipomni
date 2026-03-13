@@ -106,13 +106,25 @@ class AgentSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at', 'current_calls', 'last_call_time', 
                             'logged_in_at', 'calls_today', 'talk_time_today', 'status',
-                            'available_time_today', 'break_time_today', 'oncall_time_today', 'wrapup_time_today']
+                            'available_time_today', 'break_time_today', 'oncall_time_today', 'wrapup_time_today', 'user']
         extra_kwargs = {
             'user': {'required': False}
         }
     
+    def validate(self, attrs):
+        """Validación de campos al crear o actualizar"""
+        # En creación, se requiere username para crear el usuario
+        if not self.instance and 'username' not in self.initial_data:
+            raise serializers.ValidationError({
+                'username': 'Se requiere un nombre de usuario para crear un nuevo agente'
+            })
+        return attrs
+    
     def create(self, validated_data):
+        """Crear un nuevo agente con su usuario asociado"""
         from django.db import IntegrityError
+        import logging
+        logger = logging.getLogger(__name__)
         
         # Extraer datos de usuario
         username = validated_data.pop('username', None)
@@ -123,19 +135,25 @@ class AgentSerializer(serializers.ModelSerializer):
         sip_password = validated_data.pop('sip_password', None)
         
         try:
-            # Crear usuario si se proporcionó username
-            if username:
-                # Verificar si el usuario ya existe
-                if User.objects.filter(username=username).exists():
-                    raise serializers.ValidationError({
-                        'username': f'El nombre de usuario "{username}" ya está en uso'
-                    })
-                
-                if email and User.objects.filter(email=email).exists():
-                    raise serializers.ValidationError({
-                        'email': f'El correo electrónico "{email}" ya está en uso'
-                    })
-                
+            # Validar y crear usuario
+            if not username:
+                raise serializers.ValidationError({
+                    'username': 'El nombre de usuario es requerido para crear un agente'
+                })
+            
+            # Verificar si el usuario ya existe
+            if User.objects.filter(username=username).exists():
+                raise serializers.ValidationError({
+                    'username': f'El nombre de usuario "{username}" ya está en uso'
+                })
+            
+            if email and User.objects.filter(email=email).exists():
+                raise serializers.ValidationError({
+                    'email': f'El correo electrónico "{email}" ya está en uso'
+                })
+            
+            # Crear usuario
+            try:
                 user = User.objects.create_user(
                     username=username,
                     email=email,
@@ -145,66 +163,86 @@ class AgentSerializer(serializers.ModelSerializer):
                     role='agent',
                     is_active_agent=True
                 )
-                validated_data['user'] = user
-            elif 'user' not in validated_data:
-                raise serializers.ValidationError({
-                    'username': 'Debe proporcionar un username o un user existente'
-                })
+            except IntegrityError as e:
+                error_msg = str(e).lower()
+                if 'username' in error_msg:
+                    raise serializers.ValidationError({
+                        'username': 'El nombre de usuario ya está en uso'
+                    })
+                elif 'email' in error_msg:
+                    raise serializers.ValidationError({
+                        'email': 'El correo electrónico ya está en uso'
+                    })
+                else:
+                    raise serializers.ValidationError({
+                        'user': f'Error creando usuario: {str(e)}'
+                    })
+            
+            validated_data['user'] = user
             
             # Verificar duplicados de agent_id y sip_extension
-            if Agent.objects.filter(agent_id=validated_data.get('agent_id')).exists():
+            agent_id = validated_data.get('agent_id')
+            sip_extension = validated_data.get('sip_extension')
+            
+            if Agent.objects.filter(agent_id=agent_id).exists():
                 raise serializers.ValidationError({
-                    'agent_id': f'El ID de agente "{validated_data.get("agent_id")}" ya está en uso'
+                    'agent_id': f'El ID de agente "{agent_id}" ya está en uso'
                 })
             
-            if Agent.objects.filter(sip_extension=validated_data.get('sip_extension')).exists():
+            if Agent.objects.filter(sip_extension=sip_extension).exists():
                 raise serializers.ValidationError({
-                    'sip_extension': f'La extensión SIP "{validated_data.get("sip_extension")}" ya está en uso'
+                    'sip_extension': f'La extensión SIP "{sip_extension}" ya está en uso'
                 })
             
             # Crear agente
-            agent = Agent.objects.create(**validated_data)
-            
-        except IntegrityError as e:
-            error_msg = str(e)
-            if 'username' in error_msg:
-                raise serializers.ValidationError({
-                    'username': 'El nombre de usuario ya está en uso'
-                })
-            elif 'email' in error_msg:
-                raise serializers.ValidationError({
-                    'email': 'El correo electrónico ya está en uso'
-                })
-            elif 'agent_id' in error_msg:
-                raise serializers.ValidationError({
-                    'agent_id': 'El ID de agente ya está en uso'
-                })
-            elif 'sip_extension' in error_msg:
-                raise serializers.ValidationError({
-                    'sip_extension': 'La extensión SIP ya está en uso'
-                })
-            else:
-                raise serializers.ValidationError({
-                    'detail': f'Error de integridad: {error_msg}'
-                })
-        
-        # Crear endpoint PJSIP en Asterisk si se habilitó WebRTC
-        if agent.webrtc_enabled and sip_password:
-            from apps.telephony.asterisk_config import AsteriskConfigGenerator
-            generator = AsteriskConfigGenerator()
             try:
-                generator.create_pjsip_endpoint(
-                    extension=agent.sip_extension,
-                    password=sip_password,
-                    agent_name=agent.user.get_full_name() or agent.agent_id
-                )
-            except Exception as e:
-                # Log error pero no fallar la creación
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error creando endpoint PJSIP para {agent.sip_extension}: {e}")
-        
-        return agent
+                agent = Agent.objects.create(**validated_data)
+                logger.info(f"Agente creado exitosamente: {agent.agent_id} (usuario: {username})")
+            except IntegrityError as e:
+                error_msg = str(e).lower()
+                if 'agent_id' in error_msg:
+                    raise serializers.ValidationError({
+                        'agent_id': 'El ID de agente ya está en uso'
+                    })
+                elif 'sip_extension' in error_msg:
+                    raise serializers.ValidationError({
+                        'sip_extension': 'La extensión SIP ya está en uso'
+                    })
+                else:
+                    raise serializers.ValidationError({
+                        'detail': f'Error de integridad: {error_msg}'
+                    })
+            
+            # Crear endpoint PJSIP en Asterisk si se habilitó WebRTC
+            if agent.webrtc_enabled:
+                try:
+                    if not sip_password:
+                        # Generar contraseña SIP si no se proporcionó
+                        import uuid
+                        sip_password = str(uuid.uuid4())[:16]
+                    
+                    from apps.telephony.asterisk_config import AsteriskConfigGenerator
+                    generator = AsteriskConfigGenerator()
+                    generator.create_pjsip_endpoint(
+                        extension=agent.sip_extension,
+                        password=sip_password,
+                        agent_name=agent.user.get_full_name() or agent.agent_id
+                    )
+                    logger.info(f"Endpoint PJSIP creado para {agent.sip_extension}")
+                except Exception as e:
+                    # Log error pero no fallar la creación - PJSIP es opcional
+                    logger.warning(f"Advertencia: No se pudo crear endpoint PJSIP para {agent.sip_extension}: {e}")
+            
+            return agent
+            
+        except serializers.ValidationError:
+            # Re-lanzar errores de validación
+            raise
+        except Exception as e:
+            logger.error(f"Error inesperado al crear agente: {str(e)}", exc_info=True)
+            raise serializers.ValidationError({
+                'detail': f'Error al crear el agente: {str(e)}'
+            })
     
     def update(self, instance, validated_data):
         # Extraer datos de usuario

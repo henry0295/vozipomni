@@ -63,19 +63,31 @@ export default defineNuxtPlugin((nuxtApp) => {
       switch (status) {
         case 400:
           // Bad Request - validation errors
-          if (data?.errors) {
-            // Show validation errors
-            Object.entries(data.errors).forEach(([field, messages]) => {
-              const errorMessages = Array.isArray(messages) ? messages : [messages]
-              errorMessages.forEach((message: string) => {
-                toast.add({
-                  title: `Error en ${field}`,
-                  description: message,
-                  color: 'red',
-                  timeout: 5000
+          // Django REST Framework returns errors directly as field keys
+          if (data && typeof data === 'object') {
+            let hasErrors = false
+            Object.entries(data).forEach(([field, messages]: [string, any]) => {
+              if (field !== 'detail' && field !== 'message' && Array.isArray(messages)) {
+                hasErrors = true
+                const errorMessages = messages
+                errorMessages.forEach((message: string) => {
+                  toast.add({
+                    title: `Error en ${field}`,
+                    description: message,
+                    color: 'red',
+                    timeout: 5000
+                  })
                 })
-              })
+              }
             })
+            if (!hasErrors) {
+              toast.add({
+                title: 'Error de validación',
+                description: data?.message || data?.detail || 'Datos inválidos',
+                color: 'red',
+                timeout: 5000
+              })
+            }
           } else {
             toast.add({
               title: 'Error de validación',

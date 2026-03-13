@@ -250,14 +250,15 @@ class AgentViewSet(viewsets.ModelViewSet):
             'new_status': 'available'
         })
     
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['GET'])
     def next_available(self, request):
         """Obtener siguiente ID de agente y extensión SIP disponibles"""
+        import re
+        
         # Obtener último agent_id
         last_agent = Agent.objects.order_by('-agent_id').first()
         if last_agent and last_agent.agent_id:
             # Extraer el número del ID (ej: AGT001 -> 001)
-            import re
             match = re.search(r'(\d+)$', last_agent.agent_id)
             if match:
                 number = int(match.group(1))
@@ -299,7 +300,7 @@ class AgentViewSet(viewsets.ModelViewSet):
             'sip_extension': next_extension
         })
     
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['POST'])
     def check_availability(self, request):
         """Verificar disponibilidad de agent_id o sip_extension"""
         agent_id = request.data.get('agent_id')
