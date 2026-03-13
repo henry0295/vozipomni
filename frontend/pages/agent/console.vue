@@ -227,6 +227,7 @@ definePageMeta({
 
 const agentStore = useAgentStore()
 const { getAgents } = useAgents()
+const { requireRole, isAgent } = useAuthorization()
 
 // State
 const selectedAgent = ref<Agent | null>(null)
@@ -409,12 +410,9 @@ let dateTimeInterval: any = null
 // Lifecycle
 onMounted(async () => {
   const authStore = useAuthStore()
-  const agentStore = useAgentStore()
   
   // Verificar que solo agentes puedan acceder a esta consola
-  if (authStore.user?.role !== 'agent') {
-    console.warn('Access denied: User is not an agent')
-    await navigateTo('/dashboard')
+  if (!(await requireRole('agent', '/dashboard'))) {
     return
   }
   
@@ -422,7 +420,6 @@ onMounted(async () => {
   dateTimeInterval = setInterval(updateDateTime, 1000)
 
   // Auto-login para agentes
-  // Si el usuario es agente y aún no está logueado en consola
   if (!agentStore.isLoggedIn) {
     try {
       await loadAvailableAgents()
