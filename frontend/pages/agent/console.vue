@@ -407,21 +407,36 @@ const updateDateTime = () => {
 let dateTimeInterval: any = null
 
 // Lifecycle
-onMounted(() => {
-  loadAvailableAgents()
+onMounted(async () => {
   updateDateTime()
-  
   dateTimeInterval = setInterval(updateDateTime, 1000)
 
-  // Si el usuario ya tiene un agente asignado, auto-login
+  // Auto-login para agentes
   const authStore = useAuthStore()
-  if (authStore.user?.is_active_agent) {
-    loadAvailableAgents().then(() => {
+  const agentStore = useAgentStore()
+  
+  // Si el usuario es agente y aún no está logueado en consola
+  if (authStore.user?.role === 'agent' && !agentStore.isLoggedIn) {
+    try {
+      await loadAvailableAgents()
+      
       if (availableAgents.value.length === 1) {
+        // Auto-select y login si tiene un único agente
         selectedAgent.value = availableAgents.value[0]
-        handleLogin()
+        await handleLogin()
+      } else if (availableAgents.value.length > 1) {
+        // Mostrar dropdown si tiene múltiples agentes
+        console.log('Agent has multiple profiles, showing selection')
+      } else {
+        // Sin agentes asignados
+        console.log('No agent profiles found for user')
       }
-    })
+    } catch (error) {
+      console.error('Error during auto-login:', error)
+    }
+  } else if (agentStore.isLoggedIn) {
+    // Ya está logueado, solo cargar los datos
+    await loadAvailableAgents()
   }
 })
 

@@ -85,7 +85,17 @@ const handleLogin = async () => {
         color: 'green'
       })
       
-      await navigateTo('/dashboard')
+      // Redirigir según el rol del usuario
+      const authStore = useAuthStore()
+      const userRole = authStore.user?.role
+      
+      // Si es agente, redirigir a la consola del agente
+      if (userRole === 'agent') {
+        await navigateTo('/agent/console')
+      } else {
+        // Administrador u otros roles van al dashboard
+        await navigateTo('/dashboard')
+      }
     } else {
       toast.add({
         title: 'Error',
