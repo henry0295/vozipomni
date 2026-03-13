@@ -12,12 +12,14 @@ export default defineNuxtPlugin((nuxtApp) => {
     
     // Request interceptor
     onRequest({ options }) {
-      // Add auth token
-      const token = useCookie('access_token')
-      if (token.value) {
-        options.headers = {
-          ...options.headers,
-          Authorization: `Bearer ${token.value}`
+      // Add auth token from localStorage (managed by auth store)
+      if (process.client) {
+        const token = localStorage.getItem('auth_token')
+        if (token) {
+          options.headers = {
+            ...options.headers,
+            Authorization: `Bearer ${token}`
+          }
         }
       }
       
@@ -30,7 +32,7 @@ export default defineNuxtPlugin((nuxtApp) => {
       
       // Log request in development
       if (process.dev) {
-        console.log(`[API Request] ${options.method || 'GET'} ${options.baseURL}`, {
+        console.log(`[API Request] ${options.method || 'GET'} ${options.baseURL}${typeof options === 'string' ? options : ''}`, {
           requestId,
           body: options.body
         })
