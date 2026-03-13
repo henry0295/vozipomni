@@ -408,15 +408,22 @@ let dateTimeInterval: any = null
 
 // Lifecycle
 onMounted(async () => {
+  const authStore = useAuthStore()
+  const agentStore = useAgentStore()
+  
+  // Verificar que solo agentes puedan acceder a esta consola
+  if (authStore.user?.role !== 'agent') {
+    console.warn('Access denied: User is not an agent')
+    await navigateTo('/dashboard')
+    return
+  }
+  
   updateDateTime()
   dateTimeInterval = setInterval(updateDateTime, 1000)
 
   // Auto-login para agentes
-  const authStore = useAuthStore()
-  const agentStore = useAgentStore()
-  
   // Si el usuario es agente y aún no está logueado en consola
-  if (authStore.user?.role === 'agent' && !agentStore.isLoggedIn) {
+  if (!agentStore.isLoggedIn) {
     try {
       await loadAvailableAgents()
       
@@ -434,7 +441,7 @@ onMounted(async () => {
     } catch (error) {
       console.error('Error during auto-login:', error)
     }
-  } else if (agentStore.isLoggedIn) {
+  } else {
     // Ya está logueado, solo cargar los datos
     await loadAvailableAgents()
   }
