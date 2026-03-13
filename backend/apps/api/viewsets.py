@@ -146,7 +146,7 @@ class AgentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['agent_id', 'sip_extension', 'user__username', 'user__first_name', 'user__last_name', 'user__email']
-    filterset_fields = ['status', 'webrtc_enabled']
+    filterset_fields = ['status', 'webrtc_enabled', 'user']
     ordering_fields = ['created_at', 'agent_id', 'status', 'calls_today']
     ordering = ['-created_at']
     

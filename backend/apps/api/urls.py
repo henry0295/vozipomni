@@ -25,6 +25,7 @@ urlpatterns = [
     path('auth/login/', views.CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', views.CurrentUserView.as_view(), name='current_user'),
+    path('auth/logout/', views.LogoutView, name='logout'),
     
     # ViewSets
     path('', include(router.urls)),
