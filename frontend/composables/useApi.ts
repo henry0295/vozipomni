@@ -1,4 +1,4 @@
-import type { UseFetchOptions } from 'nuxt/app'
+import { ref } from 'vue'
 
 // Helper para extraer datos de respuestas paginadas de Django REST Framework
 // Django retorna: { count, next, previous, results: [...] }
@@ -15,71 +15,31 @@ export function extractResults<T>(data: any): { items: T[], count: number } {
 }
 
 export const useApi = () => {
-  const config = useRuntimeConfig()
-  const authStore = useAuthStore()
+  // Usar la instancia $api configurada en el plugin con todos los interceptores
+  const { $api } = useNuxtApp()
 
   const apiFetch = async <T>(
     url: string,
-    options: UseFetchOptions<T> = {}
+    options: any = {}
   ) => {
-    // Cargar token desde localStorage si no está en el store
-    if (process.client && !authStore.token) {
-      authStore.loadFromStorage()
-    }
-
-    const token = authStore.token
-
-    const defaults: UseFetchOptions<T> = {
-      baseURL: config.public.apiBase,
-      headers: token
-        ? { Authorization: `Bearer ${token}` }
-        : {},
-      onResponseError({ response }) {
-        if (response.status === 401) {
-          // Token inválido o expirado
-          if (process.client) {
-            authStore.clearAuth()
-            navigateTo('/login')
-          }
-        }
+    try {
+      // Usar la instancia $api del plugin que tiene todos los interceptores configurados
+      // (autenticación, logging, manejo de errores, etc.)
+      const data = await $api<T>(url, options)
+      
+      // Retornar en formato compatible con useFetch para no romper código existente
+      return {
+        data: ref(data),
+        error: ref(null)
+      }
+    } catch (error: any) {
+      // El plugin ya maneja los errores y muestra toasts, pero retornamos el error
+      // para que los componentes puedan manejarlo si lo necesitan
+      return {
+        data: ref(null),
+        error: ref(error)
       }
     }
-
-    const params = { ...defaults, ...options }
-    const result = await useFetch(url, params)
-    
-    // Si hay error, intentar extraer el mensaje detallado del servidor
-    if (result.error.value) {
-      const serverError = result.error.value as any
-      let errorData: any = {}
-      
-      // Intentar obtener datos del error del servidor
-      if (serverError.data) {
-        errorData = serverError.data
-      } else if (serverError.response?._data) {
-        errorData = serverError.response._data
-      }
-      
-      // Log detallado del error para debugging
-      if (process.dev) {
-        console.error('[useApi] Error completo:', {
-          url,
-          status: serverError.statusCode || serverError.status,
-          serverError,
-          errorData
-        })
-      }
-      
-      // Crear objeto de error enriquecido
-      result.error.value = {
-        ...serverError,
-        data: errorData,
-        message: errorData.detail || errorData.message || serverError.message || 'Error en la solicitud',
-        statusCode: serverError.statusCode || serverError.status
-      } as any
-    }
-    
-    return result
   }
 
   return {
@@ -90,7 +50,7 @@ export const useApi = () => {
 // Composable específico para llamadas a la API
 export const useApiCall = async <T>(
   url: string,
-  options: UseFetchOptions<T> = {}
+  options: any = {}
 ) => {
   const { apiFetch } = useApi()
   return await apiFetch<T>(url, options)
