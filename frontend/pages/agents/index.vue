@@ -425,6 +425,14 @@ const loadNextAvailable = async () => {
     form.value.sip_extension = result.data.sip_extension
     agentIdStatus.value = 'available'
     extensionStatus.value = 'available'
+    
+    // Generar contraseña SIP automáticamente si está vacía
+    if (!form.value.sip_password) {
+      // Generar contraseña SIP segura (UUID-like)
+      const randomId = Math.random().toString(36).substring(2, 15)
+      const timestamp = Date.now().toString(36)
+      form.value.sip_password = `${randomId}${timestamp}`.substring(0, 20)
+    }
   }
 }
 
