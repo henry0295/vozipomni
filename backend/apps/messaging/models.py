@@ -75,8 +75,8 @@ class Conversation(models.Model):
         verbose_name_plural = 'Conversaciones'
         ordering = ['-started_at']
         indexes = [
-            models.Index(fields=['status', 'agent']),
-            models.Index(fields=['channel', 'contact_identifier']),
+            models.Index(fields=['status', 'agent'], name='messaging_c_status_idx'),
+            models.Index(fields=['channel', 'contact_identifier'], name='messaging_c_channel_idx'),
         ]
 
     def __str__(self):
@@ -107,7 +107,7 @@ class Message(models.Model):
         verbose_name = 'Mensaje'
         verbose_name_plural = 'Mensajes'
         ordering = ['sent_at']
-        indexes = [models.Index(fields=['conversation', 'sent_at'])]
+        indexes = [models.Index(fields=['conversation', 'sent_at'], name='messaging_m_conv_idx')]
 
     def __str__(self):
         return f"[{self.direction}] {self.body[:60]}"

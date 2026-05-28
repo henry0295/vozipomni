@@ -75,9 +75,16 @@ class Call(models.Model):
         verbose_name = 'Llamada'
         verbose_name_plural = 'Llamadas'
         indexes = [
-            models.Index(fields=['start_time']),
-            models.Index(fields=['agent', 'start_time']),
-            models.Index(fields=['campaign', 'start_time']),
+            # Índices originales (renombrados en migración 0004)
+            models.Index(fields=['start_time'], name='calls_start_t_e6c81a_idx'),
+            models.Index(fields=['agent', 'start_time'], name='calls_agent_i_3202a5_idx'),
+            models.Index(fields=['campaign', 'start_time'], name='calls_campaig_a1fb2d_idx'),
+            # Índices de rendimiento (migración 0010)
+            models.Index(fields=['start_time', 'status'], name='calls_start_status_idx'),
+            models.Index(fields=['agent', 'start_time', 'status'], name='calls_agent_time_idx'),
+            models.Index(fields=['campaign', 'disposition'], name='calls_campaign_disp_idx'),
+            models.Index(fields=['unique_id'], name='calls_uniqueid_idx'),
+            models.Index(fields=['direction', 'status', 'start_time'], name='calls_dir_status_time_idx'),
         ]
     
     def __str__(self):
@@ -272,6 +279,10 @@ class SIPTrunk(models.Model):
         db_table = 'sip_trunks'
         verbose_name = 'Troncal SIP'
         verbose_name_plural = 'Troncales SIP'
+        indexes = [
+            models.Index(fields=['is_active', 'is_registered'], name='trunks_active_reg_idx'),
+            models.Index(fields=['trunk_type', 'is_active'], name='trunks_type_active_idx'),
+        ]
     
     def __str__(self):
         return f"{self.name} ({self.host}:{self.port})"

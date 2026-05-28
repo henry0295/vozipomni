@@ -100,9 +100,9 @@ class CallDispositionAudit(models.Model):
         verbose_name = 'Auditoría de Gestión'
         verbose_name_plural = 'Auditorías de Gestiones'
         indexes = [
-            models.Index(fields=['status', 'created_at']),
-            models.Index(fields=['agent', 'created_at']),
-            models.Index(fields=['campaign', 'created_at']),
+            models.Index(fields=['status', 'created_at'], name='audit_status_created_idx'),
+            models.Index(fields=['agent', 'created_at'], name='audit_agent_created_idx'),
+            models.Index(fields=['campaign', 'created_at'], name='audit_campaign_created_idx'),
         ]
 
     def __str__(self):

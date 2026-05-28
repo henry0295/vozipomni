@@ -54,6 +54,10 @@ class Agent(models.Model):
         db_table = 'agents'
         verbose_name = 'Agente'
         verbose_name_plural = 'Agentes'
+        indexes = [
+            models.Index(fields=['status', 'logged_in_at'], name='agents_status_login_idx'),
+            models.Index(fields=['current_campaign', 'status'], name='agents_campaign_status_idx'),
+        ]
     
     def __str__(self):
         return f"{self.user.get_full_name()} - {self.sip_extension}"
@@ -109,6 +113,11 @@ class AgentStatusHistory(models.Model):
         ordering = ['-started_at']
         verbose_name = 'Historial Estado Agente'
         verbose_name_plural = 'Historial Estados Agentes'
+        indexes = [
+            models.Index(fields=['agent', 'started_at'], name='agent_hist_agent_start_idx'),
+            models.Index(fields=['status', 'started_at'], name='agent_hist_status_start_idx'),
+            models.Index(fields=['ended_at'], name='agent_hist_ended_idx'),
+        ]
     
     def __str__(self):
         return f"{self.agent.user.username} - {self.status} - {self.started_at}"

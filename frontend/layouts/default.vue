@@ -157,6 +157,7 @@ const expandedMenus = process.client ? useLocalStorage<string[]>('sidebar-expand
 const allNavigation = [
   { label: 'Dashboard', icon: 'i-heroicons-home', to: '/dashboard', roles: null },
   { label: 'Supervisor', icon: 'i-heroicons-presentation-chart-line', to: '/supervisor', roles: ['admin', 'supervisor'] },
+  { label: 'Auditoría', icon: 'i-heroicons-clipboard-document-check', to: '/audit', roles: ['admin', 'supervisor'] },
   { label: 'Agentes', icon: 'i-heroicons-user-group', to: '/agents', roles: null },
   { label: 'Campañas', icon: 'i-heroicons-megaphone', to: '/campaigns', roles: null },
   { label: 'Contactos', icon: 'i-heroicons-users', to: '/contacts', roles: null },
@@ -179,7 +180,8 @@ const allNavigation = [
       { label: 'Buzones de Voz', icon: 'i-heroicons-inbox', to: '/voicemail' },
       { label: 'Condiciones Horario', icon: 'i-heroicons-clock', to: '/time-conditions' },
       { label: 'Grabaciones', icon: 'i-heroicons-video-camera', to: '/recordings' },
-      { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings' }
+      { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings' },
+      { label: 'Config. Avanzada', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced' }
     ]
   }
 ]
