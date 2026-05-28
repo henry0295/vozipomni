@@ -11,16 +11,19 @@ Jerarquía de roles:
 from rest_framework.permissions import BasePermission, SAFE_METHODS
 
 
+def _is_superuser(user) -> bool:
+    """Superusuarios de Django tienen acceso total independientemente del role."""
+    return bool(getattr(user, 'is_superuser', False))
+
+
 class IsAdminUser(BasePermission):
     """Solo administradores."""
     message = 'Se requiere rol de administrador para esta acción.'
 
     def has_permission(self, request, view):
-        return (
-            request.user
-            and request.user.is_authenticated
-            and getattr(request.user, 'role', None) == 'admin'
-        )
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return _is_superuser(request.user) or getattr(request.user, 'role', None) == 'admin'
 
 
 class IsAdminOrSupervisor(BasePermission):
@@ -28,11 +31,9 @@ class IsAdminOrSupervisor(BasePermission):
     message = 'Se requiere rol de administrador o supervisor para esta acción.'
 
     def has_permission(self, request, view):
-        return (
-            request.user
-            and request.user.is_authenticated
-            and getattr(request.user, 'role', None) in ('admin', 'supervisor')
-        )
+        if not request.user or not request.user.is_authenticated:
+            return False
+        return _is_superuser(request.user) or getattr(request.user, 'role', None) in ('admin', 'supervisor')
 
 
 class IsAdminOrSupervisorOrReadOnly(BasePermission):
@@ -45,6 +46,8 @@ class IsAdminOrSupervisorOrReadOnly(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        if _is_superuser(request.user):
+            return True
         if request.method in SAFE_METHODS:
             return True
         return getattr(request.user, 'role', None) in ('admin', 'supervisor')
@@ -57,6 +60,8 @@ class IsAdminSupervisorOrAnalyst(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        if _is_superuser(request.user):
+            return True
         role = getattr(request.user, 'role', None)
         if role in ('admin', 'supervisor'):
             return True

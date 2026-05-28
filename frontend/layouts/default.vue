@@ -153,20 +153,22 @@ const { user, logout } = useAuth()
 // Estados para submenús - usar localStorage con useLocalStorage de @vueuse (SSR-safe)
 const expandedMenus = process.client ? useLocalStorage<string[]>('sidebar-expanded-menus', []) : ref<string[]>([])
 
-// Navegación del sidebar con submenu para Telefonía
-const navigation = [
-  { label: 'Dashboard', icon: 'i-heroicons-home', to: '/dashboard' },
-  { label: 'Agentes', icon: 'i-heroicons-user-group', to: '/agents' },
-  { label: 'Campañas', icon: 'i-heroicons-megaphone', to: '/campaigns' },
-  { label: 'Contactos', icon: 'i-heroicons-users', to: '/contacts' },
-  { label: 'Llamadas', icon: 'i-heroicons-phone-arrow-up-right', to: '/calls' },
-  { label: 'Reportes', icon: 'i-heroicons-chart-bar', to: '/reports' },
+// Navegación completa por rol
+const allNavigation = [
+  { label: 'Dashboard', icon: 'i-heroicons-home', to: '/dashboard', roles: null },
+  { label: 'Supervisor', icon: 'i-heroicons-presentation-chart-line', to: '/supervisor', roles: ['admin', 'supervisor'] },
+  { label: 'Agentes', icon: 'i-heroicons-user-group', to: '/agents', roles: null },
+  { label: 'Campañas', icon: 'i-heroicons-megaphone', to: '/campaigns', roles: null },
+  { label: 'Contactos', icon: 'i-heroicons-users', to: '/contacts', roles: null },
+  { label: 'Llamadas', icon: 'i-heroicons-phone-arrow-up-right', to: '/calls', roles: null },
+  { label: 'Reportes', icon: 'i-heroicons-chart-bar', to: '/reports', roles: null },
   
   // Menú desplegable de Telefonía - Contact Center
   {
     label: 'Telefonía',
     icon: 'i-heroicons-phone',
     id: 'telephony',
+    roles: null,
     children: [
       { label: 'Colas', icon: 'i-heroicons-queue-list', to: '/queues' },
       { label: 'Troncales SIP', icon: 'i-heroicons-server', to: '/trunks' },
@@ -181,6 +183,12 @@ const navigation = [
     ]
   }
 ]
+
+// Filtrar navegación según el rol del usuario
+const navigation = computed(() => {
+  const role = user.value?.role
+  return allNavigation.filter(item => !item.roles || (role && item.roles.includes(role)))
+})
 
 // Funciones para manejar el menú desplegable
 const toggleMenu = (menuId: string) => {
@@ -258,7 +266,7 @@ watch(
       // Si el array está vacío (no hay estado guardado), auto-expandir basado en ruta activa
       const expandedRef = expandedMenus as any
       if (expandedRef.value?.length === 0) {
-        navigation.forEach(item => {
+        navigation.value.forEach(item => {
           if (item.children && isChildActive(item.children)) {
             if (!isMenuExpanded(item.id)) {
               expandedRef.value?.push(item.id)
