@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from core.permissions import IsAdminUser as IsAdminUserCustom
 from .models import (
     Call, SIPTrunk, IVR, Extension, InboundRoute,
     OutboundRoute, Voicemail, MusicOnHold, TimeCondition
@@ -33,7 +34,7 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
     """
     queryset = SIPTrunk.objects.all()
     serializer_class = SIPTrunkSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     
     def perform_create(self, serializer):
         """Crear troncal y regenerar configuración PJSIP"""
@@ -442,7 +443,7 @@ class IVRViewSet(viewsets.ModelViewSet):
     """
     queryset = IVR.objects.all()
     serializer_class = IVRSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
 
 
 class ExtensionViewSet(viewsets.ModelViewSet):
@@ -452,7 +453,7 @@ class ExtensionViewSet(viewsets.ModelViewSet):
     """
     queryset = Extension.objects.all()
     serializer_class = ExtensionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     search_fields = ['extension', 'name']
     filterset_fields = ['extension_type', 'is_active']
     ordering = ['extension']
@@ -497,7 +498,7 @@ class InboundRouteViewSet(viewsets.ModelViewSet):
     """
     queryset = InboundRoute.objects.all()
     serializer_class = InboundRouteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     search_fields = ['did', 'description']
     filterset_fields = ['destination_type', 'is_active']
     ordering = ['priority', 'did']
@@ -509,7 +510,7 @@ class OutboundRouteViewSet(viewsets.ModelViewSet):
     """
     queryset = OutboundRoute.objects.all()
     serializer_class = OutboundRouteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     search_fields = ['name', 'pattern']
     filterset_fields = ['trunk', 'is_active']
 
@@ -521,7 +522,7 @@ class VoicemailViewSet(viewsets.ModelViewSet):
     """
     queryset = Voicemail.objects.all()
     serializer_class = VoicemailSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     search_fields = ['mailbox', 'name', 'email']
     filterset_fields = ['is_active']
     ordering = ['mailbox']
@@ -547,7 +548,7 @@ class MusicOnHoldViewSet(viewsets.ModelViewSet):
     """
     queryset = MusicOnHold.objects.all()
     serializer_class = MusicOnHoldSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     search_fields = ['name', 'description']
     filterset_fields = ['mode', 'is_active']
     
@@ -582,7 +583,7 @@ class TimeConditionViewSet(viewsets.ModelViewSet):
     """
     queryset = TimeCondition.objects.all()
     serializer_class = TimeConditionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUserCustom]
     search_fields = ['name']
     filterset_fields = ['is_active']
     
