@@ -42,9 +42,8 @@ export default defineNuxtConfig({
   },
 
   // Desactivar SSR para el layout si es necesario, pero preferimos mantener SSR activo
-  ssr: true,
+  ssr: false,
 
-  // Ignorar hydration mismatches causados por cambios de estado dinámico
   experimental: {
     payloadExtraction: false,
     renderJsonPayload: false
