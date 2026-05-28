@@ -302,8 +302,8 @@ async function forceLogout(agent: any) {
 }
 
 function useAuthHeaders() {
-  const token = useCookie('access_token').value
-  return { Authorization: `Bearer ${token}` }
+  const token = process.client ? localStorage.getItem('auth_token') : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 // Auto-refresh cada 10 segundos
