@@ -16,12 +16,20 @@ from apps.recordings.models import Recording
 from apps.reports.models import Report
 
 from apps.api import serializers
+from core.permissions import (
+    IsAdminUser,
+    IsAdminOrSupervisor,
+    IsAdminOrSupervisorOrReadOnly,
+    IsAdminSupervisorOrAnalyst,
+    IsOwnerAgentOrAdminSupervisor,
+)
 
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = serializers.UserSerializer
-    permission_classes = [IsAuthenticated]
+    # Solo admin puede gestionar usuarios
+    permission_classes = [IsAdminUser]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['username', 'email', 'first_name', 'last_name']
     filterset_fields = ['role', 'is_active', 'is_active_agent']
@@ -34,7 +42,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
         'dispositions', 'agents', 'calls'
     )
     serializer_class = serializers.CampaignSerializer
-    permission_classes = [IsAuthenticated]
+    # Admin y supervisor gestionan campañas; analyst y agent solo leen
+    permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
     filterset_fields = ['campaign_type', 'status', 'dialer_type']
@@ -143,7 +152,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
 class AgentViewSet(viewsets.ModelViewSet):
     queryset = Agent.objects.select_related('user').prefetch_related('campaigns')
     serializer_class = serializers.AgentSerializer
-    permission_classes = [IsAuthenticated]
+    # Escritura solo admin; supervisor puede leer y ejecutar acciones de agente
+    permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['agent_id', 'sip_extension', 'user__username', 'user__first_name', 'user__last_name', 'user__email']
     filterset_fields = ['status', 'webrtc_enabled', 'user']
@@ -320,7 +330,7 @@ class AgentViewSet(viewsets.ModelViewSet):
 class ContactViewSet(viewsets.ModelViewSet):
     queryset = Contact.objects.select_related('contact_list').prefetch_related('notes')
     serializer_class = serializers.ContactSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['first_name', 'last_name', 'phone', 'email', 'company']
     filterset_fields = ['contact_list', 'status']
@@ -329,7 +339,7 @@ class ContactViewSet(viewsets.ModelViewSet):
 class ContactListViewSet(viewsets.ModelViewSet):
     queryset = ContactList.objects.all()
     serializer_class = serializers.ContactListSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['name', 'description']
 
@@ -342,7 +352,8 @@ class QueueViewSet(viewsets.ModelViewSet):
     """
     queryset = Queue.objects.all()
     serializer_class = serializers.QueueSerializer
-    permission_classes = [IsAuthenticated]
+    # Colas: admin las crea/borra; supervisor las lee y recarga
+    permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['name', 'extension']
     filterset_fields = ['is_active', 'strategy']
@@ -429,7 +440,8 @@ class CallViewSet(viewsets.ReadOnlyModelViewSet):
         'agent__user', 'campaign', 'contact', 'queue', 'disposition'
     ).order_by('-start_time')
     serializer_class = serializers.CallSerializer
-    permission_classes = [IsAuthenticated]
+    # Llamadas son de solo lectura; accesibles a admin, supervisor y analyst
+    permission_classes = [IsAdminSupervisorOrAnalyst]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['call_id', 'caller_id', 'called_number']
     filterset_fields = ['direction', 'status', 'agent', 'campaign']
@@ -439,7 +451,8 @@ class CallViewSet(viewsets.ReadOnlyModelViewSet):
 class RecordingViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Recording.objects.all()
     serializer_class = serializers.RecordingSerializer
-    permission_classes = [IsAuthenticated]
+    # Grabaciones: admin y supervisor; analyst puede leer también
+    permission_classes = [IsAdminSupervisorOrAnalyst]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['filename', 'call__call_id']
     filterset_fields = ['status', 'agent', 'campaign']
@@ -448,7 +461,8 @@ class RecordingViewSet(viewsets.ReadOnlyModelViewSet):
 class ReportViewSet(viewsets.ModelViewSet):
     queryset = Report.objects.all()
     serializer_class = serializers.ReportSerializer
-    permission_classes = [IsAuthenticated]
+    # Reportes: todos los roles con acceso (analyst también genera reportes)
+    permission_classes = [IsAdminSupervisorOrAnalyst]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['name']
     filterset_fields = ['report_type', 'format', 'status']

@@ -1,9 +1,15 @@
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework.decorators import api_view, permission_classes
 from apps.api.serializers import UserSerializer
 from apps.api.auth_serializers import CustomTokenObtainPairSerializer
+
+
+class LoginRateThrottle(AnonRateThrottle):
+    """Throttle estricto para el endpoint de login (5/minuto por defecto)"""
+    scope = 'login'
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -11,6 +17,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     Vista personalizada para login que incluye información del usuario
     """
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
 
 
 class CurrentUserView(generics.RetrieveAPIView):

@@ -5,6 +5,7 @@ import logging
 import csv
 import io
 from django.db import transaction
+from django.db.models import F
 from django.core.exceptions import ValidationError
 from typing import Dict, List, Optional
 import phonenumbers
@@ -111,85 +112,92 @@ class ContactService:
         skip_duplicates: bool = True
     ) -> Dict:
         """
-        Import contacts from CSV file
-        
-        Args:
-            contact_list_id: Contact list ID
-            csv_file: CSV file object
-            user: User importing contacts
-            skip_duplicates: Skip duplicate phone numbers
-            
-        Returns:
-            dict: Import results with counts
+        Import contacts from CSV file using bulk_create for performance.
+        Processes thousands of rows with a single DB insert instead of N queries.
         """
         try:
             contact_list = ContactList.objects.get(id=contact_list_id)
         except ContactList.DoesNotExist:
             raise InvalidContactError(f"Contact list {contact_list_id} not found")
-        
-        # Read CSV
+
         csv_content = csv_file.read().decode('utf-8')
         csv_reader = csv.DictReader(io.StringIO(csv_content))
-        
-        imported = 0
+
+        # Pre-load existing phones for this list in one query → O(1) lookups
+        if skip_duplicates:
+            existing_phones: set = set(
+                Contact.objects.filter(contact_list=contact_list)
+                .values_list('phone', flat=True)
+            )
+        else:
+            existing_phones = set()
+
+        to_create: List[Contact] = []
         skipped = 0
         errors = []
-        
+        BATCH_SIZE = 1000
+
         for row_num, row in enumerate(csv_reader, start=2):
+            phone = row.get('phone', '').strip()
+            if not phone:
+                skipped += 1
+                errors.append(f"Row {row_num}: Missing phone number")
+                continue
+
+            # Normalize phone
             try:
-                phone = row.get('phone', '').strip()
-                if not phone:
-                    skipped += 1
-                    errors.append(f"Row {row_num}: Missing phone number")
-                    continue
-                
-                # Check for duplicates
-                if skip_duplicates and Contact.objects.filter(
-                    contact_list=contact_list,
-                    phone=phone
-                ).exists():
-                    skipped += 1
-                    continue
-                
-                # Create contact
-                ContactService.create_contact(
-                    contact_list_id=contact_list_id,
-                    phone=phone,
-                    first_name=row.get('first_name', ''),
-                    last_name=row.get('last_name', ''),
-                    email=row.get('email', ''),
-                    company=row.get('company', ''),
-                    address=row.get('address', ''),
-                    city=row.get('city', ''),
-                    state=row.get('state', ''),
-                    zip_code=row.get('zip_code', ''),
-                    country=row.get('country', 'US')
-                )
-                imported += 1
-                
-            except (InvalidContactError, DuplicateContactError) as e:
+                parsed = phonenumbers.parse(phone, 'CO')
+                if not phonenumbers.is_valid_number(parsed):
+                    raise ValueError('Invalid number')
+                phone = phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+            except Exception:
                 skipped += 1
-                errors.append(f"Row {row_num}: {str(e)}")
-            except Exception as e:
+                errors.append(f"Row {row_num}: Invalid phone '{phone}'")
+                continue
+
+            if phone in existing_phones:
                 skipped += 1
-                errors.append(f"Row {row_num}: Unexpected error - {str(e)}")
-        
+                continue
+
+            existing_phones.add(phone)  # Avoid dupes within the same file
+            to_create.append(Contact(
+                contact_list=contact_list,
+                phone=phone,
+                first_name=row.get('first_name', '').strip(),
+                last_name=row.get('last_name', '').strip(),
+                email=row.get('email', '').strip() or None,
+                company=row.get('company', '').strip(),
+                address=row.get('address', '').strip(),
+                city=row.get('city', '').strip(),
+                state=row.get('state', '').strip(),
+                zip_code=row.get('zip_code', '').strip(),
+                country=row.get('country', 'CO').strip(),
+            ))
+
+        # Bulk insert in batches — single transaction, minimal round-trips
+        imported = 0
+        for i in range(0, len(to_create), BATCH_SIZE):
+            batch = to_create[i:i + BATCH_SIZE]
+            created = Contact.objects.bulk_create(batch, ignore_conflicts=True, batch_size=BATCH_SIZE)
+            imported += len(created)
+
+        # Update list counter in one atomic expression
+        if imported:
+            ContactList.objects.filter(pk=contact_list_id).update(
+                total_contacts=F('total_contacts') + imported
+            )
+
         logger.info(
             "Contacts imported from CSV",
-            extra={
-                'contact_list_id': contact_list_id,
-                'imported': imported,
-                'skipped': skipped,
-                'user_id': user.id
-            }
+            extra={'contact_list_id': contact_list_id, 'imported': imported, 'skipped': skipped, 'user_id': user.id}
         )
-        
+
         return {
             'success': True,
             'imported': imported,
             'skipped': skipped,
-            'errors': errors[:10],  # Return first 10 errors
-            'total_errors': len(errors)
+            'errors': errors[:10],
+            'total_errors': len(errors),
         }
     
     @staticmethod

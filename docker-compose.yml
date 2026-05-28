@@ -369,6 +369,36 @@ services:
       - dev
     logging: *default-logging
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # BACKUP AUTOMÁTICO DE POSTGRESQL (diario a las 2 AM)
+  # ──────────────────────────────────────────────────────────────────────────
+  pg_backup:
+    image: prodrigestivill/postgres-backup-local:14
+    container_name: vozipomni_pg_backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-vozipomni}
+      POSTGRES_USER: ${POSTGRES_USER:-vozipomni_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vozipomni_db_2026}
+      POSTGRES_EXTRA_OPTS: "--schema=public --blobs"
+      SCHEDULE: "@daily"          # backup diario a las 00:00 UTC (≈2 AM Colombia)
+      BACKUP_KEEP_DAYS: 7         # retener 7 backups diarios
+      BACKUP_KEEP_WEEKS: 4        # retener 4 semanales
+      BACKUP_KEEP_MONTHS: 3       # retener 3 mensuales
+      HEALTHCHECK_PORT: 8080
+      TZ: ${TZ:-America/Bogota}
+    volumes:
+      - pg_backups:/backups
+    networks:
+      - vozipomni_network
+    <<: *restart-policy
+    logging: *default-logging
+    profiles:
+      - backup
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
@@ -388,6 +418,8 @@ volumes:
   asterisk_sounds:
     driver: local
   asterisk_dynamic:
+    driver: local
+  pg_backups:
     driver: local
 
 # =============================================================================

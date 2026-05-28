@@ -116,18 +116,59 @@ class AgentStatusHistory(models.Model):
 
 class AgentBreakReason(models.Model):
     """
-    Razones de descanso para agentes
+    Razones de descanso para agentes (configurables por administrador)
     """
-    name = models.CharField(max_length=100, unique=True)
-    code = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')
+    code = models.CharField(max_length=20, unique=True, verbose_name='Código')
     is_paid = models.BooleanField(default=True, verbose_name='¿Es pagado?')
-    max_duration = models.IntegerField(null=True, blank=True, help_text="Minutos máximos", verbose_name='Duración máxima')
-    is_active = models.BooleanField(default=True)
-    
+    max_duration = models.IntegerField(null=True, blank=True, help_text="Minutos máximos (null = sin límite)", verbose_name='Duración máxima (min)')
+    order = models.IntegerField(default=0, verbose_name='Orden')
+    is_active = models.BooleanField(default=True, verbose_name='Activo')
+    created_at = models.DateTimeField(auto_now_add=True)
+
     class Meta:
         db_table = 'agent_break_reasons'
+        ordering = ['order', 'name']
         verbose_name = 'Razón de Descanso'
         verbose_name_plural = 'Razones de Descanso'
-    
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+
+class AgentGroup(models.Model):
+    """
+    Grupos de agentes para organización, skills-based routing y gestión masiva.
+    Un agente puede pertenecer a múltiples grupos.
+    """
+    name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')
+    description = models.TextField(blank=True, verbose_name='Descripción')
+    agents = models.ManyToManyField(
+        'Agent',
+        related_name='groups',
+        blank=True,
+        verbose_name='Agentes'
+    )
+    is_active = models.BooleanField(default=True, verbose_name='Activo')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_agent_groups'
+    )
+
+    class Meta:
+        db_table = 'agent_groups'
+        ordering = ['name']
+        verbose_name = 'Grupo de Agentes'
+        verbose_name_plural = 'Grupos de Agentes'
+
     def __str__(self):
         return self.name
+
+    @property
+    def agent_count(self):
+        return self.agents.count()

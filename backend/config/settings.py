@@ -6,7 +6,13 @@ from decouple import config
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='vozipomni-insecure-secret-key-change-me')
+_SECRET_KEY_DEFAULT = 'vozipomni-insecure-secret-key-change-me'
+SECRET_KEY = config('SECRET_KEY', default=_SECRET_KEY_DEFAULT)
+if not config('DEBUG', default=False, cast=bool) and SECRET_KEY == _SECRET_KEY_DEFAULT:
+    raise RuntimeError(
+        'SECRET_KEY is set to the insecure default value. '
+        'Set a strong SECRET_KEY in your .env file before running in production.'
+    )
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
@@ -33,6 +39,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'channels',
     'django_filters',
@@ -49,6 +56,8 @@ INSTALLED_APPS = [
     'apps.queues',
     'apps.recordings',
     'apps.api',
+    'apps.audit',
+    'apps.messaging',
 ]
 
 MIDDLEWARE = [
@@ -205,6 +214,16 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DATETIME_FORMAT': '%Y-%m-%d %H:%M:%S',
     'DATE_FORMAT': '%Y-%m-%d',
+    # Rate limiting — protege login y endpoints públicos contra fuerza bruta
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': config('THROTTLE_ANON', default='20/minute'),
+        'user': config('THROTTLE_USER', default='300/minute'),
+        'login': config('THROTTLE_LOGIN', default='5/minute'),
+    },
 }
 
 # JWT Configuration
@@ -215,6 +234,8 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': True,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
 # CORS Configuration
