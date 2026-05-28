@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CallViewSet, SIPTrunkViewSet, IVRViewSet, ExtensionViewSet,
     InboundRouteViewSet, OutboundRouteViewSet, VoicemailViewSet,
-    MusicOnHoldViewSet, TimeConditionViewSet
+    MusicOnHoldViewSet, TimeConditionViewSet, CustomDestinationViewSet
 )
 
 router = DefaultRouter()
@@ -16,6 +16,7 @@ router.register(r'outbound-routes', OutboundRouteViewSet, basename='outbound-rou
 router.register(r'voicemail', VoicemailViewSet, basename='voicemail')
 router.register(r'music-on-hold', MusicOnHoldViewSet, basename='music-on-hold')
 router.register(r'time-conditions', TimeConditionViewSet, basename='time-condition')
+router.register(r'custom-destinations', CustomDestinationViewSet, basename='custom-destination')
 
 urlpatterns = [
     path('', include(router.urls)),

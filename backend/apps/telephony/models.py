@@ -539,6 +539,39 @@ class MusicOnHold(models.Model):
         return self.name
 
 
+class CustomDestination(models.Model):
+    """
+    Destino personalizado de dialplan Asterisk.
+    Permite definir nodos (context + extension + priority) invocables
+    desde rutas entrantes, IVR, condiciones horarias, etc.
+    """
+    name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')
+    description = models.TextField(blank=True, verbose_name='Descripción')
+
+    # Triad Asterisk
+    context = models.CharField(max_length=100, verbose_name='Context')
+    extension = models.CharField(max_length=50, verbose_name='Extension', default='s')
+    priority = models.PositiveIntegerField(default=1, verbose_name='Priority')
+
+    # Destino de fallo (opcional)
+    failover_context = models.CharField(max_length=100, blank=True, verbose_name='Context (fallo)')
+    failover_extension = models.CharField(max_length=50, blank=True, verbose_name='Extension (fallo)')
+    failover_priority = models.PositiveIntegerField(null=True, blank=True, verbose_name='Priority (fallo)')
+
+    is_active = models.BooleanField(default=True, verbose_name='Activo')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'custom_destinations'
+        ordering = ['name']
+        verbose_name = 'Destino Personalizado'
+        verbose_name_plural = 'Destinos Personalizados'
+
+    def __str__(self):
+        return f'{self.name} ({self.context},{self.extension},{self.priority})'
+
+
 class TimeCondition(models.Model):
     """
     Condiciones de horario
@@ -549,6 +582,7 @@ class TimeCondition(models.Model):
         ('extension', 'Extensión'),
         ('voicemail', 'Buzón de Voz'),
         ('announcement', 'Anuncio'),
+        ('custom_destination', 'Destino Personalizado'),
     ]
     
     name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')

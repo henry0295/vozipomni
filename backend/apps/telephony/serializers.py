@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Call, SIPTrunk, IVR, Extension, InboundRoute, 
-    OutboundRoute, Voicemail, MusicOnHold, TimeCondition
+    OutboundRoute, Voicemail, MusicOnHold, TimeCondition, CustomDestination
 )
 from .asterisk_ami import AsteriskAMI
 
@@ -343,3 +343,10 @@ class TimeConditionSerializer(serializers.ModelSerializer):
             return f"{days} {start}-{end}"
         except (IndexError, KeyError):
             return 'Sin horarios'
+
+
+class CustomDestinationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomDestination
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']

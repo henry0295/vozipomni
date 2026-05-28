@@ -179,6 +179,7 @@ const allNavigation = [
       { label: 'Extensiones', icon: 'i-heroicons-hashtag', to: '/extensions' },
       { label: 'Buzones de Voz', icon: 'i-heroicons-inbox', to: '/voicemail' },
       { label: 'Condiciones Horario', icon: 'i-heroicons-clock', to: '/time-conditions' },
+      { label: 'Destinos Personalizados', icon: 'i-heroicons-map-pin', to: '/custom-destinations' },
       { label: 'Grabaciones', icon: 'i-heroicons-video-camera', to: '/recordings' },
       { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings' },
       { label: 'Config. Avanzada', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced' }

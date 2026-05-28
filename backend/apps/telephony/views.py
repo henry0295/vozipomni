@@ -5,12 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from core.permissions import IsAdminUser as IsAdminUserCustom
 from .models import (
     Call, SIPTrunk, IVR, Extension, InboundRoute,
-    OutboundRoute, Voicemail, MusicOnHold, TimeCondition
+    OutboundRoute, Voicemail, MusicOnHold, TimeCondition, CustomDestination
 )
 from .serializers import (
     CallSerializer, SIPTrunkSerializer, IVRSerializer,
     ExtensionSerializer, InboundRouteSerializer, OutboundRouteSerializer,
-    VoicemailSerializer, MusicOnHoldSerializer, TimeConditionSerializer
+    VoicemailSerializer, MusicOnHoldSerializer, TimeConditionSerializer,
+    CustomDestinationSerializer
 )
 from .asterisk_config import AsteriskConfigGenerator
 from .asterisk_ami import AsteriskAMI
@@ -646,3 +647,16 @@ class TimeConditionViewSet(viewsets.ModelViewSet):
             'current_destination_type': dest_type,
             'current_destination': dest,
         })
+
+
+class CustomDestinationViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint para gestión de Destinos Personalizados.
+    Un Destino Personalizado es un nodo de dialplan Asterisk (context+extension+priority)
+    invocable desde Rutas Entrantes, IVR, Condiciones Horarias, etc.
+    """
+    queryset = CustomDestination.objects.all()
+    serializer_class = CustomDestinationSerializer
+    permission_classes = [IsAdminUserCustom]
+    search_fields = ['name', 'context', 'extension']
+    filterset_fields = ['is_active']
