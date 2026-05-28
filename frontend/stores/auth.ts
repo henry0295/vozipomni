@@ -69,6 +69,15 @@ export const useAuthStore = defineStore('auth', {
         localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
         localStorage.removeItem('auth_refresh_token')
+
+        // Limpiar toasts pendientes para evitar notificaciones "fantasma"
+        // en la pantalla de login después de cerrar sesión
+        try {
+          const toast = useToast()
+          toast.toasts.value.forEach(t => toast.remove(t.id))
+        } catch {
+          // useToast puede no estar disponible fuera de un componente; ignorar
+        }
       }
     },
 

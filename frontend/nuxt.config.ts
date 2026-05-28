@@ -22,8 +22,23 @@ export default defineNuxtConfig({
   icon: {
     serverBundle: 'local',
     clientBundle: {
-      scan: true
-    }
+      scan: true,
+      // Iconos usados por Nuxt UI internamente que no son detectados por el scanner
+      // (loading spinners, paginación, selects, etc.)
+      icons: [
+        'heroicons:arrow-path-20-solid',
+        'heroicons:chevron-left-20-solid',
+        'heroicons:chevron-right-20-solid',
+        'heroicons:chevron-up-down-20-solid',
+        'heroicons:check-20-solid',
+        'heroicons:x-mark-20-solid',
+        'heroicons:magnifying-glass-20-solid',
+        'heroicons:ellipsis-horizontal-20-solid',
+        'heroicons:information-circle-20-solid',
+      ],
+    },
+    // Nunca intentar cargar iconos por HTTP desde el servidor de producción
+    fallbackToApi: false,
   },
 
   // Desactivar SSR para el layout si es necesario, pero preferimos mantener SSR activo

@@ -51,7 +51,15 @@ export default defineNuxtPlugin((nuxtApp) => {
     onResponseError({ request, response, options }) {
       const status = response.status
       const data = response._data
-      
+
+      // Suprimir errores si el usuario está cerrando sesión o no autenticado
+      // para evitar toasts "fantasma" en la pantalla de login
+      const authStore = useAuthStore()
+      if (!authStore.isAuthenticated && status !== 401) {
+        console.warn(`[API Error suppressed - no session] ${status}`, { url: request })
+        return
+      }
+
       // Log error
       console.error(`[API Error] ${status}`, {
         url: request,

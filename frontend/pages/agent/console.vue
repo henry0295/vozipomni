@@ -219,9 +219,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAgentStore } from '~/stores/agent'
 import type { Agent } from '~/types'
 
-// Middleware para requerir autenticación
+// Middleware para requerir autenticación Y rol agente
 definePageMeta({
-  middleware: 'auth',
+  middleware: ['auth', 'agent-only'],
   layout: 'agent'
 })
 

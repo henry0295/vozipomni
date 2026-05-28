@@ -37,7 +37,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
 class CampaignViewSet(viewsets.ModelViewSet):
     queryset = Campaign.objects.select_related(
-        'queue', 'contact_list', 'created_by', 'current_campaign'
+        'queue', 'contact_list', 'created_by'
     ).prefetch_related(
         'dispositions', 'agents', 'calls'
     )
