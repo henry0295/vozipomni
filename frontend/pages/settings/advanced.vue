@@ -348,7 +348,8 @@ async function removeFromGroup(agent: any) {
 }
 
 function authHeaders() {
-  return { Authorization: `Bearer ${useCookie('access_token').value}` }
+  const token = process.client ? localStorage.getItem('auth_token') : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 onMounted(() => {

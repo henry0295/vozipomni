@@ -232,7 +232,8 @@ const statusLabelText = (s: string) => ({ pending: 'Pendiente', approved: 'Aprob
 const formatDate = (d: string) => new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' })
 
 function authHeaders() {
-  return { Authorization: `Bearer ${useCookie('access_token').value}` }
+  const token = process.client ? localStorage.getItem('auth_token') : null
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 async function loadAudits() {
