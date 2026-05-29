@@ -22,6 +22,7 @@ export interface Agent {
   user_details?: User
   agent_id: string
   sip_extension: string
+  sip_password?: string
   status: 'available' | 'busy' | 'oncall' | 'break' | 'offline' | 'wrapup'
   webrtc_enabled: boolean
   max_concurrent_calls: number

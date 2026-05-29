@@ -22,6 +22,9 @@ class Agent(models.Model):
     sip_extension = models.CharField(max_length=20, unique=True, verbose_name='Extensión SIP')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='offline', verbose_name='Estado')
     
+    # Credenciales SIP (necesario para JsSIP/WebRTC)
+    sip_password = models.CharField(max_length=64, blank=True, default='', verbose_name='Password SIP')
+
     # Configuración
     webrtc_enabled = models.BooleanField(default=True, verbose_name='WebRTC habilitado')
     max_concurrent_calls = models.IntegerField(default=1, verbose_name='Llamadas concurrentes máx')

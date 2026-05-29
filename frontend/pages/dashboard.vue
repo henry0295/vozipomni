@@ -238,5 +238,51 @@ onMounted(() => {
   // Auto-refresh cada 30 segundos
   const interval = setInterval(loadDashboard, 30000)
   onUnmounted(() => clearInterval(interval))
+
+  // WebSocket para actualizaciones en tiempo real desde Django Channels
+  const config = useRuntimeConfig()
+  const apiBase = config.public.apiBase as string
+  // Construir URL WebSocket: http(s)://host:port → ws(s)://host:port
+  const wsBase = apiBase
+    .replace(/^https:\/\//, 'wss://')
+    .replace(/^http:\/\//, 'ws://')
+    .replace(/\/api\/?$/, '')
+
+  const token = localStorage.getItem('auth_token')
+  const wsUrl = `${wsBase}/ws/dashboard/${token ? '?token=' + token : ''}`
+
+  let ws: WebSocket | null = null
+  let wsReconnect: ReturnType<typeof setTimeout> | null = null
+
+  const connectWS = () => {
+    ws = new WebSocket(wsUrl)
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'dashboard_update' && msg.data) {
+          Object.assign(stats, msg.data)
+        }
+      } catch {
+        // ignorar mensajes malformados
+      }
+    }
+
+    ws.onclose = () => {
+      // Reconectar en 5 s si la página sigue abierta
+      wsReconnect = setTimeout(connectWS, 5000)
+    }
+
+    ws.onerror = () => {
+      ws?.close()
+    }
+  }
+
+  connectWS()
+
+  onUnmounted(() => {
+    if (wsReconnect) clearTimeout(wsReconnect)
+    ws?.close()
+  })
 })
 </script>

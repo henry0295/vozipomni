@@ -99,7 +99,7 @@ class AgentSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(write_only=True, required=False)
     last_name = serializers.CharField(write_only=True, required=False)
     email = serializers.EmailField(write_only=True, required=False)
-    sip_password = serializers.CharField(write_only=True, required=False, style={'input_type': 'password'})
+    sip_password = serializers.CharField(required=False, style={'input_type': 'password'})
     
     class Meta:
         model = Agent
@@ -213,14 +213,18 @@ class AgentSerializer(serializers.ModelSerializer):
                         'detail': f'Error de integridad: {error_msg}'
                     })
             
+            # Generar password SIP si no se proporcionó
+            if not sip_password:
+                import uuid
+                sip_password = str(uuid.uuid4())[:16]
+
+            # Guardar password SIP en el modelo
+            agent.sip_password = sip_password
+            agent.save(update_fields=['sip_password'])
+
             # Crear endpoint PJSIP en Asterisk si se habilitó WebRTC
             if agent.webrtc_enabled:
                 try:
-                    if not sip_password:
-                        # Generar contraseña SIP si no se proporcionó
-                        import uuid
-                        sip_password = str(uuid.uuid4())[:16]
-                    
                     from apps.telephony.asterisk_config import AsteriskConfigGenerator
                     generator = AsteriskConfigGenerator()
                     generator.create_pjsip_endpoint(
@@ -230,7 +234,6 @@ class AgentSerializer(serializers.ModelSerializer):
                     )
                     logger.info(f"Endpoint PJSIP creado para {agent.sip_extension}")
                 except Exception as e:
-                    # Log error pero no fallar la creación - PJSIP es opcional
                     logger.warning(f"Advertencia: No se pudo crear endpoint PJSIP para {agent.sip_extension}: {e}")
             
             return agent

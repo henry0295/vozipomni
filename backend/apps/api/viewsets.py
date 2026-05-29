@@ -181,21 +181,31 @@ class AgentViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def login(self, request, pk=None):
-        """Marcar agente como conectado"""
+        """Marcar agente como conectado y unirlo a las colas ACD de Asterisk"""
+        from apps.agents.services import AgentService
+        from core.exceptions import AgentNotFoundError
         agent = self.get_object()
-        agent.login()
-        return Response({
-            'status': 'logged in',
-            'agent_id': agent.agent_id,
-            'sip_extension': agent.sip_extension
-        })
-    
+        try:
+            result = AgentService.login_agent(agent.id, request.user)
+            return Response({
+                'status': 'logged in',
+                'agent_id': result['agent_code'],
+                'sip_extension': result['sip_extension'],
+                'sip_password': agent.sip_password,
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(detail=True, methods=['post'])
     def logout(self, request, pk=None):
-        """Marcar agente como desconectado"""
+        """Marcar agente como desconectado y retirarlo de las colas ACD de Asterisk"""
+        from apps.agents.services import AgentService
         agent = self.get_object()
-        agent.logout()
-        return Response({'status': 'logged out'})
+        try:
+            AgentService.logout_agent(agent.id, request.user)
+            return Response({'status': 'logged out'})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
@@ -448,7 +458,7 @@ class CallViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['start_time', 'talk_time']
 
 
-class RecordingViewSet(viewsets.ReadOnlyModelViewSet):
+class RecordingViewSet(viewsets.ModelViewSet):
     queryset = Recording.objects.all()
     serializer_class = serializers.RecordingSerializer
     # Grabaciones: admin y supervisor; analyst puede leer también
@@ -456,6 +466,16 @@ class RecordingViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter]
     search_fields = ['filename', 'call__call_id']
     filterset_fields = ['status', 'agent', 'campaign']
+    http_method_names = ['get', 'delete', 'head', 'options']  # Solo lectura + borrado
+
+    def perform_destroy(self, instance):
+        import os
+        if instance.file_path and os.path.exists(instance.file_path):
+            try:
+                os.remove(instance.file_path)
+            except OSError:
+                pass
+        instance.delete()
 
 
 class ReportViewSet(viewsets.ModelViewSet):

@@ -365,7 +365,7 @@ watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
       sipServer: sipServer.split(':')[0],
       sipPort: 8089, // Puerto WebSocket de Asterisk
       sipUser: agentStore.agent.sip_extension,
-      sipPassword: agentStore.agent.sip_extension, // En producción usar password real
+      sipPassword: agentStore.agent.sip_password || agentStore.agent.sip_extension,
       sipExtension: agentStore.agent.sip_extension,
       displayName: agentStore.agent.user_details?.first_name || 'Agente'
     })
