@@ -189,7 +189,7 @@
           </div>
 
           <!-- Transferencia -->
-          <div class="p-3 bg-blue-50 rounded-lg">
+          <div class="p-3 bg-blue-50 rounded-lg space-y-2">
             <p class="text-sm font-medium text-blue-800 mb-2">Transferir a:</p>
             <div class="flex gap-2">
               <UInput
@@ -198,6 +198,50 @@
                 class="flex-1"
               >
                 <template #leading>
+                  <UIcon name="i-heroicons-arrow-right-circle" />
+                </template>
+              </UInput>
+              <UButton
+                color="blue"
+                variant="soft"
+                icon="i-heroicons-arrow-right-circle"
+                :disabled="!transferNumber"
+                @click="transferCall"
+              >
+                Rápida
+              </UButton>
+              <UButton
+                color="indigo"
+                variant="soft"
+                icon="i-heroicons-users"
+                @click="openConsultiveTransfer"
+              >
+                Agentes
+              </UButton>
+            </div>
+          </div>
+
+          <!-- Conferencia a 3 -->
+          <div class="p-3 bg-purple-50 rounded-lg">
+            <p class="text-sm font-medium text-purple-800 mb-2">Conferencia a 3:</p>
+            <div class="flex gap-2">
+              <UInput
+                v-model="conferenceNumber"
+                placeholder="Número del 3er participante"
+                class="flex-1"
+              />
+              <UButton
+                color="purple"
+                variant="soft"
+                icon="i-heroicons-user-group"
+                :disabled="!conferenceNumber || conferenceLoading"
+                :loading="conferenceLoading"
+                @click="startConference"
+              >
+                Conferencia
+              </UButton>
+            </div>
+          </div>
                   <UIcon name="i-heroicons-arrow-right-circle" />
                 </template>
               </UInput>
@@ -225,6 +269,38 @@
         </div>
       </div>
     </UCard>
+
+    <!-- Modal: Transfer Consultivo -->
+    <UModal v-model="showConsultiveModal">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold">Agentes disponibles</h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="showConsultiveModal = false" />
+          </div>
+        </template>
+        <div v-if="loadingAgents" class="text-center py-6">
+          <UIcon name="i-heroicons-arrow-path" class="animate-spin w-6 h-6 mx-auto" />
+        </div>
+        <div v-else-if="availableAgents.length === 0" class="text-center py-6 text-gray-500">
+          No hay agentes disponibles en este momento
+        </div>
+        <div v-else class="space-y-2">
+          <div
+            v-for="agent in availableAgents"
+            :key="agent.id"
+            class="flex items-center justify-between p-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 cursor-pointer transition"
+            @click="transferToAgent(agent)"
+          >
+            <div>
+              <p class="font-medium text-sm">{{ agent.name }}</p>
+              <p class="text-xs text-gray-500">Ext: {{ agent.sip_extension }} · {{ agent.calls_today }} llamadas hoy</p>
+            </div>
+            <UBadge color="green" size="xs">Disponible</UBadge>
+          </div>
+        </div>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -235,6 +311,193 @@ import { useAgentStore } from '~/stores/agent'
 
 const agentStore = useAgentStore()
 const webrtc = useWebRTC()
+
+// State
+const dialNumber = ref('')
+const transferNumber = ref('')
+const conferenceNumber = ref('')
+const conferenceLoading = ref(false)
+const showDtmf = ref(false)
+const showConsultiveModal = ref(false)
+const availableAgents = ref<any[]>([])
+const loadingAgents = ref(false)
+
+// Contactos rápidos (se pueden cargar desde API)
+const quickContacts = ref([
+  { name: 'Supervisor', extension: '1000' },
+  { name: 'Soporte', extension: '1001' },
+  { name: 'Ventas', extension: '1002' },
+  { name: 'Servicio', extension: '1003' }
+])
+
+const authHeaders = () => ({ Authorization: 'Bearer ' + localStorage.getItem('auth_token') })
+
+// Computed
+const hasActiveCall = computed(() => webrtc.hasActiveCall.value)
+const canMakeCall = computed(() => webrtc.canMakeCall.value && agentStore.canReceiveCalls)
+const currentSession = computed(() => webrtc.currentSession.value)
+const callDuration = computed(() => webrtc.callDuration.value)
+const connectionStatus = computed(() => {
+  if (webrtc.isRegistered.value) return 'Conectado'
+  if (webrtc.isConnecting.value) return 'Conectando...'
+  return 'Desconectado'
+})
+const connectionColor = computed(() => {
+  if (webrtc.isRegistered.value) return 'green'
+  if (webrtc.isConnecting.value) return 'yellow'
+  return 'red'
+})
+
+const callDirectionLabel = computed(() => {
+  if (!currentSession.value) return ''
+  return currentSession.value.direction === 'incoming' ? 'Llamada entrante' : 'Llamada saliente'
+})
+
+// Methods
+const addDigit = (digit: string) => {
+  dialNumber.value += digit
+}
+
+const clearDigit = () => {
+  dialNumber.value = dialNumber.value.slice(0, -1)
+}
+
+const makeCall = () => {
+  if (!dialNumber.value) return
+  const result = webrtc.call(dialNumber.value)
+  if (!result.success) alert(`Error al llamar: ${result.error}`)
+}
+
+const quickCall = (extension: string) => {
+  dialNumber.value = extension
+  makeCall()
+}
+
+const answerCall = () => {
+  const result = webrtc.answer()
+  if (!result.success) alert(`Error al contestar: ${result.error}`)
+}
+
+const rejectCall = () => {
+  const result = webrtc.reject()
+  if (!result.success) alert(`Error al rechazar: ${result.error}`)
+}
+
+const hangupCall = () => {
+  const result = webrtc.hangup()
+  if (!result.success) {
+    alert(`Error al colgar: ${result.error}`)
+  } else {
+    dialNumber.value = ''
+    transferNumber.value = ''
+    conferenceNumber.value = ''
+    showDtmf.value = false
+  }
+}
+
+const toggleMute = () => {
+  const result = webrtc.toggleMute()
+  if (!result.success) alert(`Error al silenciar: ${result.error}`)
+}
+
+const toggleHold = () => {
+  const result = webrtc.toggleHold()
+  if (!result.success) alert(`Error al retener: ${result.error}`)
+}
+
+const sendDTMF = (digit: string) => {
+  const result = webrtc.sendDTMF(digit)
+  if (!result.success) alert(`Error al enviar DTMF: ${result.error}`)
+}
+
+const transferCall = () => {
+  if (!transferNumber.value) return
+  const result = webrtc.transfer(transferNumber.value)
+  if (!result.success) {
+    alert(`Error al transferir: ${result.error}`)
+  } else {
+    transferNumber.value = ''
+  }
+}
+
+// Transfer consultivo: listar agentes disponibles
+const openConsultiveTransfer = async () => {
+  showConsultiveModal.value = true
+  loadingAgents.value = true
+  try {
+    const data = await $fetch('/api/cc/available-agents/', { headers: authHeaders() })
+    availableAgents.value = (data as any).agents || []
+  } catch {
+    availableAgents.value = []
+  } finally {
+    loadingAgents.value = false
+  }
+}
+
+const transferToAgent = async (agent: any) => {
+  try {
+    const session = currentSession.value
+    await $fetch('/api/cc/consultive-transfer/', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: {
+        channel: (session as any)?.channel || '',
+        target_extension: agent.sip_extension,
+      },
+    })
+    showConsultiveModal.value = false
+  } catch (e: any) {
+    alert('Error al transferir: ' + (e?.data?.error || e.message))
+  }
+}
+
+// Conferencia a 3
+const startConference = async () => {
+  if (!conferenceNumber.value) return
+  conferenceLoading.value = true
+  try {
+    const session = currentSession.value
+    await $fetch('/api/cc/conference/', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: {
+        channel: (session as any)?.channel || '',
+        third_party: conferenceNumber.value,
+        agent_id: agentStore.agent?.id,
+      },
+    })
+    conferenceNumber.value = ''
+  } catch (e: any) {
+    alert('Error al crear conferencia: ' + (e?.data?.error || e.message))
+  } finally {
+    conferenceLoading.value = false
+  }
+}
+
+const formatDuration = webrtc.formatDuration
+
+// Registrar WebRTC cuando el agente hace login
+watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
+  if (isLoggedIn && agentStore.agent) {
+    const config = useRuntimeConfig()
+    const sipServer = config.public.apiBase.replace(/^https?:\/\//, '').replace('/api', '')
+    webrtc.register({
+      sipServer: sipServer.split(':')[0],
+      sipPort: 8089,
+      sipUser: agentStore.agent.sip_extension,
+      sipPassword: agentStore.agent.sip_password || agentStore.agent.sip_extension,
+      sipExtension: agentStore.agent.sip_extension,
+      displayName: agentStore.agent.user_details?.first_name || 'Agente'
+    })
+  } else {
+    webrtc.unregister()
+  }
+})
+
+onUnmounted(() => {
+  webrtc.unregister()
+})
+</script>
 
 // State
 const dialNumber = ref('')

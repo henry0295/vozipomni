@@ -11,6 +11,7 @@
           color="gray"
           variant="outline"
           size="lg"
+          @click="showBulkImport = true"
         >
           Importar
         </UButton>
@@ -113,6 +114,51 @@
         </template>
       </UTable>
     </UCard>
+
+    <!-- Modal: Importación masiva -->
+    <UModal v-model="showBulkImport">
+      <UCard>
+        <template #header>
+          <h3 class="font-semibold">Importar contactos (CSV / Excel)</h3>
+        </template>
+        <div class="space-y-4">
+          <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <UIcon name="i-heroicons-document-arrow-up" class="w-10 h-10 mx-auto text-gray-400 mb-3" />
+            <p class="text-sm text-gray-600 mb-2">Selecciona un archivo CSV o Excel (.xlsx)</p>
+            <input type="file" accept=".csv,.xlsx,.xls" class="hidden" id="bulk-file-input" @change="onFileChange" />
+            <label for="bulk-file-input" class="cursor-pointer">
+              <UButton color="gray" variant="outline" as="span">Seleccionar archivo</UButton>
+            </label>
+            <p v-if="importFile" class="mt-2 text-sm text-green-600 font-medium">{{ importFile.name }}</p>
+          </div>
+
+          <!-- Resultado -->
+          <div v-if="importResult" class="rounded-lg p-4" :class="importResult.error ? 'bg-red-50' : 'bg-green-50'">
+            <p v-if="importResult.error" class="text-red-700 text-sm">{{ importResult.error }}</p>
+            <div v-else class="text-sm space-y-1">
+              <p class="text-green-700 font-medium">✓ Importación completada</p>
+              <p class="text-gray-600">Importados: <strong>{{ importResult.imported }}</strong></p>
+              <p class="text-gray-600">Omitidos: <strong>{{ importResult.skipped }}</strong></p>
+              <p v-if="importResult.total_errors" class="text-red-600">Errores: {{ importResult.total_errors }}</p>
+            </div>
+          </div>
+        </div>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="gray" @click="showBulkImport = false">Cerrar</UButton>
+            <UButton
+              color="primary"
+              icon="i-heroicons-arrow-up-tray"
+              :disabled="!importFile"
+              :loading="importLoading"
+              @click="runBulkImport"
+            >
+              Importar
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -122,6 +168,38 @@ definePageMeta({
 })
 
 const showCreateModal = ref(false)
+const showBulkImport = ref(false)
+const importFile = ref<File | null>(null)
+const importListId = ref<number | null>(null)
+const importLoading = ref(false)
+const importResult = ref<any>(null)
+
+const authHeaders = () => ({ Authorization: 'Bearer ' + localStorage.getItem('auth_token') })
+
+const onFileChange = (e: Event) => {
+  const input = e.target as HTMLInputElement
+  importFile.value = input.files?.[0] || null
+  importResult.value = null
+}
+
+const runBulkImport = async () => {
+  if (!importFile.value) return
+  importLoading.value = true
+  importResult.value = null
+  try {
+    const fd = new FormData()
+    fd.append('file', importFile.value)
+    if (importListId.value) fd.append('contact_list_id', String(importListId.value))
+    const result = await $fetch('/api/cc/bulk-import/', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: fd,
+    })
+    importResult.value = result
+  } catch (e: any) {
+    importResult.value = { error: e?.data?.error || e.message }
+  } finally { importLoading.value = false }
+}
 const loading = ref(false)
 const error = ref<string | null>(null)
 

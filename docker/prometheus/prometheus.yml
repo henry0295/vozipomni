@@ -1,0 +1,33 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    monitor: 'vozipomni-prod'
+
+scrape_configs:
+  # Django / Gunicorn — django-prometheus expone /metrics
+  - job_name: 'django'
+    static_configs:
+      - targets: ['127.0.0.1:8000']
+    metrics_path: '/metrics'
+
+  # Celery — exporta métricas via celery-prometheus-exporter (si está activo)
+  - job_name: 'celery'
+    static_configs:
+      - targets: ['127.0.0.1:8001']
+    metrics_path: '/metrics'
+
+  # Node exporter — métricas del host
+  - job_name: 'node'
+    static_configs:
+      - targets: ['127.0.0.1:9100']
+
+  # Redis exporter
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['127.0.0.1:9121']
+
+  # Prometheus sí mismo
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['127.0.0.1:9090']

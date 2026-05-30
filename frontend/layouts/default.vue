@@ -143,6 +143,9 @@
         </div>
       </main>
     </div>
+
+    <!-- Screen Pop global (llamadas entrantes) -->
+    <ScreenPop />
   </div>
 </template>
 
@@ -161,7 +164,9 @@ const allNavigation = [
   { label: 'Agentes', icon: 'i-heroicons-user-group', to: '/agents', roles: null },
   { label: 'Campañas', icon: 'i-heroicons-megaphone', to: '/campaigns', roles: null },
   { label: 'Contactos', icon: 'i-heroicons-users', to: '/contacts', roles: null },
+  { label: 'Callbacks', icon: 'i-heroicons-phone-arrow-down-left', to: '/callbacks', roles: null },
   { label: 'Llamadas', icon: 'i-heroicons-phone-arrow-up-right', to: '/calls', roles: null },
+  { label: 'Calidad', icon: 'i-heroicons-star', to: '/quality', roles: ['admin', 'supervisor'] },
   { label: 'Reportes', icon: 'i-heroicons-chart-bar', to: '/reports', roles: null },
   
   // Menú desplegable de Telefonía - Contact Center
@@ -181,6 +186,7 @@ const allNavigation = [
       { label: 'Condiciones Horario', icon: 'i-heroicons-clock', to: '/time-conditions' },
       { label: 'Destinos Personalizados', icon: 'i-heroicons-map-pin', to: '/custom-destinations' },
       { label: 'Grabaciones', icon: 'i-heroicons-video-camera', to: '/recordings' },
+      { label: 'Webhooks', icon: 'i-heroicons-link', to: '/webhooks' },
       { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings' },
       { label: 'Config. Avanzada', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced' }
     ]

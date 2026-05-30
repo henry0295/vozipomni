@@ -468,9 +468,48 @@ services:
         reservations:
           memory: 128M
 
-# =============================================================================
-# VOLUMES
-# =============================================================================
+  # ─── Prometheus — recolección de métricas ──────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    <<: *restart-policy
+    network_mode: host
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.listen-address=0.0.0.0:9090'
+    volumes:
+      - prometheus_data:/prometheus
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # ─── Grafana — visualización de métricas ────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.3.3
+    <<: *restart-policy
+    network_mode: host
+    environment:
+      GF_SERVER_HTTP_PORT: "3001"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-vozipomni_grafana_2026}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
 volumes:
   postgres_data:
     driver: local
@@ -489,6 +528,10 @@ volumes:
   asterisk_lib:
     driver: local
   asterisk_configs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
     driver: local
 
 # =============================================================================
