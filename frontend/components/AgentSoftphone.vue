@@ -242,19 +242,6 @@
               </UButton>
             </div>
           </div>
-                  <UIcon name="i-heroicons-arrow-right-circle" />
-                </template>
-              </UInput>
-              <UButton
-                color="blue"
-                icon="i-heroicons-arrow-right-circle"
-                :disabled="!transferNumber"
-                @click="transferCall"
-              >
-                Transferir
-              </UButton>
-            </div>
-          </div>
 
           <!-- Botón colgar -->
           <UButton
