@@ -222,13 +222,59 @@ def on_queue_member_delete(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Call)
 def on_call_save(sender, instance, created, **kwargs):
-    if created and instance.status == 'completed':
-        if instance.agent:
+    # Actualizar estadísticas de agente
+    if instance.status == 'completed' and instance.agent:
+        try:
             from django.db.models import F
-            instance.agent.total_calls = F('total_calls') + 1
-            instance.agent.total_talk_time = F('total_talk_time') + instance.talk_time
-            instance.agent.save(update_fields=['total_calls', 'total_talk_time'])
-            logger.debug(f"Estadística del agente {instance.agent.user.username} actualizada")
+            instance.agent.__class__.objects.filter(pk=instance.agent_id).update(
+                calls_today=F('calls_today') + (1 if created else 0),
+            )
+        except Exception as e:
+            logger.debug(f"Error updating agent stats: {e}")
+
+    # Disparar webhooks según estado
+    _dispatch_call_webhook(instance, created)
+
+
+def _dispatch_call_webhook(instance, created):
+    """Despachar webhook para eventos de llamada en background."""
+    try:
+        event_map = {
+            'answered':  'call.answered',
+            'completed': 'call.completed',
+            'abandoned': 'call.abandoned',
+        }
+        if created:
+            event_type = 'call.initiated'
+        else:
+            event_type = event_map.get(instance.status)
+
+        if not event_type:
+            return
+
+        payload = {
+            'event': event_type,
+            'call_id': instance.call_id,
+            'direction': instance.direction,
+            'status': instance.status,
+            'caller_id': instance.caller_id,
+            'called_number': instance.called_number,
+            'agent_id': instance.agent_id,
+            'campaign_id': instance.campaign_id,
+            'queue_id': instance.queue_id,
+            'duration': instance.duration,
+            'talk_time': instance.talk_time,
+            'start_time': instance.start_time.isoformat() if instance.start_time else None,
+        }
+        # Asincrónico via Celery para no bloquear el request
+        from apps.telephony.tasks import deliver_webhook as _dw
+        from apps.telephony.models import WebhookEndpoint
+        endpoints = WebhookEndpoint.objects.filter(is_active=True).values_list('id', 'events')
+        for ep_id, ep_events in endpoints:
+            if not ep_events or event_type in ep_events:
+                _dw.delay(ep_id, event_type, payload)
+    except Exception as e:
+        logger.debug(f"Webhook dispatch error (non-critical): {e}")
 
 
 # ============= INSTALACIÓN DE SEÑALES =============

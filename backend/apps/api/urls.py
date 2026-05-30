@@ -6,6 +6,11 @@ from apps.api import viewsets
 from apps.api import views
 from apps.api.supervisor_viewsets import SupervisorViewSet
 from apps.api.extra_viewsets import AgentBreakReasonViewSet, AgentGroupViewSet, AuditViewSet
+from apps.api.cc_viewsets import (
+    CallbackViewSet, WebhookViewSet,
+    ScreenPopView, ConsultiveTransferView, ConferenceView,
+    DNCCheckView, BulkContactImportView, QualityStatsView,
+)
 from apps.telephony.views import SIPTrunkViewSet
 from apps.reports.views import ReportViewSet as ReportViewSetFull
 
@@ -27,6 +32,9 @@ router.register(r'agent-groups', AgentGroupViewSet, basename='agentgroup')
 router.register(r'break-reasons', AgentBreakReasonViewSet, basename='breakreason')
 # Auditoría de gestiones
 router.register(r'audits', AuditViewSet, basename='audit')
+# Contact Center features avanzados
+router.register(r'callbacks', CallbackViewSet, basename='callback')
+router.register(r'webhooks', WebhookViewSet, basename='webhook')
 
 urlpatterns = [
     # Authentication
@@ -40,4 +48,13 @@ urlpatterns = [
 
     # Telephony
     path('telephony/', include('apps.telephony.urls')),
+
+    # Contact Center - features avanzados
+    path('cc/screen-pop/', ScreenPopView.as_view(), name='screen-pop'),
+    path('cc/available-agents/', ConsultiveTransferView.as_view(), name='available-agents'),
+    path('cc/consultive-transfer/', ConsultiveTransferView.as_view(), name='consultive-transfer'),
+    path('cc/conference/', ConferenceView.as_view(), name='conference'),
+    path('cc/dnc-check/', DNCCheckView.as_view(), name='dnc-check'),
+    path('cc/bulk-import/', BulkContactImportView.as_view(), name='bulk-import'),
+    path('cc/quality-stats/', QualityStatsView.as_view(), name='quality-stats'),
 ]

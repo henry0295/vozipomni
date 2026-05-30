@@ -608,3 +608,136 @@ class TimeCondition(models.Model):
     
     def __str__(self):
         return self.name
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Callback Requests
+# ──────────────────────────────────────────────────────────────────────────────
+
+class CallbackRequest(models.Model):
+    """
+    Solicitud de devolución de llamada.
+    Se crea cuando un contacto pide ser llamado más tarde o cuando
+    una llamada no es contestada y el sistema programa reintento.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('scheduled', 'Programado'),
+        ('dialing', 'Marcando'),
+        ('completed', 'Completado'),
+        ('failed', 'Fallido'),
+        ('cancelled', 'Cancelado'),
+    ]
+
+    phone = models.CharField(max_length=30, verbose_name='Teléfono')
+    contact_name = models.CharField(max_length=200, blank=True, verbose_name='Nombre contacto')
+    notes = models.TextField(blank=True, verbose_name='Notas')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='Estado')
+    priority = models.IntegerField(default=0, verbose_name='Prioridad')
+    scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Programado para')
+    attempts = models.IntegerField(default=0, verbose_name='Intentos')
+    max_attempts = models.IntegerField(default=3, verbose_name='Máx. intentos')
+
+    # Relaciones opcionales
+    call = models.ForeignKey('Call', on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name='callbacks', verbose_name='Llamada origen')
+    campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.SET_NULL, null=True, blank=True,
+                                 related_name='callbacks', verbose_name='Campaña')
+    agent = models.ForeignKey('agents.Agent', on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name='callbacks_assigned', verbose_name='Agente asignado')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+                                   verbose_name='Creado por')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'callback_requests'
+        ordering = ['-priority', 'scheduled_at']
+        verbose_name = 'Devolución de Llamada'
+        verbose_name_plural = 'Devoluciones de Llamada'
+        indexes = [
+            models.Index(fields=['status', 'scheduled_at'], name='callback_status_sched_idx'),
+            models.Index(fields=['phone'], name='callback_phone_idx'),
+        ]
+
+    def __str__(self):
+        return f"Callback {self.phone} [{self.status}] @ {self.scheduled_at or 'ASAP'}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Webhooks
+# ──────────────────────────────────────────────────────────────────────────────
+
+WEBHOOK_EVENTS = [
+    ('call.initiated',    'Llamada iniciada'),
+    ('call.answered',     'Llamada contestada'),
+    ('call.completed',    'Llamada completada'),
+    ('call.abandoned',    'Llamada abandonada'),
+    ('agent.login',       'Agente conectado'),
+    ('agent.logout',      'Agente desconectado'),
+    ('agent.status',      'Cambio de estado agente'),
+    ('campaign.started',  'Campaña iniciada'),
+    ('campaign.paused',   'Campaña pausada'),
+    ('campaign.finished', 'Campaña finalizada'),
+    ('callback.created',  'Callback creado'),
+    ('callback.completed','Callback completado'),
+]
+
+
+class WebhookEndpoint(models.Model):
+    """Endpoint externo al que se notifican eventos del contact center."""
+
+    name = models.CharField(max_length=200, verbose_name='Nombre')
+    url = models.URLField(max_length=500, verbose_name='URL')
+    secret = models.CharField(max_length=200, blank=True, verbose_name='Secret HMAC',
+                              help_text='Si se establece, se firma el payload con HMAC-SHA256 en la cabecera X-Webhook-Signature.')
+    events = models.JSONField(default=list, verbose_name='Eventos',
+                              help_text='Lista de slugs de eventos a notificar (vacío = todos).')
+    headers = models.JSONField(default=dict, blank=True, verbose_name='Headers adicionales')
+    is_active = models.BooleanField(default=True, verbose_name='Activo')
+    retry_on_failure = models.BooleanField(default=True, verbose_name='Reintentar en fallo')
+    timeout_seconds = models.IntegerField(default=10, verbose_name='Timeout (seg)')
+
+    last_triggered_at = models.DateTimeField(null=True, blank=True, verbose_name='Última ejecución')
+    last_status_code = models.IntegerField(null=True, blank=True, verbose_name='Último código HTTP')
+    total_deliveries = models.IntegerField(default=0, verbose_name='Entregas totales')
+    failed_deliveries = models.IntegerField(default=0, verbose_name='Entregas fallidas')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+
+    class Meta:
+        db_table = 'webhook_endpoints'
+        ordering = ['name']
+        verbose_name = 'Webhook'
+        verbose_name_plural = 'Webhooks'
+
+    def __str__(self):
+        return f"{self.name} → {self.url}"
+
+    def should_notify(self, event_type: str) -> bool:
+        """Determina si este endpoint debe ser notificado para este evento."""
+        return self.is_active and (not self.events or event_type in self.events)
+
+
+class WebhookDelivery(models.Model):
+    """Log de cada intento de entrega de un webhook."""
+
+    endpoint = models.ForeignKey(WebhookEndpoint, on_delete=models.CASCADE, related_name='deliveries')
+    event_type = models.CharField(max_length=100, verbose_name='Tipo de evento')
+    payload = models.JSONField(verbose_name='Payload')
+    status_code = models.IntegerField(null=True, blank=True, verbose_name='HTTP Status')
+    response_body = models.TextField(blank=True, verbose_name='Respuesta')
+    success = models.BooleanField(default=False, verbose_name='Exitoso')
+    duration_ms = models.IntegerField(default=0, verbose_name='Duración (ms)')
+    attempt = models.IntegerField(default=1, verbose_name='Intento')
+    error_message = models.TextField(blank=True, verbose_name='Error')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'webhook_deliveries'
+        ordering = ['-created_at']
+        verbose_name = 'Entrega de Webhook'
+        verbose_name_plural = 'Entregas de Webhook'

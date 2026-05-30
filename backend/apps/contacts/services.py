@@ -302,29 +302,62 @@ class ContactService:
     ) -> Dict:
         """
         Bulk update contact statuses
-        
-        Args:
-            contact_ids: List of contact IDs
-            status: New status
-            user: User performing update
-            
-        Returns:
-            dict: Update results
         """
         updated = Contact.objects.filter(
             id__in=contact_ids
         ).update(status=status)
-        
+
         logger.info(
             "Bulk contact status update",
-            extra={
-                'updated_count': updated,
-                'new_status': status,
-                'user_id': user.id
-            }
+            extra={'updated_count': updated, 'new_status': status, 'user_id': user.id}
         )
-        
-        return {
-            'success': True,
-            'updated': updated
-        }
+        return {'success': True, 'updated': updated}
+
+    @staticmethod
+    @transaction.atomic
+    def import_contacts_from_excel(
+        contact_list_id: int,
+        excel_file,
+        user,
+        skip_duplicates: bool = True,
+    ) -> Dict:
+        """
+        Importar contactos desde archivo Excel (.xlsx / .xls).
+        Requiere openpyxl (ya incluido en django).
+        Reutiliza la misma lógica de CSV convirtiéndolo en un DictReader virtual.
+        """
+        try:
+            import openpyxl
+        except ImportError:
+            raise InvalidContactError("openpyxl no está instalado. Ejecuta: pip install openpyxl")
+
+        wb = openpyxl.load_workbook(excel_file, read_only=True, data_only=True)
+        ws = wb.active
+
+        rows = list(ws.iter_rows(values_only=True))
+        if not rows:
+            return {'success': True, 'imported': 0, 'skipped': 0, 'errors': [], 'total_errors': 0}
+
+        # Primera fila como cabecera
+        headers = [str(h).strip().lower() if h else '' for h in rows[0]]
+
+        import io
+        output = io.StringIO()
+        import csv as csv_mod
+        writer = csv_mod.writer(output)
+        writer.writerow(headers)
+        for row in rows[1:]:
+            writer.writerow(['' if v is None else str(v) for v in row])
+
+        output.seek(0)
+
+        class FakeFile:
+            def read(self):
+                return output.getvalue().encode('utf-8')
+
+        return ContactService.import_contacts_from_csv(
+            contact_list_id=contact_list_id,
+            csv_file=FakeFile(),
+            user=user,
+            skip_duplicates=skip_duplicates,
+        )

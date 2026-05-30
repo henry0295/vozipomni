@@ -65,6 +65,13 @@ class Contact(models.Model):
     
     # Datos personalizados (JSON)
     custom_fields = models.JSONField(default=dict, blank=True, verbose_name='Campos personalizados')
+
+    # Zona horaria (para time zone intelligence en dialer)
+    timezone = models.CharField(max_length=50, blank=True, default='', verbose_name='Zona horaria',
+                                help_text='Ej: America/Bogota. El dialer no marcará fuera del horario local.')
+    is_vip = models.BooleanField(default=False, verbose_name='VIP')
+    dnc_opt_out = models.BooleanField(default=False, verbose_name='No llamar (DNC)',
+                                      help_text='Contacto solicitó no ser contactado.')
     
     # Auditoría
     created_at = models.DateTimeField(auto_now_add=True)

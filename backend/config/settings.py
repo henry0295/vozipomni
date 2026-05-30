@@ -183,6 +183,15 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos
 
+# Tareas periódicas predeterminadas
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {
+    'process-pending-callbacks': {
+        'task': 'apps.telephony.tasks.process_pending_callbacks',
+        'schedule': 60.0,  # cada 60 segundos
+    },
+}
+
 # Channels (WebSocket)
 CHANNEL_LAYERS = {
     'default': {

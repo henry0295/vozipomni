@@ -53,6 +53,18 @@ class Campaign(models.Model):
     # Scripts y formularios
     script_template = models.TextField(blank=True, verbose_name='Guión de llamada')
     form_fields = models.JSONField(default=dict, blank=True, verbose_name='Campos del formulario')
+
+    # Configuración avanzada
+    dnc_enabled = models.BooleanField(default=True, verbose_name='Activar DNC',
+                                      help_text='Verificar lista negra antes de marcar.')
+    preview_timeout = models.IntegerField(default=30, verbose_name='Timeout Preview (seg)',
+                                          help_text='Segundos para revisar datos del contacto antes de marcar.')
+    timezone = models.CharField(max_length=50, default='America/Bogota', verbose_name='Zona horaria campaña')
+    vip_priority_boost = models.IntegerField(default=10, verbose_name='Boost prioridad VIP')
+    required_skills = models.ManyToManyField(
+        'agents.AgentGroup', blank=True, related_name='campaigns_requiring',
+        verbose_name='Skills requeridos',
+    )
     
     # Métricas
     total_contacts = models.IntegerField(default=0, verbose_name='Total contactos')
