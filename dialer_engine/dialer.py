@@ -13,6 +13,8 @@ import redis.asyncio as aioredis
 from panoramisk.manager import Manager as AMIManager
 import os
 import json
+import pytz
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # Custom exceptions
 class DialerException(Exception):
@@ -428,9 +430,113 @@ class DialerEngine:
         return agents
         
     async def get_next_contact(self, campaign_id: int) -> Optional[Dict]:
-        """Obtener siguiente contacto de la campaña"""
-        contact_data = await self.redis_client.lpop(f'campaign:{campaign_id}:contacts:pending')
-        return json.loads(contact_data) if contact_data else None
+        """
+        Obtener siguiente contacto de la campaña.
+        Aplica filtros DNC, timezone y prioridad VIP antes de retornar.
+        """
+        config = self.active_campaigns.get(campaign_id, {}).get('config', {})
+        dnc_enabled = config.get('dnc_enabled', True)
+        campaign_tz = config.get('timezone', 'America/Bogota')
+        vip_boost = config.get('vip_priority_boost', 10)
+
+        # Intentar hasta 10 contactos hasta encontrar uno válido
+        for _ in range(10):
+            contact_data = await self.redis_client.lpop(f'campaign:{campaign_id}:contacts:pending')
+            if not contact_data:
+                return None
+
+            contact = json.loads(contact_data)
+
+            # 1) Filtro DNC: verificar lista negra y opt-out
+            if dnc_enabled and await self._is_dnc_blocked(contact.get('phone', '')):
+                logger.info(f"DNC: saltando contacto {contact.get('phone')} (lista negra/opt-out)")
+                await self._mark_contact_dnc(contact, campaign_id)
+                continue
+
+            # 2) Filtro Timezone: no marcar fuera del horario del contacto
+            contact_tz = contact.get('timezone') or campaign_tz
+            if not self._is_callable_now(contact_tz):
+                logger.info(f"TZ: saltando {contact.get('phone')} — fuera de horario en {contact_tz}")
+                # Re-encolar para el próximo ciclo
+                await self.redis_client.rpush(
+                    f'campaign:{campaign_id}:contacts:pending',
+                    json.dumps(contact)
+                )
+                continue
+
+            # 3) VIP boost: si es VIP, subir prioridad (ya se usa al cargar contactos)
+            if contact.get('is_vip'):
+                contact['priority'] = (contact.get('priority', 0) or 0) + vip_boost
+
+            return contact
+
+        return None
+
+    async def _is_dnc_blocked(self, phone: str) -> bool:
+        """
+        Verifica si el número está en la lista negra (Redis cache de DNC).
+        Cache TTL = 5 minutos para no golpear la DB en cada llamada.
+        """
+        if not phone:
+            return False
+        phone_clean = phone.replace('+', '').replace(' ', '').replace('-', '')
+        cache_key = f'dnc:{phone_clean[-10:]}'
+        cached = await self.redis_client.get(cache_key)
+        if cached is not None:
+            return cached == '1'
+
+        # Verificar en la DB via HTTP al backend (evita importar Django en el dialer)
+        try:
+            import aiohttp
+            backend_url = os.getenv('BACKEND_URL', 'http://backend:8000')
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f'{backend_url}/api/cc/dnc-check/',
+                    json={'phone': phone},
+                    headers={'Authorization': f"Bearer {os.getenv('DIALER_API_TOKEN', '')}"},
+                    timeout=aiohttp.ClientTimeout(total=3),
+                ) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        blocked = data.get('blocked', False)
+                        await self.redis_client.setex(cache_key, 300, '1' if blocked else '0')
+                        return blocked
+        except Exception as e:
+            logger.warning(f"DNC check failed for {phone}: {e}")
+        # En caso de error, no bloquear
+        await self.redis_client.setex(cache_key, 60, '0')
+        return False
+
+    async def _mark_contact_dnc(self, contact: Dict, campaign_id: int):
+        """Publicar evento de contacto bloqueado por DNC."""
+        await self.redis_client.publish('calls:events', json.dumps({
+            'type': 'contact_skipped_dnc',
+            'campaign_id': campaign_id,
+            'contact_id': contact.get('id'),
+            'phone': contact.get('phone'),
+        }))
+
+    def _is_callable_now(self, timezone_str: str) -> bool:
+        """
+        Verifica si es horario de llamada válido para la zona horaria dada.
+        Horas permitidas: 8:00 AM – 8:00 PM de lunes a sábado.
+        """
+        try:
+            tz = ZoneInfo(timezone_str) if timezone_str else ZoneInfo('America/Bogota')
+        except (ZoneInfoNotFoundError, Exception):
+            try:
+                tz = pytz.timezone(timezone_str)
+            except Exception:
+                tz = pytz.timezone('America/Bogota')
+
+        now_local = datetime.now(tz)
+        hour = now_local.hour
+        weekday = now_local.weekday()  # 0=Lunes, 6=Domingo
+
+        # No llamar domingos (6) ni fuera de 8-20
+        if weekday == 6:
+            return False
+        return 8 <= hour < 20
         
     async def get_all_contacts(self, campaign_id: int) -> List[Dict]:
         """Obtener todos los contactos de la campaña (para call blasting)"""
