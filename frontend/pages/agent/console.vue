@@ -363,10 +363,7 @@ const handleLogin = async () => {
     if (!result.success) {
       alert(`Error al iniciar sesión: ${result.error}`)
     } else {
-      // Solicitar permisos de notificación del navegador
-      await requestNotificationPermission()
-      
-      // Mostrar notificación de bienvenida
+      // Notificación solo si el permiso ya fue concedido (no solicitarlo automáticamente)
       showNotification(
         'Sesión Iniciada',
         `Bienvenido ${selectedAgent.value.user_details?.first_name || 'Agente'}`

@@ -329,6 +329,7 @@ const loadRecentCalls = async () => {
     const { $api } = useNuxtApp()
     const today = new Date().toISOString().split('T')[0]
     
+    // 403 = rol agente sin permiso de admin; la sección se oculta silenciosamente
     const data = await $api('/calls/', {
       query: {
         agent: agentStore.agent.id,
@@ -353,8 +354,11 @@ const loadRecentCalls = async () => {
         success: call.disposition?.is_successful || false
       }
     })
-  } catch (err) {
-    console.error('Error loading recent calls:', err)
+  } catch (err: any) {
+    if (err?.status !== 403 && err?.statusCode !== 403) {
+      console.error('Error loading recent calls:', err)
+    }
+    // 403 → no hay permiso (rol agente); historial simplemente queda vacío
   }
 }
 
@@ -373,7 +377,5 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.agent-status-panel {
-  height: 100%;
-}
+/* altura natural para no ocupar toda la columna */
 </style>

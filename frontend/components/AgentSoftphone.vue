@@ -504,7 +504,7 @@ const startConference = async () => {
 
 const formatDuration = webrtc.formatDuration
 
-// Registrar WebRTC cuando el agente hace login
+// Registrar WebRTC cuando el agente hace login (immediate: actúa si ya está logueado al montar)
 watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
   if (isLoggedIn && agentStore.agent) {
     const config = useRuntimeConfig()
@@ -520,7 +520,7 @@ watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
   } else {
     webrtc.unregister()
   }
-})
+}, { immediate: true })
 
 onUnmounted(() => {
   webrtc.unregister()
@@ -537,7 +537,5 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.agent-softphone {
-  height: 100%;
-}
+/* altura natural para no ocupar toda la columna */
 </style>

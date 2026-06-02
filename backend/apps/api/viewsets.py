@@ -701,12 +701,24 @@ class CallViewSet(viewsets.ReadOnlyModelViewSet):
         'agent__user', 'campaign', 'contact', 'queue', 'disposition'
     ).order_by('-start_time')
     serializer_class = serializers.CallSerializer
-    # Llamadas son de solo lectura; accesibles a admin, supervisor y analyst
+    # Admin/supervisor/analyst ven todas; agentes solo sus propias llamadas
     permission_classes = [IsAdminSupervisorOrAnalyst]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['call_id', 'caller_id', 'called_number']
     filterset_fields = ['direction', 'status', 'agent', 'campaign']
     ordering_fields = ['start_time', 'talk_time']
+
+    def get_permissions(self):
+        if getattr(self.request.user, 'role', None) == 'agent':
+            return [IsAuthenticated()]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if getattr(self.request.user, 'role', None) == 'agent':
+            # Agente solo ve sus propias llamadas
+            return qs.filter(agent__user=self.request.user)
+        return qs
 
 
 class RecordingViewSet(viewsets.ModelViewSet):
