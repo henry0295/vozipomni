@@ -58,6 +58,12 @@ agents_logged_in = Gauge(
     'Number of logged in agents'
 )
 
+agent_status_gauge = Gauge(
+    'vozipomni_agent_status',
+    'Current status of each agent (1=active in that status)',
+    ['agent_id', 'status']
+)
+
 agent_calls_total = Counter(
     'vozipomni_agent_calls_total',
     'Total calls handled by agent',
