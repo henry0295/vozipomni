@@ -163,18 +163,7 @@
                     </div>
                   </UCard>
 
-                  <!-- Panel de notas rápidas -->
-                  <UCard>
-                    <template #header>
-                      <h3 class="text-lg font-semibold">Notas Rápidas</h3>
-                    </template>
 
-                    <UTextarea
-                      v-model="quickNotes"
-                      :rows="6"
-                      placeholder="Escriba notas importantes durante la llamada..."
-                    />
-                  </UCard>
                 </div>
               </template>
 
@@ -218,6 +207,18 @@
             :campaign-id="currentCampaignId"
             @disposition-saved="handleDispositionSaved"
           />
+
+          <!-- Notas rápidas -->
+          <UCard class="mt-3">
+            <template #header>
+              <h3 class="text-sm font-semibold">Notas Rápidas</h3>
+            </template>
+            <UTextarea
+              v-model="quickNotes"
+              :rows="5"
+              placeholder="Notas durante la llamada..."
+            />
+          </UCard>
         </div>
       </div>
     </div>
@@ -518,41 +519,94 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ── Contenedor principal: columna full-height ── */
 .agent-console {
-  @apply min-h-screen bg-gray-50;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #f3f4f6;
 }
 
+/* ── Header compacto ── */
 .console-header {
-  @apply bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-10 shadow-sm;
+  flex-shrink: 0;
+  padding: 0.4rem 1rem;
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
 }
 
+:global(.dark) .console-header {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+/* ── Pantalla de login centrada ── */
 .login-screen {
-  @apply flex items-center justify-center min-h-[80vh] p-6;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
 }
 
+/* ── Zona principal ── */
 .console-main {
-  @apply p-6;
+  flex: 1;
+  overflow: hidden;
 }
 
+/* ── Grid de 3 columnas: izq(295px) | centro(1fr) | der(295px) ── */
 .console-grid {
-  @apply grid grid-cols-1 lg:grid-cols-3 gap-6;
+  display: grid;
+  grid-template-columns: 295px 1fr 295px;
+  height: 100%;
+  overflow: hidden;
 }
 
+/* ── Columna izquierda: estado + softphone ── */
 .console-left {
-  @apply lg:col-span-1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  overflow-y: auto;
+  background: #fff;
+  border-right: 1px solid #e5e7eb;
 }
 
+:global(.dark) .console-left {
+  background: #1f2937;
+  border-color: #374151;
+}
+
+/* ── Columna central: tabs de trabajo ── */
 .console-center {
-  @apply lg:col-span-1;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+  overflow-y: auto;
+  background: #f9fafb;
 }
 
+:global(.dark) .console-center {
+  background: #111827;
+}
+
+/* ── Columna derecha: disposición + notas ── */
 .console-right {
-  @apply lg:col-span-1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.75rem;
+  overflow-y: auto;
+  background: #fff;
+  border-left: 1px solid #e5e7eb;
 }
 
-@media (max-width: 1024px) {
-  .console-grid {
-    @apply grid-cols-1;
-  }
+:global(.dark) .console-right {
+  background: #1f2937;
+  border-color: #374151;
 }
 </style>
