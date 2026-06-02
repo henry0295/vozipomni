@@ -270,12 +270,13 @@ class AgentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def login(self, request, pk=None):
         """Marcar agente como conectado y unirlo a las colas ACD de Asterisk"""
-        from apps.agents.services import AgentService
+        import logging
+        _log = logging.getLogger(__name__)
         try:
             agent = self.get_object()
 
             # Un agente solo puede iniciar su propia sesión.
-            # Admin/supervisor pueden iniciar sesión de cualquier agente para soporte.
+            # Admin/supervisor pueden iniciar sesión de cualquier agente.
             user_role = getattr(request.user, 'role', None)
             if user_role not in ['admin', 'supervisor'] and agent.user_id != request.user.id:
                 return Response(
@@ -283,33 +284,39 @@ class AgentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            # Flujo principal: servicio de negocio (métricas + eventos)
-            # Si falla integración externa, hacemos fallback al login básico
-            # para no bloquear al agente.
+            # ── Operación crítica: escribir directamente sobre el modelo ──
+            # No depende de AgentService, Prometheus, AMI ni event bus.
+            agent.status = 'available'
+            agent.logged_in_at = timezone.now()
+            agent.save(update_fields=['status', 'logged_in_at'])
+
+            # ── Integración no-bloqueante: métricas, colas, eventos ──
             try:
-                result = AgentService.login_agent(agent.id, request.user)
-            except Exception:
-                agent.login()
-                result = {
-                    'agent_code': agent.agent_id,
-                    'sip_extension': agent.sip_extension,
-                }
+                from apps.agents.services import AgentService
+                AgentService.login_agent(agent.id, request.user)
+            except Exception as svc_err:
+                _log.warning(
+                    'AgentService.login_agent failed (non-critical, agent is logged in): %s',
+                    svc_err
+                )
 
             return Response({
                 'status': 'logged in',
-                'agent_id': result['agent_code'],
-                'sip_extension': result['sip_extension'],
+                'agent_id': agent.agent_id,
+                'sip_extension': agent.sip_extension,
             })
         except Exception as e:
+            _log.exception('Unexpected error in agent login pk=%s', pk)
             return Response(
-                {'error': f'No se pudo iniciar sesión del agente: {str(e)}'},
+                {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
     @action(detail=True, methods=['post'])
     def logout(self, request, pk=None):
         """Marcar agente como desconectado y retirarlo de las colas ACD de Asterisk"""
-        from apps.agents.services import AgentService
+        import logging
+        _log = logging.getLogger(__name__)
         try:
             agent = self.get_object()
 
@@ -320,16 +327,27 @@ class AgentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
+            # Operación crítica directa sobre el modelo
+            agent.status = 'offline'
+            agent.logged_in_at = None
+            agent.current_calls = 0
+            agent.save(update_fields=['status', 'logged_in_at', 'current_calls'])
+
+            # Integración no-bloqueante
             try:
+                from apps.agents.services import AgentService
                 AgentService.logout_agent(agent.id, request.user)
-            except Exception:
-                # Fallback para no dejar al agente bloqueado en sesión
-                agent.logout()
+            except Exception as svc_err:
+                _log.warning(
+                    'AgentService.logout_agent failed (non-critical, agent is logged out): %s',
+                    svc_err
+                )
 
             return Response({'status': 'logged out'})
         except Exception as e:
+            _log.exception('Unexpected error in agent logout pk=%s', pk)
             return Response(
-                {'error': f'No se pudo cerrar sesión del agente: {str(e)}'},
+                {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
