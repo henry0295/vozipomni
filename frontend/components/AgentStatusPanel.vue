@@ -93,6 +93,36 @@
           </div>
         </div>
 
+        <!-- Historial de llamadas de hoy -->
+        <div class="pt-4 border-t border-gray-200">
+          <div class="flex items-center justify-between mb-2 cursor-pointer" @click="showCallLogs = !showCallLogs">
+            <p class="text-sm font-medium text-gray-700">Historial de Hoy</p>
+            <UIcon :name="showCallLogs ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="text-gray-500" />
+          </div>
+          
+          <div v-if="showCallLogs" class="space-y-2 max-h-48 overflow-y-auto">
+            <div
+              v-for="call in recentCalls"
+              :key="call.id"
+              class="p-2 bg-gray-50 rounded text-xs"
+            >
+              <div class="flex justify-between items-start mb-1">
+                <div>
+                  <p class="font-medium text-gray-800">{{ call.phone }}</p>
+                  <p class="text-gray-600">{{ call.time }}</p>
+                </div>
+                <UBadge :color="call.success ? 'green' : 'gray'" size="xs">
+                  {{ call.disposition }}
+                </UBadge>
+              </div>
+              <p class="text-gray-600">{{ call.duration }}</p>
+            </div>
+            <p v-if="recentCalls.length === 0" class="text-center text-gray-500 py-4">
+              Sin llamadas hoy
+            </p>
+          </div>
+        </div>
+
         <!-- Tiempo de sesión -->
         <div class="pt-4 border-t border-gray-200">
           <div class="flex items-center justify-between">
@@ -145,6 +175,15 @@ import { useAgentStore } from '~/stores/agent'
 
 const agentStore = useAgentStore()
 const showBreakModal = ref(false)
+const showCallLogs = ref(false)
+const recentCalls = ref<Array<{
+  id: number
+  phone: string
+  time: string
+  duration: string
+  disposition: string
+  success: boolean
+}>>([])
 
 // Estado seleccionado
 const selectedStatus = ref('available')
@@ -282,10 +321,48 @@ const formatTime = (seconds: number) => {
   return `${secs}s`
 }
 
+// Cargar historial de llamadas de hoy
+const loadRecentCalls = async () => {
+  if (!agentStore.agent?.id) return
+  
+  try {
+    const { $api } = useNuxtApp()
+    const today = new Date().toISOString().split('T')[0]
+    
+    const data = await $api('/calls/', {
+      query: {
+        agent: agentStore.agent.id,
+        start_time__gte: `${today}T00:00:00`,
+        ordering: '-start_time',
+        page_size: 10
+      }
+    })
+    
+    const results = data.results || data
+    
+    recentCalls.value = (Array.isArray(results) ? results : []).map((call: any) => {
+      const startTime = new Date(call.start_time)
+      const duration = call.duration || 0
+      
+      return {
+        id: call.id,
+        phone: call.called_number || call.caller_number || 'Desconocido',
+        time: startTime.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+        duration: duration > 0 ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')}` : 'N/A',
+        disposition: call.disposition?.name || 'Sin disposición',
+        success: call.disposition?.is_successful || false
+      }
+    })
+  } catch (err) {
+    console.error('Error loading recent calls:', err)
+  }
+}
+
 // Lifecycle
 onMounted(() => {
   selectedStatus.value = agentStore.status
   loadBreakReasons()
+  loadRecentCalls()
 })
 
 onUnmounted(() => {

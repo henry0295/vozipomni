@@ -11,21 +11,31 @@
             to="/dashboard"
           />
           <div>
-            <h1 class="text-2xl font-bold text-gray-800">Consola de Agente</h1>
-            <p class="text-sm text-gray-600">{{ currentDateTime }}</p>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Consola de Agente</h1>
+            <p class="text-sm text-gray-600 dark:text-gray-400">{{ currentDateTime }}</p>
           </div>
         </div>
 
-        <!-- Botón de logout -->
-        <UButton
-          v-if="agentStore.isLoggedIn"
-          color="red"
-          variant="soft"
-          icon="i-heroicons-arrow-right-on-rectangle"
-          @click="handleLogout"
-        >
-          Cerrar Sesión
-        </UButton>
+        <div class="flex items-center gap-3">
+          <!-- Toggle de modo oscuro -->
+          <UButton
+            :icon="isDark ? 'i-heroicons-moon' : 'i-heroicons-sun'"
+            color="gray"
+            variant="ghost"
+            @click="toggleDark"
+          />
+
+          <!-- Botón de logout -->
+          <UButton
+            v-if="agentStore.isLoggedIn"
+            color="red"
+            variant="soft"
+            icon="i-heroicons-arrow-right-on-rectangle"
+            @click="handleLogout"
+          >
+            Cerrar Sesión
+          </UButton>
+        </div>
       </div>
     </div>
 
@@ -215,9 +225,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import { useAgentStore } from '~/stores/agent'
 import type { Agent } from '~/types'
+
+// Lazy load de componentes pesados
+const AgentDialerPanel = defineAsyncComponent(() => import('~/components/AgentDialerPanel.vue'))
+const AgentContactsList = defineAsyncComponent(() => import('~/components/AgentContactsList.vue'))
+const AgentWhatsAppPanel = defineAsyncComponent(() => import('~/components/AgentWhatsAppPanel.vue'))
 
 // Middleware para requerir autenticación Y rol agente
 definePageMeta({
@@ -228,6 +243,36 @@ definePageMeta({
 const agentStore = useAgentStore()
 const { getAgents } = useAgents()
 const { requireRole, isAgent } = useAuthorization()
+const colorMode = useColorMode()
+
+// Modo oscuro
+const isDark = computed(() => colorMode.value === 'dark')
+const toggleDark = () => {
+  colorMode.preference = isDark.value ? 'light' : 'dark'
+}
+
+// Notificaciones del navegador
+const notificationPermission = ref<NotificationPermission>('default')
+
+const requestNotificationPermission = async () => {
+  if ('Notification' in window && Notification.permission === 'default') {
+    const permission = await Notification.requestPermission()
+    notificationPermission.value = permission
+  } else if ('Notification' in window) {
+    notificationPermission.value = Notification.permission
+  }
+}
+
+const showNotification = (title: string, body: string) => {
+  if (notificationPermission.value === 'granted') {
+    new Notification(title, {
+      body,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: 'vozipomni-agent'
+    })
+  }
+}
 
 // State
 const selectedAgent = ref<Agent | null>(null)
@@ -316,6 +361,15 @@ const handleLogin = async () => {
     
     if (!result.success) {
       alert(`Error al iniciar sesión: ${result.error}`)
+    } else {
+      // Solicitar permisos de notificación del navegador
+      await requestNotificationPermission()
+      
+      // Mostrar notificación de bienvenida
+      showNotification(
+        'Sesión Iniciada',
+        `Bienvenido ${selectedAgent.value.user_details?.first_name || 'Agente'}`
+      )
     }
   } catch (err: any) {
     alert(`Error: ${err.message}`)

@@ -253,6 +253,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { useAgentStore } from '~/stores/agent'
+import { useWebRTC } from '~/composables/useWebRTC'
 
 interface Contact {
   id: number
@@ -283,6 +284,7 @@ const emit = defineEmits<{
 }>()
 
 const agentStore = useAgentStore()
+const webrtc = useWebRTC()
 
 // State
 const contacts = ref<Contact[]>([])
@@ -350,26 +352,39 @@ const loadContacts = async () => {
 
   isLoading.value = true
   try {
-    // Cargar contactos de la campaña
-    // const { getContacts } = useContacts()
-    // const result = await getContacts({ campaign_id: props.campaignId })
+    const { $api } = useNuxtApp()
     
-    // Mock data
-    contacts.value = Array.from({ length: 25 }, (_, i) => ({
-      id: i + 1,
-      name: `Cliente ${i + 1}`,
-      phone: `300${String(i + 1).padStart(7, '0')}`,
-      email: `cliente${i + 1}@example.com`,
-      company: i % 3 === 0 ? `Empresa ${i + 1}` : undefined,
-      status: ['pending', 'contacted', 'callback', 'not_interested', 'sale'][i % 5] as any,
-      last_call_date: i % 2 === 0 ? new Date(Date.now() - i * 86400000).toISOString() : undefined,
-      last_disposition: i % 2 === 0 ? ['Contactado', 'No contesta', 'Callback'][i % 3] : undefined,
-      last_notes: i % 2 === 0 ? 'Cliente interesado en el producto' : undefined,
-      whatsapp: i % 2 === 0,
-      call_history: []
+    const data = await $api('/contacts/', {
+      query: {
+        campaign: props.campaignId,
+        status__in: 'pending,callback',
+        page_size: 100
+      }
+    })
+    
+    const results = data.results || data
+    
+    contacts.value = (Array.isArray(results) ? results : []).map((c: any) => ({
+      id: c.id,
+      name: c.full_name || `${c.first_name || ''} ${c.last_name || ''}`.trim(),
+      phone: c.phone,
+      email: c.email,
+      company: c.company,
+      status: c.status || 'pending',
+      last_call_date: c.last_call_date,
+      last_disposition: c.last_disposition,
+      last_notes: c.last_notes,
+      whatsapp: c.whatsapp_enabled || false,
+      call_history: c.call_history || [],
+      custom_fields: c.custom_fields
     }))
   } catch (err) {
     console.error('Error loading contacts:', err)
+    useToast().add({
+      title: 'Error cargando contactos',
+      description: (err as any)?.data?.error || (err as Error).message,
+      color: 'red'
+    })
   } finally {
     isLoading.value = false
   }
@@ -386,8 +401,20 @@ const selectContact = (contact: Contact) => {
 
 const callContact = (contact: Contact) => {
   if (!canCall.value) return
-  emit('callContact', contact)
-  showDetailModal.value = false
+  
+  // Usar WebRTC para llamar directamente
+  const result = webrtc.call(contact.phone)
+  if (result.success) {
+    emit('callContact', contact)
+    useToast().add({ title: `Llamando a ${contact.name}`, color: 'blue' })
+    showDetailModal.value = false
+  } else {
+    useToast().add({ 
+      title: 'Error al llamar',
+      description: result.error,
+      color: 'red'
+    })
+  }
 }
 
 const openWhatsApp = (contact: Contact) => {

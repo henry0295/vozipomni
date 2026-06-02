@@ -180,8 +180,10 @@
               v-for="digit in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']"
               :key="digit"
               size="sm"
-              color="gray"
-              variant="outline"
+              :color="dtmfPressed === digit ? 'primary' : 'gray'"
+              :variant="dtmfPressed === digit ? 'solid' : 'outline'"
+              class="transition-all"
+              :class="{ 'scale-95': dtmfPressed === digit }"
               @click="sendDTMF(digit)"
             >
               {{ digit }}
@@ -308,6 +310,22 @@ const showDtmf = ref(false)
 const showConsultiveModal = ref(false)
 const availableAgents = ref<any[]>([])
 const loadingAgents = ref(false)
+const dtmfPressed = ref<string | null>(null)
+
+// Persistir estado en sessionStorage
+const loadPersistedState = () => {
+  if (typeof window !== 'undefined' && sessionStorage.getItem('softphone_dialNumber')) {
+    dialNumber.value = sessionStorage.getItem('softphone_dialNumber') || ''
+  }
+}
+
+const persistDialNumber = () => {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem('softphone_dialNumber', dialNumber.value)
+  }
+}
+
+watch(dialNumber, persistDialNumber)
 
 // Contactos rápidos (se pueden cargar desde API)
 const quickContacts = ref([
@@ -392,7 +410,15 @@ const toggleHold = () => {
 
 const sendDTMF = (digit: string) => {
   const result = webrtc.sendDTMF(digit)
-  if (!result.success) alert(`Error al enviar DTMF: ${result.error}`)
+  if (!result.success) {
+    useToast().add({ title: `Error al enviar DTMF: ${result.error}`, color: 'red' })
+  } else {
+    // Feedback visual
+    dtmfPressed.value = digit
+    setTimeout(() => {
+      dtmfPressed.value = null
+    }, 200)
+  }
 }
 
 const transferCall = () => {
@@ -498,6 +524,15 @@ watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
 
 onUnmounted(() => {
   webrtc.unregister()
+  // Limpiar sessionStorage al cerrar
+  if (typeof window !== 'undefined') {
+    sessionStorage.removeItem('softphone_dialNumber')
+  }
+})
+
+// Cargar estado persistido al montar
+onMounted(() => {
+  loadPersistedState()
 })
 </script>
 

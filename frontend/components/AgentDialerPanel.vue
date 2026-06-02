@@ -291,19 +291,34 @@ const loadDialerCampaign = async () => {
 const loadNextContact = async () => {
   if (!activeCampaign.value) return
 
-  // Mock next contact
-  nextContact.value = {
-    id: Date.now(),
-    name: 'María González',
-    phone: '+573001234567',
-    email: 'maria@example.com',
-    company: 'Empresa ABC',
-    notes: 'Cliente interesado en productos premium. Llamada anterior: Solicitud de información.'
-  }
+  try {
+    const { $api } = useNuxtApp()
+    const data = await $api(`/campaigns/${activeCampaign.value.id}/next_contact/`, {
+      query: { agent_id: agentStore.agent?.id }
+    })
 
-  // Si es progresivo, iniciar countdown
-  if (activeCampaign.value.dialer_type === 'progressive') {
-    startCountdown()
+    if (data.contact) {
+      nextContact.value = data.contact
+      
+      // Si es progresivo, iniciar countdown
+      if (activeCampaign.value.dialer_type === 'progressive') {
+        startCountdown()
+      }
+    } else {
+      nextContact.value = null
+      useToast().add({
+        title: 'No hay más contactos',
+        description: data.message || 'Todos los contactos han sido marcados',
+        color: 'blue'
+      })
+    }
+  } catch (err) {
+    console.error('Error loading next contact:', err)
+    useToast().add({
+      title: 'Error cargando contacto',
+      description: (err as any)?.data?.error || (err as Error).message,
+      color: 'red'
+    })
   }
 }
 

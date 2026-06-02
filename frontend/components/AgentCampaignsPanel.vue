@@ -173,14 +173,17 @@ const selectedCampaign = computed(() => {
   return campaigns.value.find(c => c.id === selectedCampaignId.value)
 })
 
-// Auto-refresh cada 30 segundos
+// Auto-refresh cada 30 segundos (solo si no hay llamada activa)
 let refreshInterval: any = null
 
 onMounted(() => {
   loadCampaigns()
   
   refreshInterval = setInterval(() => {
-    loadCampaigns()
+    // No actualizar si el agente está en llamada
+    if (agentStore.status !== 'oncall') {
+      loadCampaigns()
+    }
   }, 30000)
 })
 

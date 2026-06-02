@@ -2,9 +2,12 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.throttling import UserRateThrottle
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse
+from django.utils import timezone
+import bleach
 
 from apps.users.models import User
 from apps.campaigns.models import Campaign
@@ -147,6 +150,69 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 {'error': str(e)},
                 status=status.HTTP_404_NOT_FOUND
             )
+    
+    @action(detail=True, methods=['get'])
+    def next_contact(self, request, pk=None):
+        """Obtener siguiente contacto para marcación (dialer)"""
+        campaign = self.get_object()
+        agent_id = request.query_params.get('agent_id')
+        
+        if not agent_id:
+            return Response(
+                {'error': 'agent_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            from apps.contacts.models import Contact
+            from django.db.models import Q
+            
+            # Buscar contactos pendientes de la campaña
+            contact = Contact.objects.filter(
+                contact_list=campaign.contact_list,
+                status__in=['pending', 'callback']
+            ).exclude(
+                # Excluir contactos llamados en las últimas 24h
+                calls__start_time__gte=timezone.now() - timezone.timedelta(hours=24)
+            ).order_by('priority', 'id').first()
+            
+            if not contact:
+                return Response(
+                    {'contact': None, 'message': 'No pending contacts'},
+                    status=status.HTTP_200_OK
+                )
+            
+            return Response({
+                'contact': {
+                    'id': contact.id,
+                    'name': contact.full_name,
+                    'phone': contact.phone,
+                    'email': contact.email,
+                    'company': contact.company,
+                    'notes': contact.notes,
+                    'custom_fields': contact.custom_fields,
+                    'priority': contact.priority,
+                    'call_history': [
+                        {
+                            'id': c.id,
+                            'date': c.start_time.strftime('%Y-%m-%d %H:%M'),
+                            'disposition': c.disposition.name if c.disposition else 'N/A',
+                            'notes': c.notes
+                        } for c in contact.calls.order_by('-start_time')[:5]
+                    ]
+                }
+            })
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class AgentActionThrottle(UserRateThrottle):
+    """Limitar acciones de agente a 10 req/min"""
+    rate = '10/min'
+    scope = 'agent_action'
 
 
 class AgentViewSet(viewsets.ModelViewSet):
@@ -159,6 +225,12 @@ class AgentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['status', 'webrtc_enabled', 'user']
     ordering_fields = ['created_at', 'agent_id', 'status', 'calls_today']
     ordering = ['-created_at']
+    
+    def get_throttles(self):
+        """Aplicar rate limiting solo a acciones de agente"""
+        if self.action in ['save_disposition', 'change_status', 'start_break', 'end_break']:
+            return [AgentActionThrottle()]
+        return super().get_throttles()
     
     def perform_destroy(self, instance):
         """Al eliminar un agente, desactivar su endpoint PJSIP"""
@@ -350,17 +422,34 @@ class AgentViewSet(viewsets.ModelViewSet):
         campaign_id = request.data.get('campaign_id')
         contact_id = request.data.get('contact_id')
         
+        # Sanitizar inputs (protección XSS)
+        notes = bleach.clean(notes, tags=[], strip=True)
+        form_data = {k: bleach.clean(str(v), tags=[], strip=True) for k, v in form_data.items()}
+        
         # Validar disposición
-        from apps.campaigns.models import CampaignDisposition
+        from apps.campaigns.models import CampaignDisposition, Campaign
         from apps.telephony.models import Call
         from apps.contacts.models import Contact
         
         disposition = None
         if campaign_id and disposition_code:
             try:
+                # Validar que el agente pertenece a la campaña
+                campaign = Campaign.objects.get(id=campaign_id)
+                if not campaign.agents.filter(id=agent.id).exists():
+                    return Response(
+                        {'error': 'Agent is not assigned to this campaign'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
                 disposition = CampaignDisposition.objects.get(
                     campaign_id=campaign_id,
                     code=disposition_code
+                )
+            except Campaign.DoesNotExist:
+                return Response(
+                    {'error': f'Campaign {campaign_id} not found'},
+                    status=status.HTTP_404_NOT_FOUND
                 )
             except CampaignDisposition.DoesNotExist:
                 return Response(
@@ -373,6 +462,14 @@ class AgentViewSet(viewsets.ModelViewSet):
         if call_id:
             try:
                 call = Call.objects.get(call_id=call_id)
+                
+                # Validar que la llamada pertenece al agente
+                if call.agent_id != agent.id:
+                    return Response(
+                        {'error': 'Call does not belong to this agent'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                
                 call.disposition = disposition
                 call.notes = notes
                 if call.metadata is None:
