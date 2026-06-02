@@ -17,6 +17,7 @@ from apps.reports.views import ReportViewSet as ReportViewSetFull
 router = DefaultRouter()
 router.register(r'users', viewsets.UserViewSet, basename='user')
 router.register(r'campaigns', viewsets.CampaignViewSet, basename='campaign')
+router.register(r'campaign-forms', viewsets.CampaignFormViewSet, basename='campaignform')
 router.register(r'agents', viewsets.AgentViewSet, basename='agent')
 router.register(r'contacts', viewsets.ContactViewSet, basename='contact')
 router.register(r'contact-lists', viewsets.ContactListViewSet, basename='contactlist')

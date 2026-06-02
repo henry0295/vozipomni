@@ -208,6 +208,90 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=True, methods=['post'])
+    def clone(self, request, pk=None):
+        """
+        Clonar campaña (o plantilla) como una nueva campaña.
+        Se puede especificar 'name' en el body para el nombre de la nueva campaña.
+        """
+        source = self.get_object()
+        new_name = request.data.get('name', f'{source.name} (copia)')
+
+        import copy as _copy
+        # Duplicar el objeto sin PK para crear uno nuevo
+        source.pk = None
+        source.id = None
+        source.name = new_name
+        source.status = 'draft'
+        source.is_template = False
+        source.template_name = ''
+        source.total_contacts = 0
+        source.contacted = 0
+        source.successful = 0
+        source.created_by = request.user
+        source.save()
+
+        return Response(
+            serializers.CampaignSerializer(source, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='preview-decide')
+    def preview_decide(self, request, pk=None):
+        """
+        Registrar decisión de preview: el agente acepta o rechaza el contacto asignado.
+        Body: {"agent_id": 1, "decision": "accept"|"reject"}
+        El dialer lee estas claves de Redis para continuar/saltar.
+        """
+        import redis as _redis
+        from django.conf import settings as _settings
+
+        agent_id = request.data.get('agent_id')
+        decision = request.data.get('decision')
+
+        if not agent_id or decision not in ('accept', 'reject'):
+            return Response(
+                {'error': 'Se requiere agent_id y decision (accept/reject)'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            redis_url = getattr(_settings, 'REDIS_URL', 'redis://localhost:6379/0')
+            r = _redis.from_url(redis_url, decode_responses=True)
+            campaign_id = pk
+            base_key = f'campaign:{campaign_id}:preview:agent:{agent_id}'
+            ttl = 120  # segundos
+
+            if decision == 'accept':
+                r.setex(f'{base_key}:accepted', ttl, '1')
+            else:
+                r.setex(f'{base_key}:rejected', ttl, '1')
+
+            return Response({'status': 'ok', 'decision': decision})
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['get'], url_path='templates')
+    def templates(self, request):
+        """Listar todas las campañas marcadas como plantilla."""
+        qs = Campaign.objects.filter(is_template=True).order_by('name')
+        return Response(
+            serializers.CampaignSerializer(qs, many=True, context={'request': request}).data
+        )
+
+
+class CampaignFormViewSet(viewsets.ModelViewSet):
+    """CRUD para formularios de campaña."""
+    from apps.campaigns.models import CampaignForm as _CampaignForm
+    queryset = _CampaignForm.objects.all()
+    serializer_class = serializers.CampaignFormSerializer
+    permission_classes = [IsAdminOrSupervisorOrReadOnly]
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name']
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 class AgentActionThrottle(UserRateThrottle):
     """Limitar acciones de agente a 10 req/min"""

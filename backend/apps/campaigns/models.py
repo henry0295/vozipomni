@@ -2,6 +2,47 @@ from django.db import models
 from django.conf import settings
 
 
+class CampaignForm(models.Model):
+    """
+    Formulario personalizado para una campaña.
+    El agente lo rellena durante o después de la llamada.
+    """
+    FIELD_TYPES = [
+        ('text', 'Texto libre'),
+        ('textarea', 'Texto largo'),
+        ('number', 'Número'),
+        ('select', 'Lista desplegable'),
+        ('multiselect', 'Selección múltiple'),
+        ('checkbox', 'Casilla de verificación'),
+        ('date', 'Fecha'),
+        ('phone', 'Teléfono'),
+        ('email', 'Correo electrónico'),
+    ]
+
+    name = models.CharField(max_length=200, verbose_name='Nombre del formulario')
+    description = models.TextField(blank=True, verbose_name='Descripción')
+    # Definición de campos en JSON:
+    # [{"name": "nombre_campo", "label": "Etiqueta", "type": "text", "required": true,
+    #   "options": ["op1","op2"], "placeholder": "...", "order": 1}]
+    fields_schema = models.JSONField(default=list, verbose_name='Esquema de campos')
+    is_active = models.BooleanField(default=True, verbose_name='Activo')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
+        related_name='created_forms'
+    )
+
+    class Meta:
+        db_table = 'campaign_forms'
+        ordering = ['name']
+        verbose_name = 'Formulario de Campaña'
+        verbose_name_plural = 'Formularios de Campaña'
+
+    def __str__(self):
+        return self.name
+
+
 class Campaign(models.Model):
     """
     Campañas de contact center
@@ -53,6 +94,15 @@ class Campaign(models.Model):
     # Scripts y formularios
     script_template = models.TextField(blank=True, verbose_name='Guión de llamada')
     form_fields = models.JSONField(default=dict, blank=True, verbose_name='Campos del formulario')
+    form = models.ForeignKey(
+        CampaignForm, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='campaigns', verbose_name='Formulario de gestión'
+    )
+
+    # Plantillas de campaña
+    is_template = models.BooleanField(default=False, verbose_name='Es plantilla',
+                                      help_text='Si True, esta campaña puede clonarse como punto de partida.')
+    template_name = models.CharField(max_length=200, blank=True, verbose_name='Nombre de plantilla')
 
     # Configuración avanzada
     dnc_enabled = models.BooleanField(default=True, verbose_name='Activar DNC',
@@ -103,6 +153,11 @@ class CampaignDisposition(models.Model):
     is_success = models.BooleanField(default=False, verbose_name='¿Es exitosa?')
     requires_callback = models.BooleanField(default=False, verbose_name='¿Requiere rellamada?')
     order = models.IntegerField(default=0, verbose_name='Orden')
+    # Formulario específico para esta disposición (sobreescribe el formulario de la campaña)
+    form = models.ForeignKey(
+        CampaignForm, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='dispositions', verbose_name='Formulario de disposición'
+    )
     
     class Meta:
         db_table = 'campaign_dispositions'

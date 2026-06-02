@@ -1,12 +1,12 @@
 """
 VozipOmni Dialer Engine
-Motor de discado para campañas: Progresivas, Predictivas, Call Blasting y Manuales
+Motor de discado para campañas: Progresivas, Predictivas, Preview, Call Blasting y Manuales
 Utiliza Asterisk AMI para originar llamadas
 """
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import List, Dict, Optional
 import redis.asyncio as aioredis
@@ -44,6 +44,7 @@ class CampaignType(Enum):
     MANUAL = "manual"
     PROGRESSIVE = "progressive"
     PREDICTIVE = "predictive"
+    PREVIEW = "preview"
     CALL_BLASTING = "call_blasting"
 
 class CallStatus(Enum):
@@ -138,6 +139,8 @@ class DialerEngine:
             asyncio.create_task(self.progressive_dialer_loop(campaign_id))
         elif campaign_type == CampaignType.PREDICTIVE.value:
             asyncio.create_task(self.predictive_dialer_loop(campaign_id))
+        elif campaign_type == CampaignType.PREVIEW.value:
+            asyncio.create_task(self.preview_dialer_loop(campaign_id))
         elif campaign_type == CampaignType.CALL_BLASTING.value:
             asyncio.create_task(self.call_blasting_loop(campaign_id))
             
@@ -222,6 +225,76 @@ class DialerEngine:
         
         logger.info(f"Predictive dialer detenido para campaña {campaign_id}")
         
+    async def preview_dialer_loop(self, campaign_id: int):
+        """
+        Campaña PREVIEW: Agente revisa datos del contacto antes de que se origine la llamada.
+        El backend publica contactos en 'campaign:{id}:preview:pending'. El agente acepta
+        (lpush a ':preview:accepted') o rechaza (lpush a ':preview:rejected') con su agent_id.
+        """
+        logger.info(f"Iniciando preview dialer para campaña {campaign_id}")
+        config = await self.get_campaign_config(campaign_id)
+        timeout_secs = config.get('preview_timeout', 30) if config else 30
+
+        while campaign_id in self.active_campaigns:
+            campaign = self.active_campaigns[campaign_id]
+            if campaign.get('stopped'):
+                break
+
+            available_agents = await self.get_available_agents(campaign_id)
+            if not available_agents:
+                await asyncio.sleep(2)
+                continue
+
+            for agent in available_agents:
+                agent_id = str(agent['id'])
+                # ¿Ya tiene un contacto en preview asignado?
+                assigned_key = f'campaign:{campaign_id}:preview:agent:{agent_id}'
+                already_assigned = await self.redis_client.get(assigned_key)
+                if already_assigned:
+                    # Revisar si el agente respondió
+                    accepted = await self.redis_client.get(f'{assigned_key}:accepted')
+                    rejected = await self.redis_client.get(f'{assigned_key}:rejected')
+                    if accepted:
+                        contact = json.loads(already_assigned)
+                        await self.redis_client.delete(assigned_key, f'{assigned_key}:accepted')
+                        try:
+                            await self.originate_call(campaign_id=campaign_id, contact=contact, agent=agent)
+                            campaign['calls_made'] += 1
+                        except Exception as e:
+                            logger.error(f"Preview originate failed: {e}")
+                    elif rejected:
+                        await self.redis_client.delete(assigned_key, f'{assigned_key}:rejected')
+                        logger.info(f"Preview: agente {agent_id} rechazó contacto")
+                    else:
+                        # Verificar timeout del preview
+                        assigned_ts = float(await self.redis_client.get(f'{assigned_key}:ts') or 0)
+                        if assigned_ts and (datetime.now().timestamp() - assigned_ts) > timeout_secs:
+                            logger.info(f"Preview timeout para agente {agent_id}")
+                            await self.redis_client.delete(assigned_key, f'{assigned_key}:ts')
+                    continue
+
+                # Obtener siguiente contacto y asignarlo al agente
+                contact = await self.get_next_contact(campaign_id)
+                if not contact:
+                    continue
+
+                await self.redis_client.setex(assigned_key, timeout_secs + 60, json.dumps(contact))
+                await self.redis_client.setex(f'{assigned_key}:ts', timeout_secs + 60,
+                                               str(datetime.now().timestamp()))
+                # Publicar evento para que el frontend muestre los datos
+                await self.redis_client.publish('calls:events', json.dumps({
+                    'type': 'preview_contact_assigned',
+                    'campaign_id': campaign_id,
+                    'agent_id': agent_id,
+                    'contact': contact,
+                    'timeout': timeout_secs,
+                }))
+                logger.info(f"Preview: contacto asignado a agente {agent_id}")
+
+            await asyncio.sleep(1)
+
+        logger.info(f"Preview dialer detenido para campaña {campaign_id}")
+
     async def call_blasting_loop(self, campaign_id: int):
         """
         CALL BLASTING: Discado masivo sin agentes
@@ -280,8 +353,8 @@ class DialerEngine:
             }
             
             if agent:
-                # Progresivo: conectar directamente al agente
-                channel = f"SIP/{agent['extension']}"
+                # Progresivo/Preview: conectar directamente al agente
+                channel = f"PJSIP/{agent['extension']}"
                 context = config.get('context', 'from-internal')
                 variables['AGENT_ID'] = str(agent['id'])
             else:
@@ -292,7 +365,7 @@ class DialerEngine:
             # Originar llamada vía AMI
             response = await self.ami_client.send_action({
                 'Action': 'Originate',
-                'Channel': f'SIP/{trunk}/{destination}',
+                'Channel': f'PJSIP/{trunk}/{destination}',
                 'Context': context,
                 'Exten': 's',
                 'Priority': '1',
@@ -302,9 +375,11 @@ class DialerEngine:
                 'Variable': ','.join([f'{k}={v}' for k, v in variables.items()])
             })
             
-            if response.success:
-                call_id = response.headers.get('ActionID')
-                uniqueid = response.headers.get('Uniqueid', call_id)
+            # panoramisk Message: el header de respuesta es 'Response' (capitalizado)
+            ami_response = getattr(response, 'Response', '') or ''
+            if str(ami_response).lower() == 'success':
+                call_id = getattr(response, 'ActionID', None) or str(datetime.now().timestamp())
+                uniqueid = getattr(response, 'Uniqueid', call_id) or call_id
                 
                 self.active_calls[call_id] = {
                     'campaign_id': campaign_id,
@@ -323,8 +398,8 @@ class DialerEngine:
                 )
                 
                 # Guardar referencias para mapeo en eventos
-                channel = f'SIP/{trunk}/{destination}'
-                await self.redis_client.setex(f'channel:{channel}:call_id', 3600, call_id)
+                channel_name = f'PJSIP/{trunk}/{destination}'
+                await self.redis_client.setex(f'channel:{channel_name}:call_id', 3600, call_id)
                 await self.redis_client.setex(f'uniqueid:{uniqueid}:call_id', 3600, call_id)
                 
                 logger.info(f"Llamada originada: {call_id} -> {destination} (uniqueid: {uniqueid})")
@@ -357,7 +432,7 @@ class DialerEngine:
             # Originar y reproducir mensaje
             response = await self.ami_client.send_action({
                 'Action': 'Originate',
-                'Channel': f'SIP/{trunk}/{destination}',
+                'Channel': f'PJSIP/{trunk}/{destination}',
                 'Application': 'Playback',
                 'Data': audio_file,
                 'CallerID': caller_id,
@@ -366,7 +441,8 @@ class DialerEngine:
                 'Variable': f'CAMPAIGN_ID={campaign_id},CONTACT_ID={contact["id"]}'
             })
             
-            if response.success:
+            ami_response = getattr(response, 'Response', '') or ''
+            if str(ami_response).lower() == 'success':
                 logger.info(f"Call blasting originado: {destination}")
             else:
                 logger.error(f"Error en call blasting: {response}")
@@ -433,6 +509,7 @@ class DialerEngine:
         """
         Obtener siguiente contacto de la campaña.
         Aplica filtros DNC, timezone y prioridad VIP antes de retornar.
+        Soporta reintentos multi-número: intenta phone_number, luego phone_2, phone_3.
         """
         config = self.active_campaigns.get(campaign_id, {}).get('config', {})
         dnc_enabled = config.get('dnc_enabled', True)
@@ -447,16 +524,32 @@ class DialerEngine:
 
             contact = json.loads(contact_data)
 
+            # Determinar qué número usar (multi-number retry)
+            phone_fields = ['phone_number', 'phone_2', 'phone_3']
+            retry_index = contact.get('_retry_phone_index', 0)
+            phone = None
+            for idx in range(retry_index, len(phone_fields)):
+                candidate = contact.get(phone_fields[idx], '').strip()
+                if candidate:
+                    phone = candidate
+                    contact['phone_number'] = phone  # normalizar para originate_call
+                    contact['_retry_phone_index'] = idx
+                    break
+
+            if not phone:
+                logger.info(f"Contacto {contact.get('id')} sin números disponibles, descartando")
+                continue
+
             # 1) Filtro DNC: verificar lista negra y opt-out
-            if dnc_enabled and await self._is_dnc_blocked(contact.get('phone', '')):
-                logger.info(f"DNC: saltando contacto {contact.get('phone')} (lista negra/opt-out)")
+            if dnc_enabled and await self._is_dnc_blocked(phone):
+                logger.info(f"DNC: saltando contacto {phone} (lista negra/opt-out)")
                 await self._mark_contact_dnc(contact, campaign_id)
                 continue
 
             # 2) Filtro Timezone: no marcar fuera del horario del contacto
             contact_tz = contact.get('timezone') or campaign_tz
             if not self._is_callable_now(contact_tz):
-                logger.info(f"TZ: saltando {contact.get('phone')} — fuera de horario en {contact_tz}")
+                logger.info(f"TZ: saltando {phone} — fuera de horario en {contact_tz}")
                 # Re-encolar para el próximo ciclo
                 await self.redis_client.rpush(
                     f'campaign:{campaign_id}:contacts:pending',
@@ -647,18 +740,38 @@ class DialerEngine:
         logger.info(f"Agente {agent} completó - Razón: {reason}")
 
 async def main():
-    """Función principal"""
-    dialer = DialerEngine()
-    await dialer.initialize()
-    
-    logger.info("Dialer Engine iniciado y listo")
-    
-    # Mantener el proceso corriendo
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Deteniendo Dialer Engine...")
+    """Función principal con reconexión automática"""
+    retry_delay = 5  # segundos entre reintentos
+    max_retry_delay = 60
+    attempt = 0
+
+    while True:
+        dialer = DialerEngine()
+        try:
+            await dialer.initialize()
+            logger.info("Dialer Engine iniciado y listo")
+            attempt = 0  # reiniciar contador de intentos al conectar exitosamente
+            retry_delay = 5
+
+            # Mantener el proceso corriendo, reiniciar si se cae la conexión
+            while True:
+                await asyncio.sleep(5)
+                # Verificar que Redis sigue conectado
+                try:
+                    await dialer.redis_client.ping()
+                except Exception:
+                    logger.error("Redis ping falló — reconectando...")
+                    break
+
+        except KeyboardInterrupt:
+            logger.info("Deteniendo Dialer Engine...")
+            return
+        except Exception as e:
+            attempt += 1
+            logger.error(f"Error en Dialer Engine (intento {attempt}): {e}")
+            retry_delay = min(retry_delay * 2, max_retry_delay)
+            logger.info(f"Reintentando en {retry_delay}s...")
+            await asyncio.sleep(retry_delay)
 
 if __name__ == '__main__':
     asyncio.run(main())

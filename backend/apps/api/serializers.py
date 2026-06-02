@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from apps.users.models import User
-from apps.campaigns.models import Campaign, CampaignDisposition
+from apps.campaigns.models import Campaign, CampaignDisposition, CampaignForm
 from apps.agents.models import Agent
 from apps.contacts.models import Contact, ContactList
 from apps.queues.models import Queue
@@ -23,15 +23,47 @@ class UserSerializer(serializers.ModelSerializer):
         return obj.get_full_name() or obj.username
 
 
+class CampaignFormSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CampaignForm
+        fields = ['id', 'name', 'description', 'fields_schema', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+    def validate_fields_schema(self, value):
+        """Validar que el esquema de campos sea una lista de objetos válidos."""
+        if not isinstance(value, list):
+            raise serializers.ValidationError('El esquema debe ser una lista de campos.')
+        for i, field in enumerate(value):
+            if not isinstance(field, dict):
+                raise serializers.ValidationError(f'Campo {i}: debe ser un objeto.')
+            if 'name' not in field or 'label' not in field or 'type' not in field:
+                raise serializers.ValidationError(
+                    f'Campo {i}: se requieren "name", "label" y "type".'
+                )
+        return value
+
+
 class CampaignDispositionSerializer(serializers.ModelSerializer):
+    form = CampaignFormSerializer(read_only=True)
+    form_id = serializers.PrimaryKeyRelatedField(
+        queryset=CampaignForm.objects.all(), source='form',
+        write_only=True, required=False, allow_null=True
+    )
+
     class Meta:
         model = CampaignDisposition
-        fields = ['id', 'code', 'name', 'description', 'is_success', 'requires_callback', 'order']
+        fields = ['id', 'code', 'name', 'description', 'is_success', 'requires_callback', 'order',
+                  'form', 'form_id']
 
 
 class CampaignSerializer(serializers.ModelSerializer):
     dispositions = CampaignDispositionSerializer(many=True, read_only=True)
     success_rate = serializers.ReadOnlyField()
+    form = CampaignFormSerializer(read_only=True)
+    form_id = serializers.PrimaryKeyRelatedField(
+        queryset=CampaignForm.objects.all(), source='form',
+        write_only=True, required=False, allow_null=True
+    )
     
     class Meta:
         model = Campaign
