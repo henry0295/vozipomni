@@ -271,7 +271,6 @@ class AgentViewSet(viewsets.ModelViewSet):
     def login(self, request, pk=None):
         """Marcar agente como conectado y unirlo a las colas ACD de Asterisk"""
         from apps.agents.services import AgentService
-        from core.exceptions import AgentNotFoundError
         try:
             agent = self.get_object()
 
@@ -284,20 +283,28 @@ class AgentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            result = AgentService.login_agent(agent.id, request.user)
+            # Flujo principal: servicio de negocio (métricas + eventos)
+            # Si falla integración externa, hacemos fallback al login básico
+            # para no bloquear al agente.
+            try:
+                result = AgentService.login_agent(agent.id, request.user)
+            except Exception:
+                agent.login()
+                result = {
+                    'agent_code': agent.agent_id,
+                    'sip_extension': agent.sip_extension,
+                }
+
             return Response({
                 'status': 'logged in',
                 'agent_id': result['agent_code'],
                 'sip_extension': result['sip_extension'],
-                'sip_password': agent.sip_password,
             })
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).exception('Agent login failed', extra={
-                'agent_pk': pk,
-                'user_id': getattr(request.user, 'id', None)
-            })
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'error': f'No se pudo iniciar sesión del agente: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['post'])
     def logout(self, request, pk=None):
@@ -313,10 +320,18 @@ class AgentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
 
-            AgentService.logout_agent(agent.id, request.user)
+            try:
+                AgentService.logout_agent(agent.id, request.user)
+            except Exception:
+                # Fallback para no dejar al agente bloqueado en sesión
+                agent.logout()
+
             return Response({'status': 'logged out'})
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {'error': f'No se pudo cerrar sesión del agente: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
