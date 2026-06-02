@@ -508,12 +508,23 @@ const formatDuration = webrtc.formatDuration
 watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
   if (isLoggedIn && agentStore.agent) {
     const config = useRuntimeConfig()
-    // Construir URL del WebSocket SIP a través del proxy nginx (/sip/ws)
-    // Esto evita el error de certificado al conectar directo a Asterisk (puerto 8089)
-    const rawBase = (config.public.apiBase as string).replace(/\/api\/?$/, '')
-    const base = rawBase.startsWith('http') ? rawBase : `https://${rawBase}`
-    const wsUrl = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/sip/ws'
-    const sipHost = new URL(base).hostname
+    const apiBase = config.public.apiBase as string
+
+    // Obtener el origin para construir la URL WSS del proxy nginx
+    // Si apiBase es relativa ("/api"), usar window.location.origin
+    // Si apiBase es absoluta ("https://host/api"), extraer el origin de ella
+    let pageOrigin: string
+    if (apiBase.startsWith('http')) {
+      const u = new URL(apiBase)
+      pageOrigin = u.origin  // "https://192.168.101.228"
+    } else {
+      // URL relativa — sólo funciona en browser; SSR usa fallback
+      pageOrigin = (typeof window !== 'undefined' ? window.location.origin : 'https://localhost')
+    }
+
+    const wsUrl = pageOrigin.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/sip/ws'
+    const sipHost = pageOrigin.replace(/^https?:\/\//, '').split(':')[0]
+
     webrtc.register({
       wsUrl,
       sipServer: sipHost,

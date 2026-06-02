@@ -242,11 +242,14 @@ onMounted(() => {
   // WebSocket para actualizaciones en tiempo real desde Django Channels
   const config = useRuntimeConfig()
   const apiBase = config.public.apiBase as string
-  // Construir URL WebSocket: http(s)://host:port → ws(s)://host:port
-  const wsBase = apiBase
-    .replace(/^https:\/\//, 'wss://')
-    .replace(/^http:\/\//, 'ws://')
-    .replace(/\/api\/?$/, '')
+  // Si apiBase es relativa ("/api"), usar window.location.origin para construir la URL WSS
+  let pageOrigin: string
+  if (apiBase.startsWith('http')) {
+    pageOrigin = new URL(apiBase).origin
+  } else {
+    pageOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://localhost'
+  }
+  const wsBase = pageOrigin.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://')
 
   const token = localStorage.getItem('auth_token')
   const wsUrl = `${wsBase}/ws/dashboard/${token ? '?token=' + token : ''}`
