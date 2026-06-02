@@ -8,6 +8,7 @@ export interface WebRTCConfig {
   sipPassword: string
   sipExtension: string
   displayName?: string
+  wsUrl?: string  // URL completa del WebSocket SIP (ej: wss://host/sip/ws); si se omite se construye desde sipServer:sipPort
 }
 
 export interface CallSession {
@@ -46,7 +47,9 @@ export const useWebRTC = () => {
 
     try {
       // Configuración del socket WebSocket
-      const socket = new JsSIP.WebSocketInterface(`wss://${config.sipServer}:${config.sipPort}/ws`)
+      // Usar wsUrl directo (proxy nginx) si se proporciona; si no, construir desde sipServer:sipPort
+      const wsEndpoint = config.wsUrl || `wss://${config.sipServer}:${config.sipPort}/ws`
+      const socket = new JsSIP.WebSocketInterface(wsEndpoint)
       
       const configuration = {
         sockets: [socket],

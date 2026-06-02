@@ -508,10 +508,16 @@ const formatDuration = webrtc.formatDuration
 watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
   if (isLoggedIn && agentStore.agent) {
     const config = useRuntimeConfig()
-    const sipServer = config.public.apiBase.replace(/^https?:\/\//, '').replace('/api', '')
+    // Construir URL del WebSocket SIP a través del proxy nginx (/sip/ws)
+    // Esto evita el error de certificado al conectar directo a Asterisk (puerto 8089)
+    const rawBase = (config.public.apiBase as string).replace(/\/api\/?$/, '')
+    const base = rawBase.startsWith('http') ? rawBase : `https://${rawBase}`
+    const wsUrl = base.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/sip/ws'
+    const sipHost = new URL(base).hostname
     webrtc.register({
-      sipServer: sipServer.split(':')[0],
-      sipPort: 8089,
+      wsUrl,
+      sipServer: sipHost,
+      sipPort: 443,
       sipUser: agentStore.agent.sip_extension,
       sipPassword: agentStore.agent.sip_password || agentStore.agent.sip_extension,
       sipExtension: agentStore.agent.sip_extension,
