@@ -264,9 +264,13 @@ function openSpyModal(agent: any, mode: string) {
 
 async function executeSpy() {
   if (!spyModal.value.extension) return
+  const callId = spyModal.value.agent?.current_call_id
+  if (!callId) {
+    useToast().add({ title: 'El agente no tiene una llamada activa', color: 'orange' })
+    return
+  }
   spyModal.value.loading = true
   try {
-    const callId = spyModal.value.agent?.current_call_id
     await $fetch(`/api/supervisor/${callId}/${spyModal.value.mode}/`, {
       method: 'POST',
       headers: useAuthHeaders(),

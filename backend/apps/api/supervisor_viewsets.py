@@ -97,10 +97,22 @@ class SupervisorViewSet(viewsets.ViewSet):
     def agents_status(self, request):
         """Lista detallada de todos los agentes con su estado actual."""
         from apps.agents.models import Agent
+        from apps.telephony.models import Call
 
         agents = Agent.objects.select_related('user', 'current_campaign').all()
+
+        # Obtener llamadas activas por agente en una sola query
+        active_calls = {
+            c.agent_id: c
+            for c in Call.objects.filter(
+                agent__in=agents,
+                status__in=['initiated', 'ringing', 'answered'],
+            ).select_related('agent')
+        }
+
         data = []
         for a in agents:
+            active_call = active_calls.get(a.id)
             data.append({
                 'id': a.id,
                 'agent_id': a.agent_id,
@@ -116,6 +128,8 @@ class SupervisorViewSet(viewsets.ViewSet):
                 'session_duration': a.session_duration,
                 'occupancy': a.occupancy,
                 'logged_in_at': a.logged_in_at,
+                'current_call_id': active_call.id if active_call else None,
+                'current_call_channel': active_call.channel if active_call else None,
             })
         return Response({'agents': data, 'total': len(data)})
 
@@ -143,7 +157,7 @@ class SupervisorViewSet(viewsets.ViewSet):
                 ami.originate(
                     channel=f'PJSIP/{supervisor_extension}',
                     context='from-spy',
-                    exten=call.channel or call.unique_id,
+                    exten='s',
                     priority=1,
                     variable={'SPY_MODE': 'listen', 'SPY_CHANNEL': call.channel or ''},
                     caller_id=f'Supervisor <{supervisor_extension}>',
@@ -176,7 +190,7 @@ class SupervisorViewSet(viewsets.ViewSet):
                 ami.originate(
                     channel=f'PJSIP/{supervisor_extension}',
                     context='from-spy',
-                    exten=call.channel or call.unique_id,
+                    exten='s',
                     priority=1,
                     variable={'SPY_MODE': 'whisper', 'SPY_CHANNEL': call.channel or ''},
                     caller_id=f'Supervisor <{supervisor_extension}>',
@@ -209,7 +223,7 @@ class SupervisorViewSet(viewsets.ViewSet):
                 ami.originate(
                     channel=f'PJSIP/{supervisor_extension}',
                     context='from-spy',
-                    exten=call.channel or call.unique_id,
+                    exten='s',
                     priority=1,
                     variable={'SPY_MODE': 'barge', 'SPY_CHANNEL': call.channel or ''},
                     caller_id=f'Supervisor <{supervisor_extension}>',

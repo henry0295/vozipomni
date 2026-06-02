@@ -167,6 +167,47 @@ class AsteriskAMI:
         except Exception as e:
             logger.error(f"Error recargando dialplan: {e}")
             return False
+
+    def originate(self, channel: str, context: str, exten: str, priority: int = 1,
+                  caller_id: str = None, variable: dict = None, timeout: int = 30000):
+        """
+        Originar una llamada (versión sincrónica para supervisor/spy).
+
+        Args:
+            channel:   Canal a llamar, ej: PJSIP/1099
+            context:   Contexto del dialplan, ej: from-spy
+            exten:     Extensión destino dentro del contexto
+            priority:  Prioridad del dialplan (default 1)
+            caller_id: Caller ID a mostrar
+            variable:  Dict de variables de canal {key: value}
+            timeout:   Timeout en ms (default 30000)
+        """
+        if not self.connected:
+            raise ConnectionError("No conectado a Asterisk AMI")
+
+        cmd = (
+            f"Action: Originate\r\n"
+            f"Channel: {channel}\r\n"
+            f"Context: {context}\r\n"
+            f"Exten: {exten}\r\n"
+            f"Priority: {priority}\r\n"
+            f"Timeout: {timeout}\r\n"
+            f"Async: true\r\n"
+        )
+        if caller_id:
+            cmd += f"CallerID: {caller_id}\r\n"
+        if variable:
+            var_str = ','.join(f"{k}={v}" for k, v in variable.items())
+            cmd += f"Variable: {var_str}\r\n"
+        cmd += "\r\n"
+
+        self._send_command(cmd)
+        response = self._read_response()
+        success = 'Success' in response or 'Queued' in response
+        logger.info(f"Originate {channel} -> {context}/{exten}: success={success}")
+        if not success and 'Error' in response:
+            raise RuntimeError(f"AMI Originate error: {response[:200]}")
+        return response
     
     def sip_show_peers(self):
         """Obtener lista de peers SIP"""
