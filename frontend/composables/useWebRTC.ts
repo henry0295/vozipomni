@@ -29,6 +29,7 @@ export const useWebRTC = () => {
   
   const callDuration = ref(0)
   let callTimer: any = null
+  let remoteAudioElement: HTMLAudioElement | null = null
   
   const agentStore = useAgentStore()
 
@@ -182,6 +183,13 @@ export const useWebRTC = () => {
     session.on('peerconnection', (data: any) => {
       console.log('WebRTC: Peer connection')
       
+      // Limpiar audio anterior si existe
+      if (remoteAudioElement) {
+        remoteAudioElement.pause()
+        remoteAudioElement.srcObject = null
+        remoteAudioElement = null
+      }
+      
       // Agregar stream de audio remoto
       const remoteStream = new MediaStream()
       const receivers = data.peerconnection.getReceivers()
@@ -193,9 +201,10 @@ export const useWebRTC = () => {
       })
 
       // Reproducir audio remoto
-      const remoteAudio = new Audio()
-      remoteAudio.srcObject = remoteStream
-      remoteAudio.play().catch((err: any) => {
+      remoteAudioElement = new Audio()
+      remoteAudioElement.srcObject = remoteStream
+      remoteAudioElement.autoplay = true
+      remoteAudioElement.play().catch((err: any) => {
         console.error('Error playing remote audio:', err)
       })
     })
@@ -401,6 +410,13 @@ export const useWebRTC = () => {
 
   // Manejar fin de llamada
   const handleCallEnded = () => {
+    // Limpiar audio remoto
+    if (remoteAudioElement) {
+      remoteAudioElement.pause()
+      remoteAudioElement.srcObject = null
+      remoteAudioElement = null
+    }
+    
     stopCallTimer()
     currentSession.value = null
     

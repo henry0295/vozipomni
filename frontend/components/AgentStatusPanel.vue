@@ -156,15 +156,35 @@ const statusOptions = [
   { value: 'wrapup', label: 'Post-llamada' }
 ]
 
-// Opciones de pausa
-const breakOptions = [
-  { id: 'bathroom', name: 'Baño' },
-  { id: 'meal', name: 'Comida' },
-  { id: 'training', name: 'Capacitación' },
-  { id: 'meeting', name: 'Reunión' },
-  { id: 'personal', name: 'Personal' },
-  { id: 'technical', name: 'Problemas Técnicos' }
-]
+// Opciones de pausa (se cargan desde la API)
+const breakOptions = ref<Array<{ id: string, name: string }>>([])
+
+// Cargar break reasons desde la API
+const loadBreakReasons = async () => {
+  try {
+    const { $api } = useNuxtApp()
+    const data = await $api('/break-reasons/')
+    
+    // DRF devuelve { results: [...] } si está paginado
+    const results = data.results || data
+    
+    breakOptions.value = (Array.isArray(results) ? results : []).map((r: any) => ({
+      id: r.code || r.id.toString(),
+      name: r.name
+    }))
+  } catch (err) {
+    console.error('Error loading break reasons:', err)
+    // Fallback a opciones por defecto
+    breakOptions.value = [
+      { id: 'bathroom', name: 'Baño' },
+      { id: 'meal', name: 'Comida' },
+      { id: 'training', name: 'Capacitación' },
+      { id: 'meeting', name: 'Reunión' },
+      { id: 'personal', name: 'Personal' },
+      { id: 'technical', name: 'Problemas Técnicos' }
+    ]
+  }
+}
 
 // Computed
 const agentName = computed(() => {
@@ -265,6 +285,7 @@ const formatTime = (seconds: number) => {
 // Lifecycle
 onMounted(() => {
   selectedStatus.value = agentStore.status
+  loadBreakReasons()
 })
 
 onUnmounted(() => {

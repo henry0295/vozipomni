@@ -210,9 +210,19 @@ export const useAgentStore = defineStore('agent', {
         console.error('WebSocket error:', error)
       }
       
-      this.webSocket.onclose = () => {
-        console.log('Agent WebSocket disconnected')
+      this.webSocket.onclose = (event) => {
+        console.log('Agent WebSocket disconnected', event.code, event.reason)
         this.webSocket = null
+        
+        // Reconexión automática si el agente sigue logueado
+        if (this.isLoggedIn && this.agent) {
+          console.log('Attempting to reconnect WebSocket in 3 seconds...')
+          setTimeout(() => {
+            if (this.isLoggedIn && this.agent && !this.webSocket) {
+              this.connectWebSocket()
+            }
+          }, 3000)
+        }
       }
     },
 

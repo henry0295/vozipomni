@@ -335,6 +335,88 @@ class AgentViewSet(viewsets.ModelViewSet):
             result['sip_extension_available'] = not Agent.objects.filter(sip_extension=sip_extension).exists()
         
         return Response(result)
+    
+    @action(detail=True, methods=['post'])
+    def save_disposition(self, request, pk=None):
+        """Guardar disposición de llamada (para agentes logueados)"""
+        agent = self.get_object()
+        
+        # Extraer datos
+        call_id = request.data.get('call_id')
+        disposition_code = request.data.get('disposition_code')
+        notes = request.data.get('notes', '')
+        callback_date = request.data.get('callback_date')
+        form_data = request.data.get('form_data', {})
+        campaign_id = request.data.get('campaign_id')
+        contact_id = request.data.get('contact_id')
+        
+        # Validar disposición
+        from apps.campaigns.models import CampaignDisposition
+        from apps.telephony.models import Call
+        from apps.contacts.models import Contact
+        
+        disposition = None
+        if campaign_id and disposition_code:
+            try:
+                disposition = CampaignDisposition.objects.get(
+                    campaign_id=campaign_id,
+                    code=disposition_code
+                )
+            except CampaignDisposition.DoesNotExist:
+                return Response(
+                    {'error': f'Disposition {disposition_code} not found for campaign {campaign_id}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Actualizar Call si existe
+        call = None
+        if call_id:
+            try:
+                call = Call.objects.get(call_id=call_id)
+                call.disposition = disposition
+                call.notes = notes
+                if call.metadata is None:
+                    call.metadata = {}
+                call.metadata['form_data'] = form_data
+                call.save()
+            except Call.DoesNotExist:
+                pass
+        
+        # Crear callback si es necesario
+        if disposition and disposition.requires_callback and callback_date:
+            from apps.telephony.models import CallbackRequest
+            from datetime import datetime
+            
+            callback_datetime = datetime.fromisoformat(callback_date.replace('Z', '+00:00'))
+            
+            CallbackRequest.objects.create(
+                phone=call.called_number if call else '',
+                contact_name=call.contact.full_name if call and call.contact else '',
+                notes=notes,
+                scheduled_at=callback_datetime,
+                campaign_id=campaign_id,
+                agent=agent,
+                call=call,
+                contact_id=contact_id,
+                created_by=request.user
+            )
+        
+        # Actualizar contacto con form_data
+        if contact_id and form_data:
+            try:
+                contact = Contact.objects.get(id=contact_id)
+                if contact.custom_fields is None:
+                    contact.custom_fields = {}
+                contact.custom_fields.update(form_data)
+                contact.save()
+            except Contact.DoesNotExist:
+                pass
+        
+        return Response({
+            'status': 'disposition saved',
+            'disposition': disposition.name if disposition else None,
+            'callback_created': disposition.requires_callback if disposition else False
+        })
 
 
 class ContactViewSet(viewsets.ModelViewSet):

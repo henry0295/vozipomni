@@ -255,29 +255,40 @@ const selectDisposition = (disposition: any) => {
 
 const saveDisposition = async () => {
   if (!selectedDisposition.value) {
-    alert('Debe seleccionar una disposición')
+    useToast().add({ title: 'Debe seleccionar una disposición', color: 'orange' })
+    return
+  }
+
+  if (!agentStore.agent) {
+    useToast().add({ title: 'No hay agente logueado', color: 'red' })
     return
   }
 
   isSaving.value = true
 
   try {
+    const { $api } = useNuxtApp()
+    
     // Preparar datos
     const dispositionData = {
+      call_id: agentStore.currentCall?.callId,
       disposition_code: selectedDisposition.value.code,
-      disposition_name: selectedDisposition.value.name,
       notes: notes.value,
-      contact_id: props.callInfo.contactId,
+      contact_id: props.callInfo?.contactId,
       campaign_id: props.campaignId,
       callback_date: selectedDisposition.value.requires_callback && callbackDate.value
-        ? `${callbackDate.value} ${callbackTime.value || '09:00'}`
+        ? `${callbackDate.value}T${callbackTime.value || '09:00'}:00`
         : null,
       form_data: formData.value
     }
 
-    // Aquí se enviaría a la API
-    // const { saveCampaignDisposition } = useCampaigns()
-    // await saveCampaignDisposition(dispositionData)
+    // Guardar vía API
+    await $api(`/agents/${agentStore.agent.id}/save_disposition/`, {
+      method: 'POST',
+      body: dispositionData
+    })
+
+    useToast().add({ title: 'Disposición guardada exitosamente', color: 'green' })
 
     // Emitir evento
     emit('dispositionSaved', dispositionData)
@@ -288,7 +299,11 @@ const saveDisposition = async () => {
     // Volver a disponible
     await agentStore.changeStatus('available')
   } catch (err: any) {
-    alert(`Error al guardar disposición: ${err.message}`)
+    useToast().add({ 
+      title: 'Error al guardar disposición', 
+      description: err?.data?.error || err.message,
+      color: 'red'
+    })
   } finally {
     isSaving.value = false
   }
@@ -328,14 +343,18 @@ const stopWrapupTimer = () => {
 // Cargar disposiciones de la campaña
 const loadCampaignDispositions = async (campaignId: number) => {
   try {
-    // const { getCampaign } = useCampaigns()
-    // const campaign = await getCampaign(campaignId)
-    // currentCampaign.value = campaign
-    // if (campaign.dispositions) {
-    //   dispositions.value = campaign.dispositions
-    // }
+    const { $api } = useNuxtApp()
+    const campaign = await $api(`/campaigns/${campaignId}/`)
+    
+    currentCampaign.value = campaign
+    
+    // Usar disposiciones de la campaña si existen
+    if (campaign.dispositions && campaign.dispositions.length > 0) {
+      dispositions.value = campaign.dispositions
+    }
   } catch (err) {
     console.error('Error loading campaign dispositions:', err)
+    // Mantener disposiciones por defecto
   }
 }
 

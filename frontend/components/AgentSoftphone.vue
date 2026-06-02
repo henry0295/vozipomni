@@ -317,8 +317,6 @@ const quickContacts = ref([
   { name: 'Servicio', extension: '1003' }
 ])
 
-const authHeaders = () => ({ Authorization: 'Bearer ' + localStorage.getItem('auth_token') })
-
 // Computed
 const hasActiveCall = computed(() => webrtc.hasActiveCall.value)
 const canMakeCall = computed(() => webrtc.canMakeCall.value && agentStore.canReceiveCalls)
@@ -412,9 +410,11 @@ const openConsultiveTransfer = async () => {
   showConsultiveModal.value = true
   loadingAgents.value = true
   try {
-    const data = await $fetch('/api/cc/available-agents/', { headers: authHeaders() })
+    const { $api } = useNuxtApp()
+    const data = await $api('/cc/available-agents/')
     availableAgents.value = (data as any).agents || []
-  } catch {
+  } catch (err) {
+    console.error('Error loading available agents:', err)
     availableAgents.value = []
   } finally {
     loadingAgents.value = false
@@ -423,39 +423,54 @@ const openConsultiveTransfer = async () => {
 
 const transferToAgent = async (agent: any) => {
   try {
+    const { $api } = useNuxtApp()
     const session = currentSession.value
-    await $fetch('/api/cc/consultive-transfer/', {
+    
+    await $api('/cc/consultive-transfer/', {
       method: 'POST',
-      headers: authHeaders(),
       body: {
         channel: (session as any)?.channel || '',
         target_extension: agent.sip_extension,
       },
     })
+    
     showConsultiveModal.value = false
+    useToast().add({ title: 'Llamada transferida', color: 'green' })
   } catch (e: any) {
-    alert('Error al transferir: ' + (e?.data?.error || e.message))
+    useToast().add({ 
+      title: 'Error al transferir',
+      description: e?.data?.error || e.message,
+      color: 'red'
+    })
   }
 }
 
 // Conferencia a 3
 const startConference = async () => {
   if (!conferenceNumber.value) return
+  
   conferenceLoading.value = true
   try {
+    const { $api } = useNuxtApp()
     const session = currentSession.value
-    await $fetch('/api/cc/conference/', {
+    
+    await $api('/cc/conference/', {
       method: 'POST',
-      headers: authHeaders(),
       body: {
         channel: (session as any)?.channel || '',
         third_party: conferenceNumber.value,
         agent_id: agentStore.agent?.id,
       },
     })
+    
     conferenceNumber.value = ''
+    useToast().add({ title: 'Conferencia iniciada', color: 'green' })
   } catch (e: any) {
-    alert('Error al crear conferencia: ' + (e?.data?.error || e.message))
+    useToast().add({ 
+      title: 'Error al crear conferencia',
+      description: e?.data?.error || e.message,
+      color: 'red'
+    })
   } finally {
     conferenceLoading.value = false
   }

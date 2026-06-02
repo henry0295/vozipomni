@@ -411,8 +411,15 @@ let dateTimeInterval: any = null
 onMounted(async () => {
   const authStore = useAuthStore()
   
-  // Verificar que solo agentes puedan acceder a esta consola
-  if (!(await requireRole('agent', '/dashboard'))) {
+  // Verificar que solo agentes (o admin) puedan acceder a esta consola
+  if (!authStore.user) {
+    navigateTo('/login')
+    return
+  }
+  
+  // Permitir admin y agent
+  if (!['admin', 'agent'].includes(authStore.user.role)) {
+    navigateTo('/dashboard')
     return
   }
   
@@ -434,6 +441,11 @@ onMounted(async () => {
       } else {
         // Sin agentes asignados
         console.log('No agent profiles found for user')
+        useToast().add({
+          title: 'Sin perfiles de agente',
+          description: 'Este usuario no tiene perfiles de agente asignados',
+          color: 'orange'
+        })
       }
     } catch (error) {
       console.error('Error during auto-login:', error)

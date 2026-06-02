@@ -99,38 +99,34 @@ const loadCampaigns = async () => {
 
   isLoading.value = true
   try {
-    // Cargar campañas asignadas al agente
-    // const { getCampaigns } = useCampaigns()
-    // const result = await getCampaigns({ 
-    //   agent_id: agentStore.agent.id,
-    //   status: 'active'
-    // })
+    const { $api } = useNuxtApp()
     
-    // Mock data mientras se implementa la API
-    campaigns.value = [
-      {
-        id: 1,
-        name: 'Campaña de Ventas 2024',
-        description: 'Promoción de productos nuevos',
-        campaign_type: 'progressive',
-        total_contacts: 1000,
-        contacted: 450,
-        successful: 120,
-        progress: 45,
-        script: 'Buenos días, mi nombre es {AGENT_NAME} de {COMPANY}. ¿Cómo está el día de hoy?\n\nLe llamo para ofrecerle nuestra nueva línea de productos...'
-      },
-      {
-        id: 2,
-        name: 'Encuesta de Satisfacción',
-        description: 'Evaluación post-venta',
-        campaign_type: 'preview',
-        total_contacts: 500,
-        contacted: 300,
-        successful: 250,
-        progress: 60,
-        script: 'Hola, soy {AGENT_NAME}. ¿Tiene un momento para una breve encuesta sobre nuestro servicio?'
+    // Cargar campañas activas asignadas al agente
+    const data = await $api('/campaigns/', {
+      query: {
+        agents: agentStore.agent.id,
+        status: 'active'
       }
-    ]
+    })
+    
+    // DRF devuelve { results: [...], count: ... } si está paginado
+    const results = data.results || data
+    
+    // Mapear a formato esperado
+    campaigns.value = (Array.isArray(results) ? results : []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      description: c.description || '',
+      campaign_type: c.campaign_type,
+      dialer_type: c.dialer_type,
+      total_contacts: c.contact_list_count || 0,
+      contacted: c.contacted_count || 0,
+      successful: c.successful_count || 0,
+      progress: c.contact_list_count > 0 
+        ? Math.round((c.contacted_count / c.contact_list_count) * 100)
+        : 0,
+      script: c.script || ''
+    }))
 
     // Seleccionar la primera campaña por defecto
     if (campaigns.value.length > 0 && !selectedCampaignId.value) {
@@ -138,6 +134,11 @@ const loadCampaigns = async () => {
     }
   } catch (err) {
     console.error('Error loading campaigns:', err)
+    useToast().add({
+      title: 'Error cargando campañas',
+      description: (err as any)?.data?.error || (err as Error).message,
+      color: 'red'
+    })
   } finally {
     isLoading.value = false
   }
