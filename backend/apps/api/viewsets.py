@@ -226,6 +226,22 @@ class AgentViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'agent_id', 'status', 'calls_today']
     ordering = ['-created_at']
     
+    def get_permissions(self):
+        """
+        Permitir a los agentes ejecutar sus propias acciones
+        Admin/Supervisor pueden hacer todo
+        """
+        # Acciones que los agentes autenticados pueden ejecutar
+        agent_allowed_actions = [
+            'login', 'logout', 'change_status', 
+            'start_break', 'end_break', 'save_disposition'
+        ]
+        
+        if self.action in agent_allowed_actions:
+            return [IsAuthenticated()]
+        
+        return super().get_permissions()
+    
     def get_throttles(self):
         """Aplicar rate limiting solo a acciones de agente"""
         if self.action in ['save_disposition', 'change_status', 'start_break', 'end_break']:
