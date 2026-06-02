@@ -272,8 +272,18 @@ class AgentViewSet(viewsets.ModelViewSet):
         """Marcar agente como conectado y unirlo a las colas ACD de Asterisk"""
         from apps.agents.services import AgentService
         from core.exceptions import AgentNotFoundError
-        agent = self.get_object()
         try:
+            agent = self.get_object()
+
+            # Un agente solo puede iniciar su propia sesión.
+            # Admin/supervisor pueden iniciar sesión de cualquier agente para soporte.
+            user_role = getattr(request.user, 'role', None)
+            if user_role not in ['admin', 'supervisor'] and agent.user_id != request.user.id:
+                return Response(
+                    {'error': 'No tiene permisos para iniciar sesión de este agente'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             result = AgentService.login_agent(agent.id, request.user)
             return Response({
                 'status': 'logged in',
@@ -282,18 +292,31 @@ class AgentViewSet(viewsets.ModelViewSet):
                 'sip_password': agent.sip_password,
             })
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            import logging
+            logging.getLogger(__name__).exception('Agent login failed', extra={
+                'agent_pk': pk,
+                'user_id': getattr(request.user, 'id', None)
+            })
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['post'])
     def logout(self, request, pk=None):
         """Marcar agente como desconectado y retirarlo de las colas ACD de Asterisk"""
         from apps.agents.services import AgentService
-        agent = self.get_object()
         try:
+            agent = self.get_object()
+
+            user_role = getattr(request.user, 'role', None)
+            if user_role not in ['admin', 'supervisor'] and agent.user_id != request.user.id:
+                return Response(
+                    {'error': 'No tiene permisos para cerrar sesión de este agente'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
             AgentService.logout_agent(agent.id, request.user)
             return Response({'status': 'logged out'})
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):

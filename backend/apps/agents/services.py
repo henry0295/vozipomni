@@ -88,7 +88,19 @@ class AgentService:
         ).set(1)
         
         # Emit event (will add agent to queues)
-        emit_event(agent_logged_in, sender=Agent, agent=agent, user=user)
+        try:
+            emit_event(agent_logged_in, sender=Agent, agent=agent, user=user)
+        except Exception as e:
+            # No bloquear el login del agente por fallas externas (AMI/colas/event bus)
+            logger.exception(
+                "Agent login event emission failed",
+                extra={
+                    'agent_id': agent_id,
+                    'agent_code': agent.agent_id,
+                    'user_id': user.id if user else None,
+                    'error': str(e)
+                }
+            )
         
         logger.info(
             "Agent logged in",
@@ -136,13 +148,24 @@ class AgentService:
         ).set(0)
         
         # Emit event (will remove agent from queues)
-        emit_event(
-            agent_logged_out,
-            sender=Agent,
-            agent=agent,
-            user=user,
-            session_duration=agent.session_duration
-        )
+        try:
+            emit_event(
+                agent_logged_out,
+                sender=Agent,
+                agent=agent,
+                user=user,
+                session_duration=agent.session_duration
+            )
+        except Exception as e:
+            logger.exception(
+                "Agent logout event emission failed",
+                extra={
+                    'agent_id': agent_id,
+                    'agent_code': agent.agent_id,
+                    'user_id': user.id if user else None,
+                    'error': str(e)
+                }
+            )
         
         logger.info(
             "Agent logged out",
@@ -221,14 +244,26 @@ class AgentService:
         ).set(1)
         
         # Emit event (will pause/unpause in queues)
-        emit_event(
-            agent_status_changed,
-            sender=Agent,
-            agent=agent,
-            old_status=old_status,
-            new_status=new_status,
-            reason=reason
-        )
+        try:
+            emit_event(
+                agent_status_changed,
+                sender=Agent,
+                agent=agent,
+                old_status=old_status,
+                new_status=new_status,
+                reason=reason
+            )
+        except Exception as e:
+            logger.exception(
+                "Agent status event emission failed",
+                extra={
+                    'agent_id': agent_id,
+                    'agent_code': agent.agent_id,
+                    'old_status': old_status,
+                    'new_status': new_status,
+                    'error': str(e)
+                }
+            )
         
         logger.info(
             "Agent status changed",
