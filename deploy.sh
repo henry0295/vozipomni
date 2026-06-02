@@ -1074,9 +1074,13 @@ post_deploy() {
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@vozipomni.local', '${ADMIN_PASSWORD}')
+    u = User.objects.create_superuser('admin', 'admin@vozipomni.local', '${ADMIN_PASSWORD}')
+    u.role = 'admin'
+    u.save(update_fields=['role'])
     print('Superuser creado')
 else:
+    # Asegurar que el admin existente tenga rol correcto
+    User.objects.filter(username='admin').update(role='admin')
     print('Superuser ya existe')
 PYEOF
 
