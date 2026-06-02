@@ -67,18 +67,23 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# ─── Parsear argumentos (--clean, IP) ────────────────────────────────────────
+# ─── Parsear argumentos (--clean, --update, IP) ─────────────────────────────
 CLEAN_INSTALL=false
+UPDATE_ONLY=false
 for arg in "$@"; do
     case "$arg" in
         --clean|-c)
             CLEAN_INSTALL=true
             ;;
+        --update|-u)
+            UPDATE_ONLY=true
+            ;;
         --help|-h)
-            echo "Uso: deploy.sh [--clean] <IP>"
+            echo "Uso: deploy.sh [--clean|--update] <IP>"
             echo ""
             echo "  IP          IP del servidor (requerido)"
             echo "  --clean     Borrar instalación existente (volúmenes, .env, credenciales)"
+            echo "  --update    Actualizar instalación existente sin borrar datos"
             echo "  --help      Mostrar esta ayuda"
             exit 0
             ;;
@@ -1231,6 +1236,94 @@ ENVCONFIG
     echo ""
 }
 
+# ─── 10. Actualización de instalación existente ────────────────────────────
+update_production() {
+    log_info "════════════════════════════════════════════════════════"
+    log_info "  Modo UPDATE — actualizando instalación existente"
+    log_info "  Los datos (BD, grabaciones, .env) NO se borran"
+    log_info "════════════════════════════════════════════════════════"
+
+    # Verificar que existe una instalación
+    if [ ! -d "$INSTALL_DIR/.git" ]; then
+        log_error "No se encontró instalación en $INSTALL_DIR"
+        log_error "Ejecuta sin --update para realizar una instalación nueva."
+        exit 1
+    fi
+
+    cd "$INSTALL_DIR"
+
+    # 1. Detectar compose
+    if docker compose version &>/dev/null 2>&1; then
+        COMPOSE_CMD="docker compose"
+    elif docker-compose version &>/dev/null 2>&1; then
+        COMPOSE_CMD="docker-compose"
+    else
+        log_error "docker compose no encontrado"
+        exit 1
+    fi
+    log_success "Usando: $COMPOSE_CMD"
+
+    # 2. Actualizar código
+    log_info "Actualizando código desde GitHub (rama: ${BRANCH:-main})..."
+    git fetch origin
+    git checkout "${BRANCH:-main}" 2>/dev/null || true
+    git pull origin "${BRANCH:-main}"
+    log_success "Código actualizado al último commit: $(git log --oneline -1)"
+
+    # 3. Reconstruir imágenes con el nuevo código
+    log_info "Reconstruyendo imágenes Docker (sin cache de código)..."
+    $COMPOSE_CMD -f docker-compose.prod.yml build \
+        --build-arg BUILDKIT_INLINE_CACHE=1 \
+        backend frontend celery_worker celery_beat websocket_server dialer_engine nginx 2>&1
+    log_success "Imágenes reconstruidas"
+
+    # 4. Reiniciar servicios con nuevas imágenes (up -d reemplaza solo los cambiados)
+    log_info "Reiniciando servicios con nuevas imágenes..."
+    $COMPOSE_CMD -f docker-compose.prod.yml up -d --remove-orphans
+    log_success "Servicios actualizados"
+
+    # 5. Esperar que el backend esté healthy
+    wait_container_healthy "vozipomni_backend" 180
+
+    # 6. Aplicar migraciones pendientes
+    log_info "Aplicando migraciones pendientes..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput 2>&1 | \
+        grep -v '^$' || true
+    log_success "Migraciones aplicadas"
+
+    # 7. Asegurar rol admin correcto
+    log_info "Verificando rol del usuario admin..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null || true
+from django.contrib.auth import get_user_model
+User = get_user_model()
+updated = User.objects.filter(username='admin', role__in=['agent','analyst']).update(role='admin')
+if updated:
+    print(f'Rol admin corregido para {updated} usuario(s)')
+else:
+    print('Rol admin OK')
+PYEOF
+
+    # 8. Recargar dialplan de Asterisk (recoge cambios en extensions.conf)
+    log_info "Recargando dialplan de Asterisk..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>/dev/null || true
+    log_success "Dialplan recargado"
+
+    # 9. Recolectar archivos estáticos
+    log_info "Recolectando archivos estáticos..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py collectstatic --noinput --clear 2>&1 | \
+        tail -1 || true
+
+    echo ""
+    log_success "════════════════════════════════════════════════════════"
+    log_success "  ¡Actualización completada exitosamente!"
+    log_success "════════════════════════════════════════════════════════"
+    echo ""
+    echo -e "${GREEN}Servicios activos:${NC}"
+    $COMPOSE_CMD -f docker-compose.prod.yml ps --format 'table {{.Name}}\t{{.Status}}'
+    echo ""
+    echo -e "Accede a: ${GREEN}http://$VOZIPOMNI_IPV4${NC}  (o https si tienes SSL)"
+}
+
 # ─── 10. Mostrar resultado ──────────────────────────────────────────────────
 show_result() {
     echo ""
@@ -1281,6 +1374,14 @@ show_result() {
 # =============================================================================
 main() {
     banner
+
+    # Modo actualización: flujo corto sin borrar datos
+    if [ "$UPDATE_ONLY" = true ]; then
+        check_prerequisites
+        update_production
+        exit 0
+    fi
+
     check_prerequisites
     echo ""
     prepare_system
