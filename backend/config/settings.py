@@ -18,6 +18,10 @@ if not config('DEBUG', default=False, cast=bool) and SECRET_KEY == _SECRET_KEY_D
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# Agregar automáticamente la IP del servidor (inyectada por deploy.sh como VOZIPOMNI_IPV4)
+_server_ip = config('VOZIPOMNI_IPV4', default='')
+if _server_ip and _server_ip not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(_server_ip)
 
 # Application definition
 INSTALLED_APPS = [
