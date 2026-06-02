@@ -11,6 +11,7 @@ class Migration(migrations.Migration):
     """
 
     dependencies = [
+        ('agents', '0004_agentgroup_agentbreakreason_updates'),
         ('campaigns', '0001_initial'),
     ]
 

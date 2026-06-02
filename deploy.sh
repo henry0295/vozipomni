@@ -1163,16 +1163,8 @@ ENVCONFIG
     # ─── 3. Aplicar migraciones de mejoras ──────────────────────────────────
     log_info "Aplicando migraciones de mejoras v3.0.0..."
     
-    # Migración de encriptación (0009)
-    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate telephony 0009 2>&1 | \
-        grep -v "No migrations to apply" | grep -v "^$" || true
-    
-    # Migración de índices telephony (0010)
-    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate telephony 0010 2>&1 | \
-        grep -v "No migrations to apply" | grep -v "^$" || true
-    
-    # Migración de índices agents (0003)
-    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate agents 0003 2>&1 | \
+    # Aplicar todas las migraciones pendientes
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate 2>&1 | \
         grep -v "No migrations to apply" | grep -v "^$" || true
     
     log_success "✓ Migraciones aplicadas"
