@@ -55,6 +55,16 @@ on_error() {
     echo "  3. Revise: ${COMPOSE_CMD:-docker compose} -f docker-compose.prod.yml logs"
     echo "  4. Reintente: sudo bash deploy.sh"
     echo ""
+
+    if [ -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
+        echo "Estado actual de contenedores:"
+        ${COMPOSE_CMD:-docker compose} -f "$INSTALL_DIR/docker-compose.prod.yml" ps 2>/dev/null || true
+        echo ""
+        echo "Últimos logs del backend:"
+        ${COMPOSE_CMD:-docker compose} -f "$INSTALL_DIR/docker-compose.prod.yml" logs --tail=80 backend 2>/dev/null || docker logs --tail=80 vozipomni_backend 2>/dev/null || true
+        echo ""
+    fi
+
     exit $exit_code
 }
 trap on_error ERR
