@@ -366,8 +366,46 @@ const callDirectionLabel = computed(() => {
 })
 
 // Methods
+
+// Tonos DTMF via Web Audio API (frecuencias estándar ITU-T Q.23)
+const DTMF_FREQS: Record<string, [number, number]> = {
+  '1': [697, 1209], '2': [697, 1336], '3': [697, 1477],
+  '4': [770, 1209], '5': [770, 1336], '6': [770, 1477],
+  '7': [852, 1209], '8': [852, 1336], '9': [852, 1477],
+  '*': [941, 1209], '0': [941, 1336], '#': [941, 1477]
+}
+
+const playDTMFTone = (digit: string) => {
+  try {
+    const freqs = DTMF_FREQS[digit]
+    if (!freqs) return
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioCtx) return
+    const ctx = new AudioCtx()
+    const duration = 0.12
+
+    const gain = ctx.createGain()
+    gain.connect(ctx.destination)
+    gain.gain.setValueAtTime(0.15, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration)
+
+    for (const freq of freqs) {
+      const osc = ctx.createOscillator()
+      osc.connect(gain)
+      osc.frequency.value = freq
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + duration)
+    }
+
+    setTimeout(() => ctx.close(), (duration + 0.15) * 1000)
+  } catch {
+    // Audio no disponible, no bloquear la UI
+  }
+}
+
 const addDigit = (digit: string) => {
   dialNumber.value += digit
+  playDTMFTone(digit)
 }
 
 const clearDigit = () => {

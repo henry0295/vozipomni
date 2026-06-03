@@ -1,4 +1,4 @@
-import { ref, computed } from 'vue'
+import { ref, shallowRef, computed, markRaw } from 'vue'
 import JsSIP from 'jssip'
 
 export interface WebRTCConfig {
@@ -21,7 +21,9 @@ export interface CallSession {
 }
 
 export const useWebRTC = () => {
-  const ua = ref<any>(null)
+  // shallowRef + markRaw evitan que Vue envuelva los objetos JsSIP en un deep Proxy,
+  // lo cual causaría TypeError en propiedades non-writable/non-configurable (ej: 'uri').
+  const ua = shallowRef<any>(null)
   const currentSession = ref<CallSession | null>(null)
   const isRegistered = ref(false)
   const isConnecting = ref(false)
@@ -61,7 +63,7 @@ export const useWebRTC = () => {
         use_preloaded_route: false
       }
 
-      ua.value = new JsSIP.UA(configuration)
+      ua.value = markRaw(new JsSIP.UA(configuration))
 
       // Event listeners
       setupUAEventListeners()
@@ -139,7 +141,7 @@ export const useWebRTC = () => {
     const remoteIdentity = session.remote_identity.uri.user || 'Unknown'
 
     currentSession.value = {
-      session,
+      session: markRaw(session),  // markRaw evita que Vue proxie la sesión JsSIP
       remoteIdentity,
       direction,
       isEstablished: false,
