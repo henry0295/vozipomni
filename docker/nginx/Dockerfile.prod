@@ -3,7 +3,14 @@ FROM nginx:alpine
 
 # Copiar configuración
 COPY nginx.conf /etc/nginx/nginx.conf
+# Config HTTP (activa por defecto)
 COPY default.prod.conf /etc/nginx/conf.d/default.conf
+# Config HTTPS (se activa automáticamente si existen certificados SSL)
+COPY default.https.conf /etc/nginx/conf.d/default.https.conf.bak
+
+# Script que selecciona HTTP o HTTPS según presencia de certificados
+COPY nginx-ssl-switch.sh /docker-entrypoint.d/01-ssl-switch.sh
+RUN chmod +x /docker-entrypoint.d/01-ssl-switch.sh
 
 # Crear directorios necesarios
 RUN mkdir -p /var/log/nginx /var/cache/nginx
