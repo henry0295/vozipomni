@@ -1,152 +1,148 @@
 <template>
-  <div class="agent-status-panel">
-    <UCard>
-      <template #header>
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold">Estado del Agente</h3>
-          <UBadge :color="statusColor" size="lg">
-            {{ statusLabel }}
-          </UBadge>
+  <div>
+    <!-- Botón trigger del popover -->
+    <UPopover v-model:open="isOpen" :popper="{ placement: 'bottom-end', offsetDistance: 8 }">
+      <button
+        class="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-colors"
+        :class="[
+          statusColor === 'green'  ? 'border-green-200  bg-green-50  hover:bg-green-100  dark:border-green-800  dark:bg-green-900/30  dark:hover:bg-green-900/50'  : '',
+          statusColor === 'blue'   ? 'border-blue-200   bg-blue-50   hover:bg-blue-100   dark:border-blue-800   dark:bg-blue-900/30   dark:hover:bg-blue-900/50'   : '',
+          statusColor === 'yellow' ? 'border-yellow-200 bg-yellow-50 hover:bg-yellow-100 dark:border-yellow-800 dark:bg-yellow-900/30 dark:hover:bg-yellow-900/50' : '',
+          statusColor === 'purple' ? 'border-purple-200 bg-purple-50 hover:bg-purple-100 dark:border-purple-800 dark:bg-purple-900/30 dark:hover:bg-purple-900/50' : '',
+          statusColor === 'gray'   ? 'border-gray-200   bg-gray-50   hover:bg-gray-100   dark:border-gray-700   dark:bg-gray-800      dark:hover:bg-gray-700'      : '',
+        ]"
+      >
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" :class="statusDotClass" />
+        <span class="font-medium text-sm text-gray-800 dark:text-gray-200">{{ agentName }}</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400 hidden sm:inline">· {{ statusLabel }}</span>
+        <UIcon name="i-heroicons-chevron-down" class="w-3.5 h-3.5 text-gray-400 ml-0.5" />
+      </button>
+
+      <template #panel>
+        <div class="w-72">
+          <!-- Encabezado con info del agente -->
+          <div class="flex items-center gap-3 p-4 border-b border-gray-200 dark:border-gray-700">
+            <UAvatar :alt="agentName" size="md" />
+            <div class="flex-1 min-w-0">
+              <p class="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">{{ agentName }}</p>
+              <p class="text-xs text-gray-500">Ext: {{ agentExtension }}</p>
+            </div>
+            <UBadge :color="statusColor" size="sm">{{ statusLabel }}</UBadge>
+          </div>
+
+          <div class="p-4 space-y-4">
+            <!-- Banner de pausa activa -->
+            <div
+              v-if="isOnBreak"
+              class="flex items-center justify-between px-3 py-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800"
+            >
+              <div class="flex items-center gap-2">
+                <UIcon name="i-heroicons-pause-circle" class="text-yellow-600 w-4 h-4 flex-shrink-0" />
+                <span class="text-sm font-medium text-yellow-800 dark:text-yellow-300">{{ pauseReason }}</span>
+              </div>
+              <span class="text-xs text-yellow-600 dark:text-yellow-400 tabular-nums">{{ formatTime(pauseDuration) }}</span>
+            </div>
+
+            <!-- Cambiar Estado -->
+            <div>
+              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cambiar Estado</p>
+              <div class="space-y-1">
+                <button
+                  v-for="opt in statusOptions"
+                  :key="opt.value"
+                  :disabled="isOnCall || isChangingStatus"
+                  class="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  :class="agentStore.status === opt.value
+                    ? 'bg-gray-100 dark:bg-gray-700 font-semibold cursor-default'
+                    : 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer text-gray-700 dark:text-gray-300'"
+                  @click="handleStatusChange(opt.value)"
+                >
+                  <span class="w-2 h-2 rounded-full flex-shrink-0" :class="opt.dot" />
+                  {{ opt.label }}
+                  <UIcon
+                    v-if="agentStore.status === opt.value"
+                    name="i-heroicons-check"
+                    class="ml-auto w-3.5 h-3.5 text-gray-500"
+                  />
+                </button>
+              </div>
+            </div>
+
+            <!-- Botones de pausa -->
+            <div class="border-t border-gray-100 dark:border-gray-700 pt-3">
+              <UButton
+                v-if="isOnBreak"
+                block
+                color="green"
+                size="sm"
+                icon="i-heroicons-play-circle"
+                :loading="isChangingStatus"
+                @click="endBreak"
+              >
+                Terminar Pausa
+              </UButton>
+              <UButton
+                v-else-if="!isOnCall"
+                block
+                color="yellow"
+                variant="soft"
+                size="sm"
+                icon="i-heroicons-pause-circle"
+                :disabled="isChangingStatus"
+                @click="openBreakModal"
+              >
+                Iniciar Pausa
+              </UButton>
+            </div>
+
+            <!-- Estadísticas del día -->
+            <div class="border-t border-gray-100 dark:border-gray-700 pt-3">
+              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Estadísticas de Hoy</p>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="text-center p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p class="text-xl font-bold text-blue-700 dark:text-blue-300">{{ stats.callsToday }}</p>
+                  <p class="text-xs text-blue-600 dark:text-blue-400">Llamadas</p>
+                </div>
+                <div class="text-center p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <p class="text-base font-bold text-green-700 dark:text-green-300 tabular-nums">{{ formatTime(stats.talkTimeToday) }}</p>
+                  <p class="text-xs text-green-600 dark:text-green-400">Hablando</p>
+                </div>
+                <div class="text-center p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                  <p class="text-base font-bold text-purple-700 dark:text-purple-300 tabular-nums">{{ formatTime(stats.availableTimeToday) }}</p>
+                  <p class="text-xs text-purple-600 dark:text-purple-400">Disponible</p>
+                </div>
+                <div class="text-center p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                  <p class="text-base font-bold text-yellow-700 dark:text-yellow-300 tabular-nums">{{ formatTime(stats.breakTimeToday) }}</p>
+                  <p class="text-xs text-yellow-600 dark:text-yellow-400">En Pausa</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tiempo de sesión -->
+            <div class="border-t border-gray-100 dark:border-gray-700 pt-3 flex items-center justify-between">
+              <span class="text-xs text-gray-500">Sesión activa:</span>
+              <span class="text-xs font-semibold text-gray-700 dark:text-gray-300 tabular-nums">{{ formatTime(sessionDuration) }}</span>
+            </div>
+          </div>
         </div>
       </template>
+    </UPopover>
 
-      <!-- Información del agente -->
-      <div class="space-y-4">
-        <div class="flex items-center gap-3 pb-4 border-b border-gray-200">
-          <UAvatar
-            :alt="agentName"
-            size="xl"
-          />
-          <div class="flex-1">
-            <p class="font-semibold text-lg">{{ agentName }}</p>
-            <p class="text-sm text-gray-600">Ext: {{ agentExtension }}</p>
-          </div>
-        </div>
-
-        <!-- Selector de estado -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Cambiar Estado</label>
-          <USelectMenu
-            v-model="selectedStatus"
-            :options="statusOptions"
-            :disabled="isOnCall"
-            @change="handleStatusChange"
-          >
-            <template #leading>
-              <div :class="`w-2 h-2 rounded-full ${statusColor === 'green' ? 'bg-green-500' : statusColor === 'red' ? 'bg-red-500' : statusColor === 'yellow' ? 'bg-yellow-500' : 'bg-gray-500'}`" />
-            </template>
-          </USelectMenu>
-        </div>
-
-        <!-- Botón de pausa -->
-        <div v-if="!isOnCall && !isOnBreak" class="pt-2">
-          <UButton
-            block
-            color="yellow"
-            variant="soft"
-            icon="i-heroicons-pause-circle"
-            @click="showBreakModal = true"
-          >
-            Iniciar Pausa
-          </UButton>
-        </div>
-
-        <!-- En pausa - mostrar razón y botón para terminar -->
-        <div v-if="isOnBreak" class="pt-2 space-y-2">
-          <div class="flex items-center justify-between p-3 bg-yellow-50 rounded-lg">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-heroicons-pause-circle" class="text-yellow-600" />
-              <span class="text-sm font-medium text-yellow-800">{{ pauseReason }}</span>
-            </div>
-            <span class="text-xs text-yellow-600">{{ formatTime(pauseDuration) }}</span>
-          </div>
-          <UButton
-            block
-            color="green"
-            icon="i-heroicons-play-circle"
-            @click="endBreak"
-          >
-            Terminar Pausa
-          </UButton>
-        </div>
-
-        <!-- Estadísticas del día -->
-        <div class="pt-4 border-t border-gray-200">
-          <p class="text-sm font-medium text-gray-700 mb-3">Estadísticas de Hoy</p>
-          <div class="grid grid-cols-2 gap-3">
-            <div class="bg-blue-50 p-3 rounded-lg">
-              <p class="text-xs text-blue-600 mb-1">Llamadas</p>
-              <p class="text-2xl font-bold text-blue-700">{{ stats.callsToday }}</p>
-            </div>
-            <div class="bg-green-50 p-3 rounded-lg">
-              <p class="text-xs text-green-600 mb-1">Tiempo hablando</p>
-              <p class="text-lg font-bold text-green-700">{{ formatTime(stats.talkTimeToday) }}</p>
-            </div>
-            <div class="bg-purple-50 p-3 rounded-lg">
-              <p class="text-xs text-purple-600 mb-1">Disponible</p>
-              <p class="text-lg font-bold text-purple-700">{{ formatTime(stats.availableTimeToday) }}</p>
-            </div>
-            <div class="bg-yellow-50 p-3 rounded-lg">
-              <p class="text-xs text-yellow-600 mb-1">En pausa</p>
-              <p class="text-lg font-bold text-yellow-700">{{ formatTime(stats.breakTimeToday) }}</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Historial de llamadas de hoy -->
-        <div class="pt-4 border-t border-gray-200">
-          <div class="flex items-center justify-between mb-2 cursor-pointer" @click="showCallLogs = !showCallLogs">
-            <p class="text-sm font-medium text-gray-700">Historial de Hoy</p>
-            <UIcon :name="showCallLogs ? 'i-heroicons-chevron-up' : 'i-heroicons-chevron-down'" class="text-gray-500" />
-          </div>
-          
-          <div v-if="showCallLogs" class="space-y-2 max-h-48 overflow-y-auto">
-            <div
-              v-for="call in recentCalls"
-              :key="call.id"
-              class="p-2 bg-gray-50 rounded text-xs"
-            >
-              <div class="flex justify-between items-start mb-1">
-                <div>
-                  <p class="font-medium text-gray-800">{{ call.phone }}</p>
-                  <p class="text-gray-600">{{ call.time }}</p>
-                </div>
-                <UBadge :color="call.success ? 'green' : 'gray'" size="xs">
-                  {{ call.disposition }}
-                </UBadge>
-              </div>
-              <p class="text-gray-600">{{ call.duration }}</p>
-            </div>
-            <p v-if="recentCalls.length === 0" class="text-center text-gray-500 py-4">
-              Sin llamadas hoy
-            </p>
-          </div>
-        </div>
-
-        <!-- Tiempo de sesión -->
-        <div class="pt-4 border-t border-gray-200">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-600">Sesión iniciada:</span>
-            <span class="text-sm font-medium">{{ formatTime(sessionDuration) }}</span>
-          </div>
-        </div>
-      </div>
-    </UCard>
-
-    <!-- Modal de pausa -->
+    <!-- Modal de pausa (fuera del popover para evitar conflictos de z-index) -->
     <UModal v-model="showBreakModal">
       <UCard>
         <template #header>
-          <h3 class="text-lg font-semibold">Seleccionar Motivo de Pausa</h3>
+          <h3 class="text-base font-semibold">Seleccionar Motivo de Pausa</h3>
         </template>
 
-        <div class="space-y-3">
+        <div class="space-y-2">
           <UButton
             v-for="breakOption in breakOptions"
             :key="breakOption.id"
             block
             variant="soft"
             color="gray"
+            :loading="isChangingStatus"
             @click="startBreak(breakOption)"
           >
             {{ breakOption.name }}
@@ -155,11 +151,7 @@
 
         <template #footer>
           <div class="flex justify-end">
-            <UButton
-              color="gray"
-              variant="ghost"
-              @click="showBreakModal = false"
-            >
+            <UButton color="gray" variant="ghost" @click="showBreakModal = false">
               Cancelar
             </UButton>
           </div>
@@ -174,52 +166,36 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useAgentStore } from '~/stores/agent'
 
 const agentStore = useAgentStore()
+const isOpen = ref(false)
 const showBreakModal = ref(false)
-const showCallLogs = ref(false)
-const recentCalls = ref<Array<{
-  id: number
-  phone: string
-  time: string
-  duration: string
-  disposition: string
-  success: boolean
-}>>([])
+const isChangingStatus = ref(false)
 
-// Estado seleccionado
-const selectedStatus = ref('available')
-
-// Opciones de estado
+// Opciones de estado (solo strings como value)
 const statusOptions = [
-  { value: 'available', label: 'Disponible' },
-  { value: 'busy', label: 'Ocupado' },
-  { value: 'wrapup', label: 'Post-llamada' }
+  { value: 'available', label: 'Disponible', dot: 'bg-green-500' },
+  { value: 'busy',      label: 'Ocupado',     dot: 'bg-yellow-500' },
+  { value: 'wrapup',    label: 'Post-llamada', dot: 'bg-purple-500' }
 ]
 
 // Opciones de pausa (se cargan desde la API)
 const breakOptions = ref<Array<{ id: string, name: string }>>([])
 
-// Cargar break reasons desde la API
 const loadBreakReasons = async () => {
   try {
     const { $api } = useNuxtApp()
     const data = await $api('/break-reasons/')
-    
-    // DRF devuelve { results: [...] } si está paginado
     const results = data.results || data
-    
     breakOptions.value = (Array.isArray(results) ? results : []).map((r: any) => ({
       id: r.code || r.id.toString(),
       name: r.name
     }))
-  } catch (err) {
-    console.error('Error loading break reasons:', err)
-    // Fallback a opciones por defecto
+  } catch {
     breakOptions.value = [
-      { id: 'bathroom', name: 'Baño' },
-      { id: 'meal', name: 'Comida' },
-      { id: 'training', name: 'Capacitación' },
-      { id: 'meeting', name: 'Reunión' },
-      { id: 'personal', name: 'Personal' },
+      { id: 'bathroom',  name: 'Baño' },
+      { id: 'meal',      name: 'Comida' },
+      { id: 'training',  name: 'Capacitación' },
+      { id: 'meeting',   name: 'Reunión' },
+      { id: 'personal',  name: 'Personal' },
       { id: 'technical', name: 'Problemas Técnicos' }
     ]
   }
@@ -236,146 +212,99 @@ const agentExtension = computed(() => agentStore.agent?.sip_extension || 'N/A')
 
 const statusLabel = computed(() => {
   const labels: Record<string, string> = {
-    offline: 'Desconectado',
+    offline:   'Desconectado',
     available: 'Disponible',
-    busy: 'Ocupado',
-    oncall: 'En Llamada',
-    break: 'En Pausa',
-    wrapup: 'Post-llamada'
+    busy:      'Ocupado',
+    oncall:    'En Llamada',
+    break:     'En Pausa',
+    wrapup:    'Post-llamada'
   }
   return labels[agentStore.status] || agentStore.status
 })
 
 const statusColor = computed(() => {
   const colors: Record<string, string> = {
-    offline: 'gray',
+    offline:   'gray',
     available: 'green',
-    busy: 'yellow',
-    oncall: 'blue',
-    break: 'yellow',
-    wrapup: 'purple'
+    busy:      'yellow',
+    oncall:    'blue',
+    break:     'yellow',
+    wrapup:    'purple'
   }
   return colors[agentStore.status] || 'gray'
 })
 
-const isOnCall = computed(() => agentStore.status === 'oncall')
+const statusDotClass = computed(() => {
+  const classes: Record<string, string> = {
+    offline:   'bg-gray-400',
+    available: 'bg-green-500',
+    busy:      'bg-yellow-500',
+    oncall:    'bg-blue-500 animate-pulse',
+    break:     'bg-yellow-500',
+    wrapup:    'bg-purple-500'
+  }
+  return classes[agentStore.status] || 'bg-gray-400'
+})
+
+const isOnCall  = computed(() => agentStore.status === 'oncall')
 const isOnBreak = computed(() => agentStore.status === 'break')
-const pauseReason = computed(() => agentStore.pauseReason || 'Pausa')
-const stats = computed(() => agentStore.stats)
+const pauseReason    = computed(() => agentStore.pauseReason || 'Pausa')
+const stats          = computed(() => agentStore.stats)
 const sessionDuration = computed(() => agentStore.sessionDuration)
 
-// Duración de pausa
 const pauseDuration = ref(0)
-let pauseTimer: any = null
+let pauseTimer: ReturnType<typeof setInterval> | null = null
 
 // Métodos
-const handleStatusChange = async () => {
-  if (selectedStatus.value === agentStore.status) return
-  
-  const result = await agentStore.changeStatus(selectedStatus.value as any)
+const handleStatusChange = async (newStatus: string) => {
+  if (newStatus === agentStore.status || isChangingStatus.value) return
+  isChangingStatus.value = true
+  const result = await agentStore.changeStatus(newStatus as any)
+  isChangingStatus.value = false
   if (!result.success) {
-    // Revertir selección
-    selectedStatus.value = agentStore.status
     alert(result.error)
+  } else {
+    isOpen.value = false
   }
 }
 
-const startBreak = async (breakOption: any) => {
+const openBreakModal = () => {
+  isOpen.value = false
+  // pequeño delay para que el popover cierre antes de abrir el modal
+  setTimeout(() => { showBreakModal.value = true }, 150)
+}
+
+const startBreak = async (breakOption: { id: string, name: string }) => {
   showBreakModal.value = false
+  isChangingStatus.value = true
   const result = await agentStore.startBreak(breakOption.name)
-  
+  isChangingStatus.value = false
   if (result.success) {
     pauseDuration.value = 0
-    pauseTimer = setInterval(() => {
-      pauseDuration.value++
-    }, 1000)
+    pauseTimer = setInterval(() => { pauseDuration.value++ }, 1000)
   } else {
     alert(result.error)
   }
 }
 
 const endBreak = async () => {
-  if (pauseTimer) {
-    clearInterval(pauseTimer)
-    pauseTimer = null
-  }
+  if (pauseTimer) { clearInterval(pauseTimer); pauseTimer = null }
   pauseDuration.value = 0
-  
+  isChangingStatus.value = true
   const result = await agentStore.endBreak()
-  if (!result.success) {
-    alert(result.error)
-  }
+  isChangingStatus.value = false
+  if (!result.success) alert(result.error)
 }
 
 const formatTime = (seconds: number) => {
-  const hrs = Math.floor(seconds / 3600)
+  const hrs  = Math.floor(seconds / 3600)
   const mins = Math.floor((seconds % 3600) / 60)
   const secs = seconds % 60
-  
-  if (hrs > 0) {
-    return `${hrs}h ${mins}m`
-  }
-  if (mins > 0) {
-    return `${mins}m ${secs}s`
-  }
+  if (hrs  > 0) return `${hrs}h ${mins}m`
+  if (mins > 0) return `${mins}m ${secs}s`
   return `${secs}s`
 }
 
-// Cargar historial de llamadas de hoy
-const loadRecentCalls = async () => {
-  if (!agentStore.agent?.id) return
-  
-  try {
-    const { $api } = useNuxtApp()
-    const today = new Date().toISOString().split('T')[0]
-    
-    // 403 = rol agente sin permiso de admin; la sección se oculta silenciosamente
-    const data = await $api('/calls/', {
-      query: {
-        agent: agentStore.agent.id,
-        start_time__gte: `${today}T00:00:00`,
-        ordering: '-start_time',
-        page_size: 10
-      }
-    })
-    
-    const results = data.results || data
-    
-    recentCalls.value = (Array.isArray(results) ? results : []).map((call: any) => {
-      const startTime = new Date(call.start_time)
-      const duration = call.duration || 0
-      
-      return {
-        id: call.id,
-        phone: call.called_number || call.caller_number || 'Desconocido',
-        time: startTime.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
-        duration: duration > 0 ? `${Math.floor(duration / 60)}:${String(duration % 60).padStart(2, '0')}` : 'N/A',
-        disposition: call.disposition?.name || 'Sin disposición',
-        success: call.disposition?.is_successful || false
-      }
-    })
-  } catch (err: any) {
-    if (err?.status !== 403 && err?.statusCode !== 403) {
-      console.error('Error loading recent calls:', err)
-    }
-    // 403 → no hay permiso (rol agente); historial simplemente queda vacío
-  }
-}
-
-// Lifecycle
-onMounted(() => {
-  selectedStatus.value = agentStore.status
-  loadBreakReasons()
-  loadRecentCalls()
-})
-
-onUnmounted(() => {
-  if (pauseTimer) {
-    clearInterval(pauseTimer)
-  }
-})
+onMounted(loadBreakReasons)
+onUnmounted(() => { if (pauseTimer) clearInterval(pauseTimer) })
 </script>
-
-<style scoped>
-/* altura natural para no ocupar toda la columna */
-</style>

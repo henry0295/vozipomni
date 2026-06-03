@@ -25,6 +25,9 @@
             @click="toggleDark"
           />
 
+          <!-- Botón de estado del agente (popover) -->
+          <AgentStatusPanel v-if="agentStore.isLoggedIn" />
+
           <!-- Botón de logout -->
           <UButton
             v-if="agentStore.isLoggedIn"
@@ -107,13 +110,8 @@
       <div class="console-grid">
         <!-- Columna izquierda -->
         <div class="console-left">
-          <div class="space-y-4">
-            <!-- Panel de estado del agente -->
-            <AgentStatusPanel />
-
-            <!-- Softphone -->
-            <AgentSoftphone />
-          </div>
+          <!-- Softphone -->
+          <AgentSoftphone />
         </div>
 
         <!-- Columna central -->

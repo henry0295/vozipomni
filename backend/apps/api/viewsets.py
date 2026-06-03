@@ -438,19 +438,38 @@ class AgentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def change_status(self, request, pk=None):
         """Cambiar estado del agente"""
-        agent = self.get_object()
-        new_status = request.data.get('status')
-        if new_status in dict(Agent.STATUS_CHOICES):
-            agent.status = new_status
-            agent.save()
-            return Response({
-                'status': 'updated',
-                'new_status': new_status
-            })
-        return Response(
-            {'error': 'Invalid status', 'valid_statuses': [s[0] for s in Agent.STATUS_CHOICES]}, 
-            status=status.HTTP_400_BAD_REQUEST
-        )
+        import logging
+        _log = logging.getLogger(__name__)
+        try:
+            agent = self.get_object()
+            new_status = request.data.get('status')
+
+            # Validar que sea una cadena (evita TypeError si llega un objeto JSON)
+            if not isinstance(new_status, str):
+                return Response(
+                    {'error': 'El campo status debe ser una cadena de texto.',
+                     'valid_statuses': [s[0] for s in Agent.STATUS_CHOICES]},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if new_status in dict(Agent.STATUS_CHOICES):
+                agent.status = new_status
+                agent.save()
+                return Response({
+                    'status': 'updated',
+                    'new_status': new_status
+                })
+
+            return Response(
+                {'error': 'Invalid status', 'valid_statuses': [s[0] for s in Agent.STATUS_CHOICES]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            _log.exception('Unexpected error in change_status pk=%s', pk)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     @action(detail=True, methods=['get'])
     def stats(self, request, pk=None):
