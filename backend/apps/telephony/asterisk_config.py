@@ -58,9 +58,19 @@ class AsteriskConfigGenerator:
             "",
         ]
         
+        # Extensiones de agentes WebRTC: detectar por Agent model además de extension_type
+        # Esto corrige extensiones creadas con tipo PJSIP que en realidad son WebRTC
+        try:
+            from apps.agents.models import Agent
+            webrtc_agent_exts = set(
+                Agent.objects.filter(webrtc_enabled=True).values_list('sip_extension', flat=True)
+            )
+        except Exception:
+            webrtc_agent_exts = set()
+
         for ext in extensions:
-            is_webrtc = ext.extension_type == 'WEBRTC'
-            transport = getattr(ext, 'transport', None) or ('transport-wss' if is_webrtc else 'transport-udp')
+            is_webrtc = ext.extension_type == 'WEBRTC' or str(ext.extension) in webrtc_agent_exts
+            transport = 'transport-wss' if is_webrtc else (getattr(ext, 'transport', None) or 'transport-udp')
             callerid = ext.callerid if ext.callerid else f'"{ext.name}" <{ext.extension}>'
             # Si callerid no tiene formato correcto, formatearlo
             if callerid and '<' not in callerid:
