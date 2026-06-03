@@ -327,13 +327,22 @@ const persistDialNumber = () => {
 
 watch(dialNumber, persistDialNumber)
 
-// Contactos rápidos (se pueden cargar desde API)
-const quickContacts = ref([
-  { name: 'Supervisor', extension: '1000' },
-  { name: 'Soporte', extension: '1001' },
-  { name: 'Ventas', extension: '1002' },
-  { name: 'Servicio', extension: '1003' }
-])
+// Contactos rápidos — cargados desde /api/telephony/extensions/
+const quickContacts = ref<{ name: string; extension: string }[]>([])
+
+const loadQuickContacts = async () => {
+  try {
+    const { $api } = useNuxtApp()
+    const data = await $api('/telephony/extensions/', { query: { is_active: true } })
+    const items = Array.isArray(data) ? data : (data?.results ?? [])
+    quickContacts.value = items.map((ext: any) => ({
+      name: ext.callerid || ext.name || ext.extension,
+      extension: String(ext.extension)
+    }))
+  } catch {
+    quickContacts.value = []
+  }
+}
 
 // Computed
 const hasActiveCall = computed(() => webrtc.hasActiveCall.value)
@@ -550,6 +559,7 @@ onUnmounted(() => {
 // Cargar estado persistido al montar
 onMounted(() => {
   loadPersistedState()
+  loadQuickContacts()
 })
 </script>
 

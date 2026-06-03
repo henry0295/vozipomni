@@ -339,21 +339,25 @@ const activeTab = ref(0)
 const tabs = [
   {
     key: 'campaign',
+    slot: 'campaign',
     label: 'Campaña',
     icon: 'i-heroicons-megaphone'
   },
   {
     key: 'dialer',
+    slot: 'dialer',
     label: 'Dialer',
     icon: 'i-heroicons-phone-arrow-up-right'
   },
   {
     key: 'contacts',
+    slot: 'contacts',
     label: 'Contactos',
     icon: 'i-heroicons-user-group'
   },
   {
     key: 'whatsapp',
+    slot: 'whatsapp',
     label: 'WhatsApp',
     icon: 'i-heroicons-chat-bubble-left-right'
   }
