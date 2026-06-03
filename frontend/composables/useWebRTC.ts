@@ -182,11 +182,12 @@ export const useWebRTC = () => {
     })
 
     session.on('failed', (data: any) => {
-      console.error('WebRTC: Call failed', data)
       const statusCode = data.message?.status_code
+      const reasonPhrase = data.message?.reason_phrase || ''
       const cause = data.cause || 'Unknown'
+      console.error(`WebRTC: Call failed — SIP ${statusCode} ${reasonPhrase} | cause: ${cause}`, data)
       lastCallError.value = statusCode
-        ? `Llamada rechazada (${statusCode} - ${cause})`
+        ? `Llamada rechazada (${statusCode} ${reasonPhrase})`
         : `Llamada fallida: ${cause}`
       handleCallEnded()
     })
@@ -233,10 +234,9 @@ export const useWebRTC = () => {
 
     try {
       const eventHandlers = {
-        progress: () => console.log('Call is in progress'),
-        failed: (data: any) => console.error('Call failed:', data),
-        ended: () => console.log('Call ended'),
-        confirmed: () => console.log('Call confirmed')
+        progress: () => console.log('WebRTC: Call progress'),
+        ended: () => console.log('WebRTC: Call ended'),
+        confirmed: () => console.log('WebRTC: Call confirmed')
       }
 
       const options = {
