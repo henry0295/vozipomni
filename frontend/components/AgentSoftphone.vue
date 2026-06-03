@@ -522,7 +522,7 @@ watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
       pageOrigin = (typeof window !== 'undefined' ? window.location.origin : 'https://localhost')
     }
 
-    const wsUrl = pageOrigin.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/asterisk/ws'
+    const wsUrl = pageOrigin.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://') + '/sip/ws'
     const sipHost = pageOrigin.replace(/^https?:\/\//, '').split(':')[0]
 
     webrtc.register({

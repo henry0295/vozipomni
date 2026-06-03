@@ -39,6 +39,17 @@
       </div>
     </div>
 
+    <!-- Banner de permisos de micrófono -->
+    <div v-if="micPermission === 'denied'" class="flex items-center gap-3 px-4 py-2 bg-red-100 border-b border-red-300 text-red-800 text-sm">
+      <UIcon name="i-heroicons-microphone-slash" class="h-5 w-5 flex-shrink-0" />
+      <span>El micrófono está bloqueado. Para recibir y realizar llamadas, permite el acceso al micrófono en la configuración del navegador y recarga la página.</span>
+    </div>
+    <div v-else-if="micPermission === 'prompt'" class="flex items-center gap-3 px-4 py-2 bg-yellow-50 border-b border-yellow-300 text-yellow-800 text-sm">
+      <UIcon name="i-heroicons-exclamation-triangle" class="h-5 w-5 flex-shrink-0" />
+      <span>Se necesita acceso al micrófono para las llamadas.</span>
+      <UButton size="xs" color="yellow" variant="solid" @click="requestMediaPermissions">Permitir micrófono</UButton>
+    </div>
+
     <!-- Pantalla de login del agente -->
     <div v-if="!agentStore.isLoggedIn" class="login-screen">
       <UCard class="max-w-md mx-auto">
@@ -250,6 +261,46 @@ const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
 const toggleDark = () => {
   colorMode.preference = isDark.value ? 'light' : 'dark'
+}
+
+// Permisos de micrófono (necesario para WebRTC)
+const micPermission = ref<'granted' | 'denied' | 'prompt'>('prompt')
+
+const requestMediaPermissions = async () => {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    micPermission.value = 'denied'
+    return
+  }
+  try {
+    // Solicitar acceso al micrófono — el navegador muestra el diálogo nativo
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+    // Liberar el stream de inmediato (solo necesitamos el permiso, no el stream)
+    stream.getTracks().forEach(track => track.stop())
+    micPermission.value = 'granted'
+  } catch {
+    micPermission.value = 'denied'
+  }
+}
+
+const checkMicPermission = async () => {
+  if (!navigator.permissions) {
+    // Navegadores que no soportan Permissions API: solicitar directamente
+    await requestMediaPermissions()
+    return
+  }
+  try {
+    const result = await navigator.permissions.query({ name: 'microphone' as PermissionName })
+    micPermission.value = result.state as 'granted' | 'denied' | 'prompt'
+    result.onchange = () => {
+      micPermission.value = result.state as 'granted' | 'denied' | 'prompt'
+    }
+    // Si aún no se ha pedido permiso, solicitarlo ahora
+    if (result.state === 'prompt') {
+      await requestMediaPermissions()
+    }
+  } catch {
+    await requestMediaPermissions()
+  }
 }
 
 // Notificaciones del navegador
@@ -477,6 +528,9 @@ onMounted(async () => {
   
   updateDateTime()
   dateTimeInterval = setInterval(updateDateTime, 1000)
+
+  // Solicitar permisos de micrófono al cargar la consola
+  await checkMicPermission()
 
   // Auto-login para agentes
   if (!agentStore.isLoggedIn) {
