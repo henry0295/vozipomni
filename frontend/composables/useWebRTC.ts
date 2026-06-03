@@ -29,6 +29,7 @@ export const useWebRTC = () => {
   const isConnecting = ref(false)
   const registrationStatus = ref('disconnected')
   const lastError = ref<string | null>(null)
+  const lastCallError = ref<string | null>(null)
   
   const callDuration = ref(0)
   let callTimer: any = null
@@ -182,6 +183,11 @@ export const useWebRTC = () => {
 
     session.on('failed', (data: any) => {
       console.error('WebRTC: Call failed', data)
+      const statusCode = data.message?.status_code
+      const cause = data.cause || 'Unknown'
+      lastCallError.value = statusCode
+        ? `Llamada rechazada (${statusCode} - ${cause})`
+        : `Llamada fallida: ${cause}`
       handleCallEnded()
     })
 
@@ -449,6 +455,7 @@ export const useWebRTC = () => {
     isConnecting,
     registrationStatus,
     lastError,
+    lastCallError,
     callDuration,
     hasActiveCall,
     canMakeCall,

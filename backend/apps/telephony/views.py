@@ -455,6 +455,11 @@ class ExtensionViewSet(viewsets.ModelViewSet):
     queryset = Extension.objects.all()
     serializer_class = ExtensionSerializer
     permission_classes = [IsAdminUserCustom]
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [IsAuthenticated()]
+        return [IsAdminUserCustom()]
     search_fields = ['extension', 'name']
     filterset_fields = ['extension_type', 'is_active']
     ordering = ['extension']

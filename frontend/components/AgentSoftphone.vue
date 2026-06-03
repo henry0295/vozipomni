@@ -327,6 +327,13 @@ const persistDialNumber = () => {
 
 watch(dialNumber, persistDialNumber)
 
+// Notificar fallos de llamada SIP
+watch(() => webrtc.lastCallError.value, (error) => {
+  if (error) {
+    useToast().add({ title: 'Llamada fallida', description: error, color: 'red', icon: 'i-heroicons-phone-x-mark' })
+  }
+})
+
 // Contactos rápidos — cargados desde /api/telephony/extensions/
 const quickContacts = ref<{ name: string; extension: string }[]>([])
 

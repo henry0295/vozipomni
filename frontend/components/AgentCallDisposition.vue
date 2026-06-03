@@ -11,19 +11,19 @@
           <div class="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p class="text-gray-600">Cliente:</p>
-              <p class="font-semibold">{{ callInfo.customer || 'Desconocido' }}</p>
+              <p class="font-semibold">{{ safeCallInfo.customer || 'Desconocido' }}</p>
             </div>
             <div>
               <p class="text-gray-600">Número:</p>
-              <p class="font-semibold">{{ callInfo.number }}</p>
+              <p class="font-semibold">{{ safeCallInfo.number }}</p>
             </div>
             <div>
               <p class="text-gray-600">Duración:</p>
-              <p class="font-semibold">{{ callInfo.duration }}</p>
+              <p class="font-semibold">{{ safeCallInfo.duration }}</p>
             </div>
             <div>
               <p class="text-gray-600">Campaña:</p>
-              <p class="font-semibold">{{ callInfo.campaign || 'N/A' }}</p>
+              <p class="font-semibold">{{ safeCallInfo.campaign || 'N/A' }}</p>
             </div>
           </div>
         </div>
@@ -156,6 +156,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   callInfo: () => ({ number: '', duration: '00:00', customer: '', campaign: '' })
 })
+
+const safeCallInfo = computed(() => props.callInfo ?? { number: '', duration: '00:00', customer: '', campaign: '' })
 
 // Emits
 const emit = defineEmits<{
