@@ -196,28 +196,36 @@ export const useWebRTC = () => {
     session.on('peerconnection', (data: any) => {
       console.log('WebRTC: Peer connection')
       const pc = data.peerconnection
-      
+
       // Limpiar audio anterior si existe
       if (remoteAudioElement) {
         remoteAudioElement.pause()
         remoteAudioElement.srcObject = null
+        remoteAudioElement.remove()
         remoteAudioElement = null
       }
-      
-      const remoteStream = new MediaStream()
-      remoteAudioElement = new Audio()
-      remoteAudioElement.srcObject = remoteStream
+
+      // Crear elemento de audio DENTRO del DOM: los elementos fuera del DOM
+      // son bloqueados por la política de autoplay de Chrome/Firefox incluso
+      // cuando la llamada fue iniciada por un gesto del usuario.
+      remoteAudioElement = document.createElement('audio')
       remoteAudioElement.autoplay = true
+      remoteAudioElement.setAttribute('playsinline', '')
+      // El elemento se inserta hidden — solo necesita estar en el DOM para
+      // tener permiso de reproducción, no debe ser visible.
+      remoteAudioElement.style.display = 'none'
+      document.body.appendChild(remoteAudioElement)
 
       // Escuchar tracks cuando lleguen (después del SDP exchange).
-      // getReceivers() al momento del evento aún no tiene tracks, por eso
-      // es necesario el evento 'track' del RTCPeerConnection.
       pc.addEventListener('track', (event: RTCTrackEvent) => {
-        console.log('WebRTC: Remote track received:', event.track.kind)
-        const tracks = event.streams[0]?.getTracks() ?? [event.track]
-        tracks.forEach((track: MediaStreamTrack) => remoteStream.addTrack(track))
-        remoteAudioElement?.play().catch((err: any) => {
-          console.warn('WebRTC: Audio autoplay bloqueado (se reproducirá en próxima interacción):', err)
+        if (event.track.kind !== 'audio') return
+        console.log('WebRTC: Remote audio track received')
+        // event.streams[0] ya contiene el track — usarlo directamente es más
+        // fiable que crear un MediaStream vacío y añadir tracks después.
+        const stream = event.streams[0] ?? new MediaStream([event.track])
+        remoteAudioElement!.srcObject = stream
+        remoteAudioElement!.play().catch((err: any) => {
+          console.warn('WebRTC: Audio autoplay bloqueado:', err)
         })
       })
     })
@@ -422,10 +430,11 @@ export const useWebRTC = () => {
 
   // Manejar fin de llamada
   const handleCallEnded = () => {
-    // Limpiar audio remoto
+    // Limpiar audio remoto y remover del DOM
     if (remoteAudioElement) {
       remoteAudioElement.pause()
       remoteAudioElement.srcObject = null
+      remoteAudioElement.remove()
       remoteAudioElement = null
     }
     
