@@ -256,16 +256,95 @@ services:
     logging: *default-logging
     stop_grace_period: 30s
     # En desarrollo usamos bridge con puertos mapeados (en producción network_mode: host)
+    # ARQUITECTURA: Asterisk escucha en 5080 (interno, solo Kamailio lo usa)
+    #               Kamailio expone 5060 al exterior (los agentes conectan a Kamailio)
     ports:
-      - "5060:5060/udp"
-      - "5060:5060/tcp"
-      - "5061:5061/tcp"
-      - "5161:5161/udp"
-      - "5162:5162/udp"
-      - "5038:5038"
-      - "8088:8088"
-      - "8089:8089"
-      - "10000-10100:10000-10100/udp"
+      - "5080:5080/udp"          # SIP interno Kamailio → Asterisk
+      - "5080:5080/tcp"
+      - "5161:5161/udp"          # Troncales SIP (sin NAT)
+      - "5162:5162/udp"          # Troncales SIP (con NAT)
+      - "5038:5038"              # Asterisk AMI
+      - "8088:8088"              # HTTP WebSocket (debug directo)
+      - "8089:8089"              # HTTPS WebSocket nativo Asterisk
+      - "10000-10100:10000-10100/udp"  # RTP media (Asterisk ↔ RTPEngine)
+    networks:
+      - vozipomni_network
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # SIP PROXY (Kamailio) — WebRTC ↔ SIP bridge
+  # Arquitectura OmniLeads:
+  #   Browser (JsSIP/WSS) → Nginx:/sip/ws → Kamailio:8080 → RTPEngine → Asterisk:5080
+  # ──────────────────────────────────────────────────────────────────────────
+  kamailio:
+    build:
+      context: ./docker/kamailio
+      dockerfile: Dockerfile
+    container_name: vozipomni_kamailio
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-vozipomni_redis_2026}
+      ASTERISK_HOST: asterisk
+      RTPENGINE_HOST: rtpengine
+      VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      TZ: ${TZ:-America/Bogota}
+    ports:
+      - "5060:5060/udp"          # SIP externo (agentes SIP tradicional)
+      - "5061:5061/tcp"          # SIP TLS
+      - "8080:8080/tcp"          # WebSocket SIP (nginx → kamailio)
+    depends_on:
+      redis:
+        condition: service_healthy
+      asterisk:
+        condition: service_healthy
+      rtpengine:
+        condition: service_started
+    <<: *restart-policy
+    logging: *default-logging
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
+    networks:
+      - vozipomni_network
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # MEDIA PROXY (RTPEngine) — WebRTC SRTP ↔ VoIP RTP transcoding
+  # Kamailio → RTPEngine:22222 (control NG)
+  # Media RTP: puertos 23000-23100/udp
+  # ──────────────────────────────────────────────────────────────────────────
+  rtpengine:
+    build:
+      context: ./docker/rtpengine
+      dockerfile: Dockerfile
+    container_name: vozipomni_rtpengine
+    environment:
+      VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      TZ: ${TZ:-America/Bogota}
+    ports:
+      - "22222:22222/udp"        # Control NG (Kamailio → RTPEngine)
+      - "23000-23100:23000-23100/udp"  # Media RTP/SRTP
+    depends_on:
+      redis:
+        condition: service_healthy
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    <<: *restart-policy
+    logging: *default-logging
+    stop_grace_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+        reservations:
+          memory: 64M
     networks:
       - vozipomni_network
 

@@ -26,22 +26,8 @@ echo "  [entrypoint] Directorio de configs dinámicas: ${DYNAMIC_DIR}"
 # -------------------------------------------------------
 # 1. Ajustar maxload según cores disponibles del sistema
 # -------------------------------------------------------
-CORES=$(nproc 2>/dev/null || echo 1)
-# maxload = cores * 0.9 (permite usar ~90% de la capacidad del sistema)
-if command -v bc >/dev/null 2>&1; then
-    MAXLOAD=$(echo "$CORES * 0.9" | bc)
-else
-    # Fallback sin bc: usar el número de cores directamente
-    MAXLOAD=$CORES
-fi
-echo "  [entrypoint] CPUs detectados: ${CORES} → maxload = ${MAXLOAD}"
-
-# Reemplazar placeholder o valor existente en asterisk.conf
-ASTERISK_CONF="${CONFIG_DIR}/asterisk.conf"
-if [ -f "${ASTERISK_CONF}" ]; then
-    sed -i "s/^maxload.*/maxload = ${MAXLOAD}/" "${ASTERISK_CONF}"
-    echo "  [entrypoint] asterisk.conf → maxload = ${MAXLOAD}"
-fi
+# maxload = 0 (sin límite) está fijo en asterisk.conf.
+# No se sobreescribe aquí para evitar rechazar llamadas por load average.
 
 # -------------------------------------------------------
 # 2. Archivos de inclusión dinámica (placeholders vacíos)
@@ -142,6 +128,17 @@ chmod -R 777 "${DYNAMIC_DIR}" 2>/dev/null || true  # Permitir escritura desde ba
 chown -R asterisk:asterisk /var/log/asterisk 2>/dev/null || true
 chown -R asterisk:asterisk /var/run/asterisk 2>/dev/null || true
 chown -R asterisk:asterisk /var/spool/asterisk 2>/dev/null || true
+
+# -------------------------------------------------------
+# 7. Resolver hostname "asterisk" en producción (network_mode: host)
+# Con network_mode: host el Docker DNS no está disponible, por lo que
+# getaddrinfo("asterisk") falla. Registrar 127.0.0.1 → asterisk en /etc/hosts.
+# -------------------------------------------------------
+HOSTNAME_ENTRY="127.0.0.1 asterisk"
+if ! grep -qF "asterisk" /etc/hosts 2>/dev/null; then
+    echo "${HOSTNAME_ENTRY}" >> /etc/hosts
+    echo "  [entrypoint] /etc/hosts → '${HOSTNAME_ENTRY}' (fix DNS network_mode: host)"
+fi
 
 echo "=== Iniciando Asterisk ==="
 exec /usr/sbin/asterisk -f -vvv -U asterisk -G asterisk

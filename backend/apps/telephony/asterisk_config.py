@@ -77,8 +77,11 @@ class AsteriskConfigGenerator:
                 callerid = f'"{ext.name}" <{callerid}>'
             
             # Códecs según tipo
+            # WebRTC: solo G.711 — browsers soportan PCMU/PCMA obligatoriamente (RFC 7874).
+            # Evita la ruta de traducción opus→ulaw que requiere codec_opus.so en Asterisk.
+            # RTPEngine se encarga de la conversión SRTP/DTLS→RTP sin cambiar el codec.
             if is_webrtc:
-                codecs = 'opus,ulaw,alaw'
+                codecs = 'ulaw,alaw'
             else:
                 codecs = getattr(ext, 'codecs', None) or 'ulaw,alaw,g722'
             
