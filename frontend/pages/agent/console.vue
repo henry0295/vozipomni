@@ -218,7 +218,7 @@
           />
 
           <!-- Notas rápidas -->
-          <UCard class="mt-3">
+          <UCard>
             <template #header>
               <h3 class="text-sm font-semibold">Notas Rápidas</h3>
             </template>
@@ -651,11 +651,16 @@ onUnmounted(() => {
 .console-right {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 0.75rem;
   padding: 0.75rem;
   overflow-y: auto;
   background: #fff;
   border-left: 1px solid #e5e7eb;
+}
+
+/* Evitar que los hijos se encojan y corten su contenido */
+.console-right > * {
+  flex-shrink: 0;
 }
 
 :global(.dark) .console-right {
