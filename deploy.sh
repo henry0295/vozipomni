@@ -1288,7 +1288,7 @@ update_production() {
     log_info "Reconstruyendo imágenes Docker (sin cache de código)..."
     $COMPOSE_CMD -f docker-compose.prod.yml build \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
-        backend frontend celery_worker celery_beat websocket_server dialer_engine nginx asterisk 2>&1
+        backend frontend celery_worker celery_beat websocket_server dialer_engine nginx asterisk kamailio rtpengine 2>&1
     log_success "Imágenes reconstruidas"
 
     # 4. Reiniciar servicios con nuevas imágenes (up -d reemplaza solo los cambiados)
