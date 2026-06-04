@@ -162,7 +162,8 @@ export const useWebRTC = () => {
     session.on('confirmed', () => {
       console.log('WebRTC: Call confirmed')
       if (currentSession.value) {
-        currentSession.value.isEstablished = true
+        // Reemplazar el objeto completo para garantizar que Vue detecte el cambio
+        currentSession.value = { ...currentSession.value, isEstablished: true }
       }
       
       // Iniciar timer
@@ -194,6 +195,7 @@ export const useWebRTC = () => {
 
     session.on('peerconnection', (data: any) => {
       console.log('WebRTC: Peer connection')
+      const pc = data.peerconnection
       
       // Limpiar audio anterior si existe
       if (remoteAudioElement) {
@@ -202,22 +204,21 @@ export const useWebRTC = () => {
         remoteAudioElement = null
       }
       
-      // Agregar stream de audio remoto
       const remoteStream = new MediaStream()
-      const receivers = data.peerconnection.getReceivers()
-      
-      receivers.forEach((receiver: any) => {
-        if (receiver.track) {
-          remoteStream.addTrack(receiver.track)
-        }
-      })
-
-      // Reproducir audio remoto
       remoteAudioElement = new Audio()
       remoteAudioElement.srcObject = remoteStream
       remoteAudioElement.autoplay = true
-      remoteAudioElement.play().catch((err: any) => {
-        console.error('Error playing remote audio:', err)
+
+      // Escuchar tracks cuando lleguen (después del SDP exchange).
+      // getReceivers() al momento del evento aún no tiene tracks, por eso
+      // es necesario el evento 'track' del RTCPeerConnection.
+      pc.addEventListener('track', (event: RTCTrackEvent) => {
+        console.log('WebRTC: Remote track received:', event.track.kind)
+        const tracks = event.streams[0]?.getTracks() ?? [event.track]
+        tracks.forEach((track: MediaStreamTrack) => remoteStream.addTrack(track))
+        remoteAudioElement?.play().catch((err: any) => {
+          console.warn('WebRTC: Audio autoplay bloqueado (se reproducirá en próxima interacción):', err)
+        })
       })
     })
   }

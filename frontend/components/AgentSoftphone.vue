@@ -139,7 +139,19 @@
           </UButton>
         </div>
 
-        <!-- Controles de llamada establecida -->
+        <!-- Botón Colgar: siempre visible durante llamada activa (entrante o saliente) -->
+        <UButton
+          v-if="currentSession?.isEstablished || currentSession?.direction === 'outgoing'"
+          block
+          size="xl"
+          color="red"
+          icon="i-heroicons-phone-x-mark"
+          @click="hangupCall"
+        >
+          Colgar
+        </UButton>
+
+        <!-- Controles de llamada establecida (mute, hold, DTMF, transfer, conferencia) -->
         <div v-if="currentSession?.isEstablished" class="space-y-3">
           <!-- Controles principales -->
           <div class="grid grid-cols-3 gap-2">
@@ -245,16 +257,7 @@
             </div>
           </div>
 
-          <!-- Botón colgar -->
-          <UButton
-            block
-            size="xl"
-            color="red"
-            icon="i-heroicons-phone-x-mark"
-            @click="hangupCall"
-          >
-            Colgar
-          </UButton>
+          <!-- Botón colgar (dentro de controles establecidos, se oculta con el de arriba duplicado) -->
         </div>
       </div>
     </UCard>
@@ -331,6 +334,19 @@ watch(dialNumber, persistDialNumber)
 watch(() => webrtc.lastCallError.value, (error) => {
   if (error) {
     useToast().add({ title: 'Llamada fallida', description: error, color: 'red', icon: 'i-heroicons-phone-x-mark' })
+  }
+})
+
+// Notificar cuando la llamada se establece (confirmed)
+watch(() => webrtc.currentSession.value?.isEstablished, (established) => {
+  if (established) {
+    const remote = webrtc.currentSession.value?.remoteIdentity || ''
+    useToast().add({
+      title: 'Llamada conectada',
+      description: remote ? `En línea con ${remote}` : 'Llamada activa',
+      color: 'green',
+      icon: 'i-heroicons-phone'
+    })
   }
 })
 
