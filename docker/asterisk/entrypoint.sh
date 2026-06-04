@@ -76,11 +76,14 @@ if [ -n "${VOZIPOMNI_IPV4}" ]; then
 fi
 
 # -------------------------------------------------------
-# 4. Inyectar IP pública en trunk-nat-transport
+# 4. Inyectar IP pública en trunk-nat-transport y kamailio-endpoint-identify
 # -------------------------------------------------------
 PJSIP_CONF="${CONFIG_DIR}/pjsip.conf"
 if [ -n "${VOZIPOMNI_IPV4}" ] && [ -f "${PJSIP_CONF}" ]; then
-    echo "  [entrypoint] Inyectando VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4} en trunk-nat-transport"
+    echo "  [entrypoint] Inyectando VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4} en trunk-nat-transport y kamailio-endpoint-identify"
+
+    # Inyectar IP en kamailio-endpoint-identify (para que Kamailio que envía desde la IP de la NIC sea aceptado)
+    sed -i "s|match=__SERVER_IPV4__/32|match=${VOZIPOMNI_IPV4}/32|" "${PJSIP_CONF}"
 
     # Si ya existen líneas external_*, reemplazarlas; si no, agregarlas después de bind
     if grep -q "^external_media_address=" "${PJSIP_CONF}"; then

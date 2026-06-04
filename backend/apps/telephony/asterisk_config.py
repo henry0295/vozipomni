@@ -70,6 +70,13 @@ class AsteriskConfigGenerator:
 
         for ext in extensions:
             is_webrtc = ext.extension_type == 'WEBRTC' or str(ext.extension) in webrtc_agent_exts
+
+            # Si la extensión ya está gestionada por pjsip_agents.conf (agente WebRTC
+            # con Agent.webrtc_enabled=True), no la generamos aquí para evitar
+            # "duplicate object" que hace fallar la carga completa de pjsip.conf.
+            if str(ext.extension) in webrtc_agent_exts:
+                continue
+
             transport = 'transport-wss' if is_webrtc else (getattr(ext, 'transport', None) or 'transport-udp')
             callerid = ext.callerid if ext.callerid else f'"{ext.name}" <{ext.extension}>'
             # Si callerid no tiene formato correcto, formatearlo
