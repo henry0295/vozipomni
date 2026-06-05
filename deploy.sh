@@ -1292,6 +1292,16 @@ update_production() {
     fi
     log_success "Usando: $COMPOSE_CMD"
 
+    # 1b. Si se pasó --nat, persistir NAT_IPV4 en .env para futuros reinicios
+    if [ -n "${NAT_IPV4:-}" ] && [ -f "$INSTALL_DIR/.env" ]; then
+        if grep -q "^NAT_IPV4=" "$INSTALL_DIR/.env"; then
+            sed -i "s|^NAT_IPV4=.*|NAT_IPV4=${NAT_IPV4}|" "$INSTALL_DIR/.env"
+        else
+            echo "NAT_IPV4=${NAT_IPV4}" >> "$INSTALL_DIR/.env"
+        fi
+        log_success "NAT_IPV4=${NAT_IPV4} guardado en .env"
+    fi
+
     # 2. Actualizar código
     log_info "Actualizando código desde GitHub (rama: ${BRANCH:-main})..."
     git fetch origin
