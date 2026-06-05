@@ -100,3 +100,8 @@ kiro
 /.kiro/*
 /.kiro/**/*
 /.kiro
+
+.gitignore
+.gitattributes
+
+.apply-improvements.sh

@@ -549,7 +549,9 @@ class AsteriskConfigGenerator:
                 'secret': password,
                 'callerid': f'"{agent_name or extension}" <{extension}>',
                 'is_active': True,
-                'codecs': 'opus,ulaw,alaw',
+                # opus no está disponible en Asterisk sin codec_opus.so;
+                # WebRTC usa PCMU/PCMA obligatoriamente (RFC 7874), RTPEngine hace el bridge.
+                'codecs': 'ulaw,alaw',
                 'transport': 'transport-wss',
                 'max_contacts': 3
             }

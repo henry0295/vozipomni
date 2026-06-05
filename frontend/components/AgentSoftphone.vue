@@ -508,7 +508,7 @@ const openConsultiveTransfer = async () => {
   try {
     const { $api } = useNuxtApp()
     const data = await $api('/cc/available-agents/')
-    availableAgents.value = (data as any).agents || []
+    availableAgents.value = (data as any).available_agents || []
   } catch (err) {
     console.error('Error loading available agents:', err)
     availableAgents.value = []
@@ -526,7 +526,7 @@ const transferToAgent = async (agent: any) => {
       method: 'POST',
       body: {
         channel: (session as any)?.channel || '',
-        target_extension: agent.sip_extension,
+        extension: agent.sip_extension,
       },
     })
     
