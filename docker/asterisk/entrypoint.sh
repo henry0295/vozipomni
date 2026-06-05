@@ -79,26 +79,32 @@ fi
 # 4. Inyectar IP pública en trunk-nat-transport y kamailio-endpoint-identify
 # -------------------------------------------------------
 PJSIP_CONF="${CONFIG_DIR}/pjsip.conf"
-if [ -n "${VOZIPOMNI_IPV4}" ] && [ -f "${PJSIP_CONF}" ]; then
-    echo "  [entrypoint] Inyectando VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4} en trunk-nat-transport y kamailio-endpoint-identify"
+# Usar IP pública si está definida (NAT); si no, usar VOZIPOMNI_IPV4 como fallback
+EXTERNAL_IP="${VOZIPOMNI_PUBLIC_IP:-${VOZIPOMNI_IPV4}}"
+if [ -n "${EXTERNAL_IP}" ] && [ -f "${PJSIP_CONF}" ]; then
+    if [ -n "${VOZIPOMNI_PUBLIC_IP}" ] && [ "${VOZIPOMNI_PUBLIC_IP}" != "${VOZIPOMNI_IPV4}" ]; then
+        echo "  [entrypoint] NAT detectado — external_media/signaling_address = ${EXTERNAL_IP} (local: ${VOZIPOMNI_IPV4})"
+    else
+        echo "  [entrypoint] Inyectando external_media_address=${EXTERNAL_IP} en trunk-nat-transport"
+    fi
 
-    # Inyectar IP en trunk-nat-transport (external_media_address / external_signaling_address)
+    # Inyectar IP pública en trunk-nat-transport (external_media_address / external_signaling_address)
     # NOTA: kamailio-endpoint-identify ya usa ${ENV(VOZIPOMNI_IPV4)} nativo de Asterisk,
     #       no requiere sed para ese parámetro.
     if grep -q "^external_media_address=" "${PJSIP_CONF}"; then
-        sed -i "s|^external_media_address=.*|external_media_address=${VOZIPOMNI_IPV4}|" "${PJSIP_CONF}"
-        sed -i "s|^external_signaling_address=.*|external_signaling_address=${VOZIPOMNI_IPV4}|" "${PJSIP_CONF}"
+        sed -i "s|^external_media_address=.*|external_media_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
+        sed -i "s|^external_signaling_address=.*|external_signaling_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
     else
         # Insertar después de "bind=0.0.0.0:5162"
         sed -i "/^\[trunk-nat-transport\]/,/^\[/ {
             /^bind=0\.0\.0\.0:5162/a\\
-external_media_address=${VOZIPOMNI_IPV4}\\
-external_signaling_address=${VOZIPOMNI_IPV4}
+external_media_address=${EXTERNAL_IP}\\
+external_signaling_address=${EXTERNAL_IP}
         }" "${PJSIP_CONF}"
     fi
-    echo "  [entrypoint] ✓ trunk-nat-transport configurado con IP ${VOZIPOMNI_IPV4}"
+    echo "  [entrypoint] ✓ trunk-nat-transport configurado con IP ${EXTERNAL_IP}"
 else
-    if [ -z "${VOZIPOMNI_IPV4}" ]; then
+    if [ -z "${EXTERNAL_IP}" ]; then
         echo "  [entrypoint] ⚠ AVISO: VOZIPOMNI_IPV4 no definido — trunk-nat-transport sin external_*"
         echo "  [entrypoint]   Las llamadas salientes por troncales NAT NO tendrán audio."
     fi

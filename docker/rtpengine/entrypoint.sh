@@ -12,10 +12,20 @@ if [ -z "$INTERFACE_IP" ] || [ "$INTERFACE_IP" = "127.0.0.1" ]; then
     exit 1
 fi
 
-echo "  [entrypoint] Configurando interfaz de red: $INTERFACE_IP"
+# Soporte NAT: si VOZIPOMNI_PUBLIC_IP está definida y es distinta a la IP local,
+# usar notación local!público para que RTPEngine anuncie la IP pública en el SDP
+# pero enlace en la IP privada (interfaz real del servidor).
+PUBLIC_IP="${VOZIPOMNI_PUBLIC_IP:-}"
+if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "$INTERFACE_IP" ]; then
+    NAT_INTERFACE="${INTERFACE_IP}!${PUBLIC_IP}"
+    echo "  [entrypoint] NAT detectado — bind: $INTERFACE_IP  anuncio SDP: $PUBLIC_IP"
+else
+    NAT_INTERFACE="$INTERFACE_IP"
+    echo "  [entrypoint] Configurando interfaz de red: $INTERFACE_IP"
+fi
 
 # Reemplazar __INTERFACE_IP__ en la configuración
-sed -i "s/__INTERFACE_IP__/$INTERFACE_IP/g" /etc/rtpengine/rtpengine.conf
+sed -i "s/__INTERFACE_IP__/$NAT_INTERFACE/g" /etc/rtpengine/rtpengine.conf
 
 echo "=== Iniciando RTPEngine ==="
 cat /etc/rtpengine/rtpengine.conf

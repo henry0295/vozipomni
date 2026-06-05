@@ -240,6 +240,7 @@ services:
     hostname: asterisk
     environment:
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-}
+      VOZIPOMNI_PUBLIC_IP: ${VOZIPOMNI_PUBLIC_IP:-}
       NAT_IPV4: ${NAT_IPV4:-}
       TZ: ${TZ:-America/Bogota}
     volumes:
@@ -324,6 +325,7 @@ services:
     container_name: vozipomni_rtpengine
     environment:
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      VOZIPOMNI_PUBLIC_IP: ${VOZIPOMNI_PUBLIC_IP:-}
       TZ: ${TZ:-America/Bogota}
     ports:
       - "22222:22222/udp"        # Control NG (Kamailio → RTPEngine)
