@@ -1,6 +1,29 @@
 import { ref, shallowRef, computed, markRaw } from 'vue'
 import JsSIP from 'jssip'
 
+// Construye la lista de ICE servers: STUN público + TURN propio si está configurado.
+// STUN: permite al browser descubrir su IP pública.
+// TURN: relay de último recurso cuando UDP directo está bloqueado (NAT simétrica, firewall corporativo).
+function buildIceServers(): RTCIceServer[] {
+  const config = useRuntimeConfig()
+  const servers: RTCIceServer[] = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+  ]
+  const turn = config.public.turnServer
+  if (turn) {
+    servers.push({
+      urls: [
+        `turn:${turn}:3478?transport=udp`,
+        `turn:${turn}:3478?transport=tcp`,
+        `turns:${turn}:5349`
+      ],
+      username: config.public.turnUser as string,
+      credential: config.public.turnPassword as string
+    })
+  }
+  return servers
+}
+
 export interface WebRTCConfig {
   sipServer: string
   sipPort: number
@@ -255,9 +278,8 @@ export const useWebRTC = () => {
           video: false
         },
         pcConfig: {
-          iceServers: [
-            { urls: ['stun:stun.l.google.com:19302'] }
-          ]
+          iceServers: buildIceServers(),
+          iceTransportPolicy: 'all' as RTCIceTransportPolicy
         }
       }
 
@@ -283,9 +305,8 @@ export const useWebRTC = () => {
           video: false
         },
         pcConfig: {
-          iceServers: [
-            { urls: ['stun:stun.l.google.com:19302'] }
-          ]
+          iceServers: buildIceServers(),
+          iceTransportPolicy: 'all' as RTCIceTransportPolicy
         }
       }
 

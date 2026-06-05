@@ -404,6 +404,9 @@ services:
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api}
       NUXT_PUBLIC_WS_BASE: ${NUXT_PUBLIC_WS_BASE:-/ws}
       NUXT_PUBLIC_APP_NAME: ${NUXT_PUBLIC_APP_NAME:-VozipOmni}
+      NUXT_PUBLIC_TURN_SERVER: ${VOZIPOMNI_IPV4:-}
+      NUXT_PUBLIC_TURN_USER: ${TURN_USER:-vozipomni}
+      NUXT_PUBLIC_TURN_PASSWORD: ${TURN_PASSWORD:-vozipomni2026}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       backend:
@@ -478,6 +481,35 @@ services:
     logging: *default-logging
     profiles:
       - backup
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # TURN SERVER (coturn) — relay WebRTC para agentes detrás de NAT estricta
+  # Puerto 3478 UDP/TCP: STUN+TURN estándar
+  # Puerto 5349 TCP: TURNS (TURN sobre TLS)
+  # Activar con: docker compose --profile turn up -d
+  # ──────────────────────────────────────────────────────────────────────────
+  coturn:
+    image: coturn/coturn:latest
+    container_name: vozipomni_coturn
+    network_mode: host
+    environment:
+      TZ: ${TZ:-America/Bogota}
+    command: >
+      -n
+      --log-file=stdout
+      --min-port=49152
+      --max-port=49200
+      --external-ip=${NAT_IPV4:-${VOZIPOMNI_IPV4:-}}/${VOZIPOMNI_IPV4:-}
+      --realm=vozipomni
+      --user=${TURN_USER:-vozipomni}:${TURN_PASSWORD:-vozipomni2026}
+      --lt-cred-mech
+      --fingerprint
+      --no-multicast-peers
+      --no-cli
+    <<: *restart-policy
+    logging: *default-logging
+    profiles:
+      - turn
 
 # =============================================================================
 # VOLUMES
