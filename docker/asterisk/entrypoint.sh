@@ -79,10 +79,11 @@ fi
 # 4. Inyectar IP pública en trunk-nat-transport y kamailio-endpoint-identify
 # -------------------------------------------------------
 PJSIP_CONF="${CONFIG_DIR}/pjsip.conf"
-# Usar IP pública si está definida (NAT); si no, usar VOZIPOMNI_IPV4 como fallback
-EXTERNAL_IP="${VOZIPOMNI_PUBLIC_IP:-${VOZIPOMNI_IPV4}}"
+# NAT_IPV4: IP pública cuando el servidor está detrás de NAT.
+# Si no se define, se usa VOZIPOMNI_IPV4 (servidor con IP pública directa).
+EXTERNAL_IP="${NAT_IPV4:-${VOZIPOMNI_IPV4}}"
 if [ -n "${EXTERNAL_IP}" ] && [ -f "${PJSIP_CONF}" ]; then
-    if [ -n "${VOZIPOMNI_PUBLIC_IP}" ] && [ "${VOZIPOMNI_PUBLIC_IP}" != "${VOZIPOMNI_IPV4}" ]; then
+    if [ -n "${NAT_IPV4}" ] && [ "${NAT_IPV4}" != "${VOZIPOMNI_IPV4}" ]; then
         echo "  [entrypoint] NAT detectado — external_media/signaling_address = ${EXTERNAL_IP} (local: ${VOZIPOMNI_IPV4})"
     else
         echo "  [entrypoint] Inyectando external_media_address=${EXTERNAL_IP} en trunk-nat-transport"

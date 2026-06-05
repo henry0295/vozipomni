@@ -12,10 +12,11 @@ if [ -z "$INTERFACE_IP" ] || [ "$INTERFACE_IP" = "127.0.0.1" ]; then
     exit 1
 fi
 
-# Soporte NAT: si VOZIPOMNI_PUBLIC_IP está definida y es distinta a la IP local,
+# Soporte NAT: si NAT_IPV4 está definida y es distinta a la IP local,
 # usar notación local!público para que RTPEngine anuncie la IP pública en el SDP
 # pero enlace en la IP privada (interfaz real del servidor).
-PUBLIC_IP="${VOZIPOMNI_PUBLIC_IP:-}"
+# Equivalente al parámetro --nat-ip de rtpengine.
+PUBLIC_IP="${NAT_IPV4:-}"
 if [ -n "$PUBLIC_IP" ] && [ "$PUBLIC_IP" != "$INTERFACE_IP" ]; then
     NAT_INTERFACE="${INTERFACE_IP}!${PUBLIC_IP}"
     echo "  [entrypoint] NAT detectado — bind: $INTERFACE_IP  anuncio SDP: $PUBLIC_IP"

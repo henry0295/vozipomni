@@ -6,6 +6,10 @@
 # Uso rápido (una línea, recomendado):
 #   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X
 #
+# Servidor detrás de NAT (IP pública distinta a la de la NIC):
+#   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X_PRIVADA --nat X.X.X.X_PUBLICA
+#   sudo bash deploy.sh 192.168.101.228 --nat 190.159.139.176
+#
 # Reinstalar desde cero (borra volúmenes, .env, credenciales):
 #   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- --clean X.X.X.X
 #
@@ -17,8 +21,8 @@
 #   sudo bash deploy.sh --clean X.X.X.X
 #
 # Variables opcionales:
-#   VOZIPOMNI_IPV4  — IP pública/privada del servidor (REQUERIDO, o pasar como argumento $1)
-#   NAT_IPV4        — IP pública si el servidor está detrás de NAT
+#   VOZIPOMNI_IPV4  — IP privada del servidor / IP de la NIC (REQUERIDO, o pasar como argumento $1)
+#   NAT_IPV4        — IP pública real si el servidor está detrás de NAT (o pasar con --nat)
 #   TZ              — Zona horaria (default: America/Bogota)
 #   INSTALL_DIR     — Directorio de instalación (default: /opt/vozipomni)
 #   BRANCH          — Rama Git a desplegar (default: main)
@@ -77,9 +81,10 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# ─── Parsear argumentos (--clean, --update, IP) ─────────────────────────────
+# ─── Parsear argumentos (--clean, --update, --nat, IP) ─────────────────────
 CLEAN_INSTALL=false
 UPDATE_ONLY=false
+NEXT_IS_NAT=false
 for arg in "$@"; do
     case "$arg" in
         --clean|-c)
@@ -88,18 +93,30 @@ for arg in "$@"; do
         --update|-u)
             UPDATE_ONLY=true
             ;;
+        --nat|-n)
+            NEXT_IS_NAT=true
+            ;;
         --help|-h)
-            echo "Uso: deploy.sh [--clean|--update] <IP>"
+            echo "Uso: deploy.sh [--clean|--update] <IP_PRIVADA> [--nat <IP_PUBLICA>]"
             echo ""
-            echo "  IP          IP del servidor (requerido)"
-            echo "  --clean     Borrar instalación existente (volúmenes, .env, credenciales)"
-            echo "  --update    Actualizar instalación existente sin borrar datos"
-            echo "  --help      Mostrar esta ayuda"
+            echo "  IP_PRIVADA   IP del servidor / IP de la NIC (requerido)"
+            echo "  --nat IP     IP pública real (cuando el servidor está detrás de NAT)"
+            echo "  --clean      Borrar instalación existente (volúmenes, .env, credenciales)"
+            echo "  --update     Actualizar instalación existente sin borrar datos"
+            echo "  --help       Mostrar esta ayuda"
+            echo ""
+            echo "Ejemplos:"
+            echo "  sudo bash deploy.sh 190.159.139.176                       # IP pública directa"
+            echo "  sudo bash deploy.sh 192.168.101.228 --nat 190.159.139.176 # Servidor NAT"
+            echo "  sudo bash deploy.sh --update 192.168.101.228 --nat 190.159.139.176"
             exit 0
             ;;
         *)
-            # Si parece una IP, usarla
-            if [[ "$arg" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+            if [ "$NEXT_IS_NAT" = true ]; then
+                export NAT_IPV4="$arg"
+                NEXT_IS_NAT=false
+            # Si parece una IP, usarla como VOZIPOMNI_IPV4
+            elif [[ "$arg" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
                 export VOZIPOMNI_IPV4="$arg"
             fi
             ;;
