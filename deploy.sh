@@ -1292,14 +1292,26 @@ update_production() {
     fi
     log_success "Usando: $COMPOSE_CMD"
 
-    # 1b. Si se pasó --nat, persistir NAT_IPV4 en .env para futuros reinicios
-    if [ -n "${NAT_IPV4:-}" ] && [ -f "$INSTALL_DIR/.env" ]; then
-        if grep -q "^NAT_IPV4=" "$INSTALL_DIR/.env"; then
-            sed -i "s|^NAT_IPV4=.*|NAT_IPV4=${NAT_IPV4}|" "$INSTALL_DIR/.env"
-        else
-            echo "NAT_IPV4=${NAT_IPV4}" >> "$INSTALL_DIR/.env"
+    # 1b. Persistir IPs en .env para futuros reinicios (no depender de env vars de shell)
+    if [ -f "$INSTALL_DIR/.env" ]; then
+        # VOZIPOMNI_IPV4 siempre se actualiza si se pasó como argumento
+        if [ -n "${VOZIPOMNI_IPV4:-}" ]; then
+            if grep -q "^VOZIPOMNI_IPV4=" "$INSTALL_DIR/.env"; then
+                sed -i "s|^VOZIPOMNI_IPV4=.*|VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4}|" "$INSTALL_DIR/.env"
+            else
+                echo "VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4}" >> "$INSTALL_DIR/.env"
+            fi
+            log_success "VOZIPOMNI_IPV4=${VOZIPOMNI_IPV4} guardado en .env"
         fi
-        log_success "NAT_IPV4=${NAT_IPV4} guardado en .env"
+        # NAT_IPV4 solo si se pasó --nat
+        if [ -n "${NAT_IPV4:-}" ]; then
+            if grep -q "^NAT_IPV4=" "$INSTALL_DIR/.env"; then
+                sed -i "s|^NAT_IPV4=.*|NAT_IPV4=${NAT_IPV4}|" "$INSTALL_DIR/.env"
+            else
+                echo "NAT_IPV4=${NAT_IPV4}" >> "$INSTALL_DIR/.env"
+            fi
+            log_success "NAT_IPV4=${NAT_IPV4} guardado en .env"
+        fi
     fi
 
     # 2. Actualizar código
