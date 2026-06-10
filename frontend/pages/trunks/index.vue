@@ -515,16 +515,53 @@
                   <h4 class="font-medium text-orange-800">Configuración PJSIP Wizard Personalizada</h4>
                 </div>
 
+                <!-- Advertencia si se detecta sintaxis chan_sip legacy -->
+                <UAlert
+                  v-if="isLegacySipConfig"
+                  color="red"
+                  icon="i-heroicons-exclamation-triangle"
+                  title="Sintaxis incompatible detectada"
+                  :description="`La configuración contiene directivas de chan_sip (${legacySipDirectives.join(', ')}) que NO son compatibles con PJSIP. Asterisk ignorará esta configuración y la troncal aparecerá como 'No Encontrado'. Usa el tipo 'Proveedor con NAT' o 'Proveedor sin NAT' y completa los campos del formulario.`"
+                  variant="subtle"
+                />
+                <!-- Sugerencia de conversión -->
+                <UAlert
+                  v-if="isLegacySipConfig && convertedPjsipConfig"
+                  color="amber"
+                  icon="i-heroicons-light-bulb"
+                  title="Conversión automática disponible"
+                  description="Detectamos la configuración chan_sip y la convertimos a PJSIP Wizard. Revisa y aplica si es correcta."
+                  variant="subtle"
+                >
+                  <template #description>
+                    <p class="mb-2">Detectamos la configuración chan_sip y la convertimos a PJSIP Wizard. Revisa y aplica si es correcta.</p>
+                    <UButton size="xs" color="amber" @click="applyConvertedConfig">
+                      Aplicar conversión PJSIP
+                    </UButton>
+                  </template>
+                </UAlert>
+
                 <UTextarea
                   v-model="form.pjsip_config_custom"
                   :rows="12"
+                  :class="['font-mono text-sm', isLegacySipConfig ? 'border-red-400 bg-red-50' : '']"
                   placeholder="type=wizard
 transport=trunk-nat-transport
 accepts_registrations=no
 sends_auth=yes
-..."
-                  class="font-mono text-sm"
+sends_registrations=yes
+remote_hosts=proveedor.com:5060
+outbound_auth/username=usuario
+outbound_auth/password=contraseña
+endpoint/allow=!all,ulaw,alaw
+endpoint/dtmf_mode=rfc4733
+endpoint/context=from-pstn
+registration/server_uri=sip:proveedor.com
+registration/client_uri=sip:usuario@proveedor.com"
                 />
+                <p class="text-xs text-orange-700">
+                  ⚠ Solo acepta sintaxis <strong>PJSIP Wizard</strong> (type=wizard). Las configuraciones de chan_sip (type=peer, insecure=, canreinvite=) no son compatibles.
+                </p>
               </div>
             </div>
           </template>
@@ -838,6 +875,85 @@ const trunkTypeBadgeColor = (type: string): string => {
     custom: 'orange'
   }
   return map[type] || 'gray'
+}
+
+// ===== DETECCIÓN DE SINTAXIS CHAN_SIP LEGACY EN CAMPO CUSTOM =====
+// Directivas exclusivas de chan_sip que NO existen en PJSIP
+const LEGACY_SIP_DIRECTIVES = ['type=peer', 'type=user', 'type=friend', 'insecure=', 'canreinvite=', 'qualify=yes', 'qualify=no', 'fromuser=', 'fromdomain=']
+
+const isLegacySipConfig = computed(() => {
+  if (form.trunk_type !== 'custom' || !form.pjsip_config_custom) return false
+  const cfg = form.pjsip_config_custom.toLowerCase()
+  return LEGACY_SIP_DIRECTIVES.some(d => cfg.includes(d.toLowerCase()))
+})
+
+const legacySipDirectives = computed(() => {
+  if (!form.pjsip_config_custom) return []
+  const cfg = form.pjsip_config_custom.toLowerCase()
+  return LEGACY_SIP_DIRECTIVES.filter(d => cfg.includes(d.toLowerCase()))
+})
+
+// Conversión automática de chan_sip (type=peer) a PJSIP Wizard
+const convertedPjsipConfig = computed(() => {
+  if (!isLegacySipConfig.value || !form.pjsip_config_custom) return ''
+  const lines = form.pjsip_config_custom.split('\n')
+  const kv: Record<string, string> = {}
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith(';') || trimmed.startsWith('#')) continue
+    const eqIdx = trimmed.indexOf('=')
+    if (eqIdx === -1) continue
+    const key = trimmed.slice(0, eqIdx).trim().toLowerCase()
+    const val = trimmed.slice(eqIdx + 1).trim()
+    kv[key] = val
+  }
+
+  const host = kv['host'] || ''
+  const port = kv['port'] || '5060'
+  const username = kv['username'] || ''
+  const secret = kv['secret'] || ''
+  const dtmf = kv['dtmfmode'] === 'rfc2833' ? 'rfc2833' : 'rfc4733'
+  const nat = (kv['nat'] || '').includes('force_rport')
+  const qualify = kv['qualify'] === 'yes'
+  // Codecs: allow=ulaw&alaw → ulaw,alaw
+  const allowRaw = kv['allow'] || 'ulaw,alaw'
+  const codecs = allowRaw.replace(/&/g, ',')
+  const hasNat = nat || (kv['nat'] || '').length > 0
+
+  const remoteHost = port !== '5060' ? `${host}:${port}` : host
+
+  const lines2 = [
+    `[${form.name || 'troncal'}]`,
+    'type=wizard',
+    hasNat ? 'transport=trunk-nat-transport' : 'transport=trunk-transport',
+    'accepts_registrations=no',
+    'accepts_auth=no',
+    'sends_registrations=yes',
+    'sends_auth=yes',
+    `endpoint/rtp_symmetric=${hasNat ? 'yes' : 'no'}`,
+    `endpoint/force_rport=${hasNat ? 'yes' : 'no'}`,
+    `endpoint/rewrite_contact=${hasNat ? 'yes' : 'no'}`,
+    'endpoint/direct_media=no',
+    `endpoint/dtmf_mode=${dtmf}`,
+    `endpoint/allow=!all,${codecs}`,
+    'endpoint/context=from-pstn',
+    qualify ? `aor/qualify_frequency=60` : '',
+    `remote_hosts=${remoteHost}`,
+    username ? `outbound_auth/username=${username}` : '',
+    secret ? `outbound_auth/password=${secret}` : '',
+    username ? `registration/server_uri=sip:${host}` : '',
+    username ? `registration/client_uri=sip:${username}@${host}` : '',
+    'registration/retry_interval=60',
+    'registration/expiration=3600',
+  ].filter(Boolean)
+
+  return lines2.join('\n')
+})
+
+const applyConvertedConfig = () => {
+  if (convertedPjsipConfig.value) {
+    form.pjsip_config_custom = convertedPjsipConfig.value
+  }
 }
 
 // ===== PRESET POR TIPO (OmniLeads) =====
