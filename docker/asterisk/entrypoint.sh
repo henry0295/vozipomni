@@ -90,8 +90,6 @@ if [ -n "${EXTERNAL_IP}" ] && [ -f "${PJSIP_CONF}" ]; then
     fi
 
     # Inyectar IP pública en trunk-nat-transport (external_media_address / external_signaling_address)
-    # NOTA: kamailio-endpoint-identify ya usa ${ENV(VOZIPOMNI_IPV4)} nativo de Asterisk,
-    #       no requiere sed para ese parámetro.
     if grep -q "^external_media_address=" "${PJSIP_CONF}"; then
         sed -i "s|^external_media_address=.*|external_media_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
         sed -i "s|^external_signaling_address=.*|external_signaling_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
@@ -104,6 +102,15 @@ external_signaling_address=${EXTERNAL_IP}
         }" "${PJSIP_CONF}"
     fi
     echo "  [entrypoint] ✓ trunk-nat-transport configurado con IP ${EXTERNAL_IP}"
+
+    # CRÍTICO: Reemplazar ${ENV(VOZIPOMNI_IPV4)} en kamailio-endpoint-identify
+    # El parser de res_pjsip_endpoint_identifier_ip NO interpreta ${ENV(...)},
+    # solo dialplan (extensions.conf) lo hace. Hay que sustituir el literal
+    # con la IP real usando sed en tiempo de arranque del contenedor.
+    if [ -n "${VOZIPOMNI_IPV4}" ]; then
+        sed -i "s|\\\${ENV(VOZIPOMNI_IPV4)}|${VOZIPOMNI_IPV4}|g" "${PJSIP_CONF}"
+        echo "  [entrypoint] ✓ kamailio-endpoint-identify: match=${VOZIPOMNI_IPV4}/32 inyectado"
+    fi
 else
     if [ -z "${EXTERNAL_IP}" ]; then
         echo "  [entrypoint] ⚠ AVISO: VOZIPOMNI_IPV4 no definido — trunk-nat-transport sin external_*"
