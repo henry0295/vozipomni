@@ -4,7 +4,8 @@ from django.db import models
 
 class VozipOmniUserManager(UserManager):
     def create_superuser(self, username, email=None, password=None, **extra_fields):
-        extra_fields.setdefault('role', 'admin')
+        # Superusuarios siempre tienen rol 'admin', sin importar el valor por defecto
+        extra_fields['role'] = 'admin'
         return super().create_superuser(username, email, password, **extra_fields)
 
 

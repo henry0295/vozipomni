@@ -22,14 +22,18 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const role = authStore.user?.role
 
+  // Rutas exclusivas de la consola del agente (prefijo exacto /agent/).
+  // IMPORTANTE: /agents (gestión de agentes) es diferente de /agent/* (consola del agente).
+  const isAgentConsolePath = to.path === '/agent' || to.path.startsWith('/agent/')
+
   // Los agentes no deben acceder al panel administrativo.
-  // Cualquier ruta distinta a /agent/* redirige a su consola.
-  if (role === 'agent' && !to.path.startsWith('/agent')) {
+  // Cualquier ruta que no sea la consola del agente redirige a su consola.
+  if (role === 'agent' && !isAgentConsolePath) {
     return navigateTo('/agent/console', { replace: true })
   }
 
   // Usuarios no agentes no deben navegar a la consola de agente.
-  if (role && role !== 'agent' && to.path.startsWith('/agent')) {
+  if (role && role !== 'agent' && isAgentConsolePath) {
     return navigateTo('/dashboard', { replace: true })
   }
 
