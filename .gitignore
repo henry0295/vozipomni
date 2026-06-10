@@ -87,6 +87,7 @@ logs/
 !verify-production.sh
 !deploy.sh
 !voip-debug.sh
+!generate-dev-ssl.sh
 
 # Scripts Docker - NUNCA ignorar (necesarios para build)
 !docker/**/*.sh
