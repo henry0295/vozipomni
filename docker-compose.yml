@@ -269,7 +269,7 @@ services:
       - "5038:5038"              # Asterisk AMI
       - "8088:8088"              # HTTP WebSocket (debug directo)
       - "8089:8089"              # HTTPS WebSocket nativo Asterisk
-      - "10000-10100:10000-10100/udp"  # RTP media (Asterisk ↔ RTPEngine)
+      - "10000-10300:10000-10300/udp"  # RTP media (Asterisk ↔ RTPEngine)
     networks:
       - vozipomni_network
 
@@ -331,7 +331,7 @@ services:
       TZ: ${TZ:-America/Bogota}
     ports:
       - "22222:22222/udp"        # Control NG (Kamailio → RTPEngine)
-      - "23000-23100:23000-23100/udp"  # Media RTP/SRTP
+      - "23000-23300:23000-23300/udp"  # Media RTP/SRTP
     depends_on:
       redis:
         condition: service_healthy
@@ -359,11 +359,14 @@ services:
     image: nginx:alpine
     container_name: vozipomni_nginx
     dns: 8.8.8.8
+    entrypoint: ["/bin/sh", "/etc/nginx/entrypoint.sh"]
     environment:
       TZ: ${TZ:-America/Bogota}
     volumes:
       - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - ./docker/nginx/entrypoint.sh:/etc/nginx/entrypoint.sh:ro
       - static_volume:/app/static:ro
       - media_volume:/app/media:ro
     ports:
@@ -375,7 +378,7 @@ services:
       frontend:
         condition: service_started
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost/health || curl -fsSLk -o /dev/null https://localhost/health || exit 1"]
       <<: *healthcheck-http
       start_period: 30s
     <<: *restart-policy

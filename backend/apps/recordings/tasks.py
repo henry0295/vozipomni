@@ -11,10 +11,141 @@ logger = logging.getLogger(__name__)
 @shared_task(
     bind=True,
     autoretry_for=(Exception,),
-    retry_kwargs={'max_retries': 2, 'countdown': 60},
-    retry_backoff=True
+    retry_kwargs={'max_retries': 3, 'countdown': 30},
+    retry_backoff=True,
+    name='recordings.link_recording_to_call',
 )
-def cleanup_old_recordings(self):
+def link_recording_to_call(self, call_id: str):
+    """
+    Tarea diferida para vincular el archivo de grabación a un Call.
+    Se lanza con countdown=30s desde el listener CDR para dar tiempo a que
+    MixMonitor cierre el archivo WAV correctamente antes de buscar el archivo.
+    Reintenta hasta 3 veces con backoff si el archivo aún no está disponible.
+    """
+    from apps.telephony.models import Call
+    from apps.recordings.models import Recording
+
+    try:
+        call = Call.objects.get(call_id=call_id)
+    except Call.DoesNotExist:
+        logger.warning(f"[Recording] Call {call_id} no encontrado para vincular grabación")
+        return
+
+    unique_id = call.unique_id or ''
+    recording_dirs = [
+        '/var/spool/asterisk/monitor',
+        '/app/recordings',
+    ]
+
+    found_path = ''
+    for rdir in recording_dirs:
+        if not os.path.isdir(rdir):
+            continue
+        try:
+            for fname in os.listdir(rdir):
+                if unique_id and unique_id in fname:
+                    candidate = os.path.join(rdir, fname)
+                    if os.path.getsize(candidate) > 100:
+                        found_path = candidate
+                        break
+                # Fallback: buscar por call_id sin prefijo "ast-"
+                raw_id = call_id.replace('ast-', '')
+                if raw_id and raw_id in fname:
+                    candidate = os.path.join(rdir, fname)
+                    if os.path.getsize(candidate) > 100:
+                        found_path = candidate
+                        break
+        except OSError:
+            continue
+        if found_path:
+            break
+
+    if not found_path:
+        logger.debug(f"[Recording] Archivo no encontrado para call {call_id} (unique_id={unique_id}), reintentando…")
+        raise self.retry(countdown=30)
+
+    file_size = os.path.getsize(found_path)
+    filename = os.path.basename(found_path)
+
+    Recording.objects.update_or_create(
+        call=call,
+        defaults={
+            'filename': filename,
+            'file_path': found_path,
+            'file_size': file_size,
+            'duration': call.talk_time or 0,
+            'format': filename.rsplit('.', 1)[-1] if '.' in filename else 'wav',
+            'status': 'completed',
+            'agent': call.agent,
+            'campaign': call.campaign if hasattr(call, 'campaign') else None,
+        },
+    )
+    call.recording_file = found_path
+    call.is_recorded = True
+    call.save(update_fields=['recording_file', 'is_recorded'])
+    logger.info(f"[Recording] ✓ Grabación vinculada a call {call_id}: {filename} ({file_size} bytes)")
+
+
+@shared_task(
+    name='recordings.scan_unlinked_recordings',
+)
+def scan_unlinked_recordings():
+    """
+    Tarea periódica que escanea el directorio de grabaciones y vincula
+    cualquier archivo que aún no tenga un registro Recording en la BD.
+    Útil como red de seguridad para llamadas que fallaron en la vinculación inicial.
+    """
+    from apps.telephony.models import Call
+    from apps.recordings.models import Recording
+
+    recording_dirs = [
+        '/var/spool/asterisk/monitor',
+        '/app/recordings',
+    ]
+    linked = 0
+    for rdir in recording_dirs:
+        if not os.path.isdir(rdir):
+            continue
+        for fname in os.listdir(rdir):
+            if not fname.endswith(('.wav', '.mp3', '.gsm', '.ogg')):
+                continue
+            full_path = os.path.join(rdir, fname)
+            if os.path.getsize(full_path) < 100:
+                continue
+            # Ya vinculado
+            if Recording.objects.filter(file_path=full_path).exists():
+                continue
+            # Intentar identificar la llamada por nombre de archivo (contiene unique_id)
+            matched_call = None
+            for call in Call.objects.filter(recording_file='').order_by('-start_time')[:500]:
+                uid = call.unique_id or ''
+                if uid and uid in fname:
+                    matched_call = call
+                    break
+            if matched_call:
+                file_size = os.path.getsize(full_path)
+                Recording.objects.update_or_create(
+                    call=matched_call,
+                    defaults={
+                        'filename': fname,
+                        'file_path': full_path,
+                        'file_size': file_size,
+                        'duration': matched_call.talk_time or 0,
+                        'format': fname.rsplit('.', 1)[-1],
+                        'status': 'completed',
+                        'agent': matched_call.agent,
+                    },
+                )
+                matched_call.recording_file = full_path
+                matched_call.is_recorded = True
+                matched_call.save(update_fields=['recording_file', 'is_recorded'])
+                linked += 1
+
+    if linked:
+        logger.info(f"[Recording] Scan periódico: {linked} grabaciones vinculadas")
+    return linked
+
+
     """
     Limpiar grabaciones antiguas según política de retención configurada
     """

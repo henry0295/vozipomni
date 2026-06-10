@@ -777,49 +777,16 @@ def _process_agent_login_logoff(event: dict, is_login: bool):
 # ─────────────────────────────────────────────────────────────────
 
 def _link_recording(call, event: dict):
-    """Busca archivo de grabación y crea el registro Recording si existe."""
-    from apps.recordings.models import Recording
-
-    unique_id = call.unique_id or ''
-    recording_dirs = [
-        '/var/spool/asterisk/monitor',
-        '/app/recordings',
-    ]
-
-    found_path = ''
-    for rdir in recording_dirs:
-        if not os.path.isdir(rdir):
-            continue
-        for fname in os.listdir(rdir):
-            if unique_id in fname or call.call_id.replace('ast-', '') in fname:
-                candidate = os.path.join(rdir, fname)
-                size = os.path.getsize(candidate)
-                if size > 100:
-                    found_path = candidate
-                    break
-        if found_path:
-            break
-
-    if found_path:
-        file_size = os.path.getsize(found_path)
-        filename = os.path.basename(found_path)
-
-        Recording.objects.update_or_create(
-            call=call,
-            defaults={
-                'filename': filename,
-                'file_path': found_path,
-                'file_size': file_size,
-                'duration': call.talk_time or 0,
-                'format': filename.rsplit('.', 1)[-1] if '.' in filename else 'wav',
-                'status': 'completed',
-                'agent': call.agent,
-            },
-        )
-        call.recording_file = found_path
-        call.is_recorded = True
-        call.save(update_fields=['recording_file', 'is_recorded'])
-        logger.info(f"[CDR] Grabación vinculada: {filename} ({file_size} bytes)")
+    """
+    Despacha una tarea Celery diferida (30 s) para vincular el archivo de grabación al Call.
+    El delay da tiempo a que MixMonitor cierre el WAV antes de que la tarea lo busque.
+    """
+    try:
+        from apps.recordings.tasks import link_recording_to_call
+        link_recording_to_call.apply_async(args=[call.call_id], countdown=30)
+        logger.debug(f"[CDR] Tarea de vinculación de grabación encolada para call {call.call_id} (en 30s)")
+    except Exception as e:
+        logger.warning(f"[CDR] No se pudo encolar tarea de grabación para call {call.call_id}: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────

@@ -62,6 +62,11 @@ app.conf.beat_schedule = {
         'task': 'apps.agents.tasks.update_prometheus_metrics',
         'schedule': 60.0,  # cada minuto
     },
+    # Red de seguridad: escanear grabaciones no vinculadas cada 5 minutos
+    'scan-unlinked-recordings': {
+        'task': 'recordings.scan_unlinked_recordings',
+        'schedule': 300.0,  # cada 5 minutos
+    },
 }
 
 @app.task(bind=True, ignore_result=True)
