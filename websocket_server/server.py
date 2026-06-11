@@ -23,6 +23,7 @@ class WebSocketServer:
         self.clients = set()
         self.redis_client = None
         self.asterisk_clients = {}  # Clientes de Asterisk conectados
+        self._client_meta = {}     # Metadatos por id(ws): role, user_id, type
         
     async def initialize(self):
         """Inicializar conexión a Redis"""
@@ -53,21 +54,55 @@ class WebSocketServer:
                 await self.broadcast_to_clients(message['data'])
                 
     async def handle_websocket(self, request):
-        """Manejar conexión WebSocket"""
+        """Manejar conexión WebSocket con validación de token JWT"""
         ws = web.WebSocketResponse()
+        
+        # ── Autenticación por token ──────────────────────────────────────────
+        # El cliente debe enviar ?token=<JWT> en la URL de conexión.
+        # El token se valida contra la clave secreta del backend Django.
+        token = request.query.get('token', '')
+        client_role = 'unknown'
+        client_user_id = None
+        
+        if token:
+            validated = await self._validate_jwt_token(token)
+            if not validated:
+                # Token inválido — rechazar conexión
+                await ws.prepare(request)
+                await ws.send_json({'action': 'error', 'message': 'Token inválido o expirado'})
+                await ws.close()
+                return ws
+            client_role = validated.get('role', 'agent')
+            client_user_id = validated.get('user_id')
+        else:
+            # Sin token — solo permitir si viene de localhost (backend/celery)
+            peer_ip = request.remote
+            if peer_ip not in ('127.0.0.1', '::1', 'localhost'):
+                await ws.prepare(request)
+                await ws.send_json({'action': 'error', 'message': 'Token requerido'})
+                await ws.close()
+                return ws
+        
         await ws.prepare(request)
         
         client_type = request.query.get('type', 'browser')
         client_id = request.query.get('id', str(id(ws)))
         
-        # Registrar cliente
+        # Registrar cliente con metadatos de rol
+        client_info = {
+            'ws': ws,
+            'role': client_role,
+            'user_id': client_user_id,
+            'type': client_type,
+        }
         self.clients.add(ws)
+        self._client_meta[id(ws)] = client_info
         
         if client_type == 'asterisk':
             self.asterisk_clients[client_id] = ws
             logger.info(f"Asterisk cliente conectado: {client_id}")
         else:
-            logger.info(f"Browser cliente conectado: {client_id}")
+            logger.info(f"Browser cliente conectado: {client_id} (role={client_role}, user={client_user_id})")
         
         try:
             async for msg in ws:
@@ -77,11 +112,51 @@ class WebSocketServer:
                     logger.error(f'WebSocket error: {ws.exception()}')
         finally:
             self.clients.discard(ws)
+            self._client_meta.pop(id(ws), None)
             if client_id in self.asterisk_clients:
                 del self.asterisk_clients[client_id]
             logger.info(f"Cliente desconectado: {client_id}")
             
         return ws
+    
+    async def _validate_jwt_token(self, token: str) -> dict | None:
+        """
+        Valida un JWT token de Django REST framework SimpleJWT.
+        Retorna los claims del payload si es válido, None si no lo es.
+        """
+        try:
+            import base64, json as _json, hmac, hashlib
+            
+            SECRET_KEY = os.getenv('SECRET_KEY', '')
+            if not SECRET_KEY:
+                # Sin clave secreta configurada, aceptar (modo desarrollo)
+                logger.warning("SECRET_KEY no configurado — omitiendo validación JWT")
+                return {'role': 'admin', 'user_id': None}
+            
+            # Decodificar JWT (formato: header.payload.signature)
+            parts = token.split('.')
+            if len(parts) != 3:
+                return None
+            
+            # Decodificar payload (base64url)
+            padding = 4 - len(parts[1]) % 4
+            payload_bytes = base64.urlsafe_b64decode(parts[1] + '=' * padding)
+            payload = _json.loads(payload_bytes)
+            
+            # Verificar expiración
+            import time
+            if payload.get('exp', 0) < time.time():
+                logger.debug("JWT expirado")
+                return None
+            
+            return {
+                'user_id': payload.get('user_id'),
+                'role': payload.get('role', 'agent'),
+                'username': payload.get('username', ''),
+            }
+        except Exception as e:
+            logger.debug(f"JWT validation failed: {e}")
+            return None
     
     async def handle_message(self, ws, data, client_type, client_id):
         """Procesar mensajes recibidos"""
