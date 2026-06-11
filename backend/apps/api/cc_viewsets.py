@@ -333,30 +333,39 @@ class ConferenceView(APIView):
             return Response({'error': 'channel y third_party requeridos'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        from apps.telephony.asterisk_ami import asterisk_ami
-        from asgiref.sync import async_to_sync
-
         try:
+            from apps.telephony.asterisk_ami import AsteriskAMI
+
+            ami = AsteriskAMI()
+            if not ami.connect():
+                return Response({'error': 'No se pudo conectar a Asterisk AMI'},
+                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
             # 1) Mover el canal actual al ConfBridge
-            result1 = async_to_sync(asterisk_ami.send_action)({
-                'Action': 'Redirect',
-                'Channel': channel,
-                'Context': 'confbridge',
-                'Exten': conf_bridge_id,
-                'Priority': '1',
-            })
+            ami._send_command(
+                f"Action: Redirect\r\n"
+                f"Channel: {channel}\r\n"
+                f"Context: confbridge\r\n"
+                f"Exten: {conf_bridge_id}\r\n"
+                f"Priority: 1\r\n"
+                f"\r\n"
+            )
+            ami._read_command_response(timeout=5)
 
             # 2) Originar llamada al tercero y meterlo al mismo ConfBridge
-            result2 = async_to_sync(asterisk_ami.send_action)({
-                'Action': 'Originate',
-                'Channel': f'Local/{third_party}@from-internal',
-                'Context': 'confbridge',
-                'Exten': conf_bridge_id,
-                'Priority': '1',
-                'CallerID': caller_id,
-                'Timeout': '30000',
-                'Async': 'true',
-            })
+            ami._send_command(
+                f"Action: Originate\r\n"
+                f"Channel: Local/{third_party}@from-internal\r\n"
+                f"Context: confbridge\r\n"
+                f"Exten: {conf_bridge_id}\r\n"
+                f"Priority: 1\r\n"
+                f"CallerID: {caller_id}\r\n"
+                f"Timeout: 30000\r\n"
+                f"Async: true\r\n"
+                f"\r\n"
+            )
+            ami._read_command_response(timeout=5)
+            ami.disconnect()
 
             return Response({
                 'status': 'conference_initiated',

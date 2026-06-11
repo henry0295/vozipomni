@@ -345,7 +345,7 @@ class DialerEngine:
             destination = contact['phone_number']
             caller_id = config.get('caller_id', '1000')
             
-            # Variables de canal
+            # Variables de canal — se envían como headers separados via panoramisk
             variables = {
                 'CAMPAIGN_ID': str(campaign_id),
                 'CONTACT_ID': str(contact['id']),
@@ -353,27 +353,42 @@ class DialerEngine:
             }
             
             if agent:
-                # Progresivo/Preview: conectar directamente al agente
-                channel = f"PJSIP/{agent['extension']}"
-                context = config.get('context', 'from-internal')
+                # Progresivo/Preview: el agente es el A-leg (quien llama primero).
+                # Asterisk marca al agente; cuando contesta, origina la B-leg al contacto.
                 variables['AGENT_ID'] = str(agent['id'])
+                variables['QUEUE_NAME'] = config.get('queue_name', '')
+                originate_action = {
+                    'Action': 'Originate',
+                    'Channel': f"PJSIP/{agent['extension']}",
+                    'Context': config.get('context', 'from-internal'),
+                    'Exten': destination,
+                    'Priority': '1',
+                    'CallerID': caller_id,
+                    'Timeout': '30000',
+                    'Async': 'true',
+                }
             else:
-                # Predictivo: conectar a cola
-                channel = config.get('queue_channel', 'Local/s@outbound-queue')
-                context = 'outbound-queue'
+                # Predictivo: llamar directamente al contacto y encolarlo.
+                # El contexto outbound-queue conecta la llamada contestada a la cola.
+                queue_name = config.get('queue_name', '')
+                variables['QUEUE_NAME'] = queue_name
+                originate_action = {
+                    'Action': 'Originate',
+                    'Channel': f'PJSIP/{trunk}/{destination}',
+                    'Context': 'outbound-queue',
+                    'Exten': 's',
+                    'Priority': '1',
+                    'CallerID': caller_id,
+                    'Timeout': '30000',
+                    'Async': 'true',
+                }
+            
+            # Añadir variables al action — panoramisk acepta múltiples 'Variable' como lista
+            # o como string concatenado. Usar lista garantiza headers separados en AMI.
+            originate_action['Variable'] = [f'{k}={v}' for k, v in variables.items()]
             
             # Originar llamada vía AMI
-            response = await self.ami_client.send_action({
-                'Action': 'Originate',
-                'Channel': f'PJSIP/{trunk}/{destination}',
-                'Context': context,
-                'Exten': 's',
-                'Priority': '1',
-                'CallerID': caller_id,
-                'Timeout': '30000',
-                'Async': 'true',
-                'Variable': ','.join([f'{k}={v}' for k, v in variables.items()])
-            })
+            response = await self.ami_client.send_action(originate_action)
             
             # panoramisk Message: el header de respuesta es 'Response' (capitalizado)
             ami_response = getattr(response, 'Response', '') or ''

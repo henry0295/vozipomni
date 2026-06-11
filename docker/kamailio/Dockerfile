@@ -34,6 +34,7 @@ RUN mkdir -p /etc/kamailio /var/run/kamailio
 # Copiar configuraciones
 COPY kamailio.cfg /etc/kamailio/kamailio.cfg
 COPY kamailio-local.cfg /etc/kamailio/kamailio-local.cfg
+COPY tls.cfg /etc/kamailio/tls.cfg
 
 # Copiar entrypoint
 COPY entrypoint.sh /entrypoint.sh

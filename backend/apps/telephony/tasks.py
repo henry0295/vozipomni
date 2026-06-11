@@ -8,6 +8,7 @@ Estas tareas Celery se usan para:
 """
 import logging
 from celery import shared_task
+from django.db import models as models  # noqa: necesario para process_pending_callbacks
 
 logger = logging.getLogger(__name__)
 
@@ -204,5 +205,4 @@ def process_pending_callbacks(self):
     return f"Processed {processed} callbacks"
 
 
-# Importar models aquí para evitar importación circular en la tarea anterior
-from django.db import models as models  # noqa: E402
+# El import de models ahora está al inicio del archivo

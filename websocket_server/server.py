@@ -213,8 +213,14 @@ async def init_app():
 def main():
     """Punto de entrada principal"""
     logger.info(f"Iniciando WebSocket Server en {WS_HOST}:{WS_PORT}")
-    app = asyncio.run(init_app())
-    web.run_app(app, host=WS_HOST, port=WS_PORT)
+    # CORRECTO: pasar la coroutine init_app() directamente a web.run_app().
+    # aiohttp crea UN solo event loop y ejecuta init_app() dentro de él,
+    # garantizando que la conexión Redis, el listener pub/sub y el servidor HTTP
+    # compartan el mismo loop.
+    # INCORRECTO: asyncio.run(init_app()) crea un loop temporal que se destruye
+    # antes de que web.run_app() arranque su propio loop — las tareas (redis_pubsub_listener)
+    # creadas en el loop temporal quedan huérfanas y silenciosamente mueren.
+    web.run_app(init_app(), host=WS_HOST, port=WS_PORT)
 
 if __name__ == '__main__':
     main()

@@ -98,12 +98,13 @@ def _parse_ami_event(raw: str) -> dict:
 def _ami_login(sock: socket.socket) -> bool:
     """Autenticación AMI con suscripción a TODOS los eventos necesarios."""
     _read_until_blank(sock)
-    # Events: system,call,agent,cdr,dialplan,dtmf — cubrir todo lo relevante
+    # Events: system,call,agent,cdr,dialplan,user — cubrir todo lo relevante
+    # 'user' es necesario para VoicemailUserEntry
     cmd = (
         f"Action: Login\r\n"
         f"Username: {AMI_USER}\r\n"
         f"Secret: {AMI_SECRET}\r\n"
-        f"Events: system,call,agent,cdr,dialplan\r\n"
+        f"Events: system,call,agent,cdr,dialplan,user\r\n"
         f"\r\n"
     )
     sock.sendall(cmd.encode())
