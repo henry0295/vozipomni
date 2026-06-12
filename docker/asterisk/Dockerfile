@@ -52,6 +52,8 @@ RUN git clone --depth 1 --branch 21 https://github.com/asterisk/asterisk.git ast
         --enable res_pjsip \
         --enable res_pjsip_session \
         --enable chan_pjsip \
+        --enable chan_sip.so \
+        --enable res_rtp_asterisk \
         --disable format_mp3 \
         menuselect.makeopts && \
     make -j$(nproc) && \
