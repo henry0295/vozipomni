@@ -385,10 +385,12 @@ services:
     network_mode: host
     environment:
       TZ: ${TZ:-America/Bogota}
+      VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-127.0.0.1}
     volumes:
       - static_volume:/app/static
       - media_volume:/app/media
-      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      # Sin :ro — el entrypoint genera certificados SSL autofirmados si no existen
+      - ./docker/nginx/ssl:/etc/nginx/ssl
       - ./logs/nginx:/var/log/nginx
     depends_on:
       backend:
