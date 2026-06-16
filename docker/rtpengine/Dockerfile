@@ -38,7 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Crear directorios
 RUN mkdir -p /var/run/rtpengine
 
-# Copiar configuración
+# Copiar configuración (plantilla; entrypoint restaura en cada arranque)
+COPY rtpengine.conf /etc/rtpengine/rtpengine.conf.orig
 COPY rtpengine.conf /etc/rtpengine/rtpengine.conf
 
 # Copiar entrypoint

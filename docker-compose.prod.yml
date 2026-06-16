@@ -319,7 +319,7 @@ services:
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-vozipomni_redis_2026}
       ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
-      RTPENGINE_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      RTPENGINE_HOST: 127.0.0.1
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-}
       TZ: ${TZ:-America/Bogota}
     depends_on:

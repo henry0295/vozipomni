@@ -23,7 +23,7 @@ fi
 # Todos los servicios escuchan en la misma IP del host (VOZIPOMNI_IPV4).
 KAM_CFG="/etc/kamailio/kamailio.cfg"
 
-RTPENGINE_ADDR="${RTPENGINE_HOST:-${VOZIPOMNI_IPV4:-127.0.0.1}}"
+RTPENGINE_ADDR="${RTPENGINE_HOST:-127.0.0.1}"
 ASTERISK_ADDR="${ASTERISK_HOST:-${VOZIPOMNI_IPV4:-127.0.0.1}}"
 REDIS_ADDR="${REDIS_HOST:-${VOZIPOMNI_IPV4:-127.0.0.1}}"
 # sipping_from: usar la IP del servidor como "dominio" del ping SIP keepalive
