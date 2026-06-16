@@ -56,6 +56,8 @@ x-django-env: &django-env
   ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
   ASTERISK_CONFIG_DIR: /var/lib/asterisk/dynamic
   ASTERISK_PUBLIC_IP: ${VOZIPOMNI_IPV4:-127.0.0.1}
+  # Host SIP de Kamailio para contact= en pjsip_agents.conf (network_mode: host → 127.0.0.1)
+  KAMAILIO_HOST: ${KAMAILIO_HOST:-127.0.0.1}
   EMAIL_HOST: ${EMAIL_HOST:-}
   EMAIL_PORT: ${EMAIL_PORT:-587}
   EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}

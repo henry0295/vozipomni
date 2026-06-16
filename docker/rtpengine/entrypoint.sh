@@ -57,4 +57,5 @@ if [ ! -f "$RTPENGINE_BIN" ]; then
 fi
 
 echo "=== Iniciando RTPEngine ($RTPENGINE_BIN) ==="
-exec "$RTPENGINE_BIN" --config-file=/etc/rtpengine/rtpengine.conf --foreground
+# table=-1: userspace-only — no requiere módulo kernel (necesario en Docker)
+exec "$RTPENGINE_BIN" --config-file=/etc/rtpengine/rtpengine.conf --foreground --table=-1
