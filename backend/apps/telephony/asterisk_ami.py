@@ -359,12 +359,18 @@ class AsteriskAMI:
                             reg_status = p.capitalize()
                             break
                     if reg_status != 'Unknown' or '/' in reg_id:
-                        # Extraer nombre base (sin -reg y sin /uri)
+                        # Extraer nombre base del trunk a partir del registro.
+                        # El wizard PJSIP genera nombres con estos patrones:
+                        #   trunk-reg-0/sip:host   → base trunk
+                        #   trunk-reg/sip:host     → base trunk
+                        #   trunk/sip:host         → base trunk
+                        # Siempre dividir por '/' primero para quitar la URI
                         base_name = reg_id.split('/')[0]
-                        if base_name.endswith('-reg'):
-                            base_name_no_suffix = base_name[:-4]
-                        else:
-                            base_name_no_suffix = base_name
+                        
+                        # Quitar sufijos de registro generados por el wizard:
+                        # -reg-0, -reg-1, -reg (con o sin índice numérico)
+                        import re as _re
+                        base_name_no_suffix = _re.sub(r'-reg(-\d+)?$', '', base_name)
                         
                         reg_entry = {
                             'status': reg_status,
@@ -372,11 +378,11 @@ class AsteriskAMI:
                             'base_name': base_name_no_suffix
                         }
                         registrations[base_name] = reg_entry
-                        # También registrar sin sufijo para lookup más fácil
+                        # Registrar también con el nombre base (sin sufijo) para lookup
                         if base_name != base_name_no_suffix:
                             registrations[base_name_no_suffix] = reg_entry
                         
-                        logger.debug(f"  Registration: {base_name} -> {base_name_no_suffix} status={reg_status}")
+                        logger.debug(f"  Registration: {base_name} → base={base_name_no_suffix} status={reg_status}")
 
             logger.info(f"PJSIP registrations encontradas: {list(registrations.keys())}")
             return registrations
@@ -504,11 +510,20 @@ class AsteriskAMI:
             return None
 
     def get_trunk_registration_status(self, trunk_name):
-        """Obtener estado de registro de una troncal específica"""
+        """
+        Obtener estado de registro de una troncal específica.
+        El PJSIP Wizard genera nombres de registro con sufijos:
+          - trunk-reg-0   (formato más común en Asterisk 21)
+          - trunk-reg     (formato antiguo)
+          - trunk         (sin sufijo, si el wizard no agrega índice)
+        """
         try:
-            # Primero intentar registros (troncales que se registran)
+            import re as _re
+            # Primero intentar con la lista completa (más eficiente)
             registrations = self.pjsip_show_registrations()
-            reg = registrations.get(trunk_name) or registrations.get(f"{trunk_name}-reg")
+            
+            # El parser ya normaliza los nombres base, buscar directamente por trunk_name
+            reg = registrations.get(trunk_name)
             if reg:
                 status = reg.get('status', 'Unknown')
                 if status == 'Registered':
@@ -520,6 +535,37 @@ class AsteriskAMI:
                 elif status == 'Attempting':
                     return 'Attempting'
                 return status
+
+            # Si no encontramos por nombre exacto, buscar cualquier registro
+            # cuyo base_name coincida (por si el parser no normalizó bien)
+            for reg_key, reg_data in registrations.items():
+                if reg_data.get('base_name') == trunk_name:
+                    status = reg_data.get('status', 'Unknown')
+                    if status == 'Registered':
+                        return 'Registered'
+                    elif status in ('Rejected', 'Failed'):
+                        return 'Failed'
+                    return status
+
+            # Fallback: verificación individual con variantes de nombre
+            # Asterisk 21 usa trunk-reg-0, -1, etc. según el índice del wizard
+            variants_to_try = [
+                f"{trunk_name}-reg-0",
+                f"{trunk_name}-reg-1",
+                f"{trunk_name}-reg",
+                trunk_name,
+            ]
+            for variant in variants_to_try:
+                reg_check = self.pjsip_check_registration(variant)
+                if reg_check and reg_check.get('status', 'Unknown') != 'Unknown':
+                    status = reg_check['status']
+                    if status == 'Registered':
+                        return 'Registered'
+                    elif status in ('Rejected', 'Failed'):
+                        return 'Failed'
+                    elif status == 'Attempting':
+                        return 'Attempting'
+                    return status
 
             # Fallback: buscar en endpoints (troncales sin registro, IP-based)
             endpoints = self.pjsip_show_endpoints()

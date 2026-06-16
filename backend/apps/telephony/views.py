@@ -132,17 +132,34 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                 return None
 
             def find_registration(name):
-                """Buscar registration por nombre con variantes"""
+                """
+                Buscar registration por nombre con variantes.
+                El PJSIP Wizard de Asterisk 21 genera sufijos como:
+                  trunk-reg-0, trunk-reg-1, trunk-reg, trunk
+                """
+                import re as _re
                 variants = [
-                    name, f"{name}-reg",
-                    name.replace('-', '_'), f"{name.replace('-', '_')}-reg",
-                    name.replace('_', '-'), f"{name.replace('_', '-')}-reg",
+                    name,
+                    f"{name}-reg",
+                    f"{name}-reg-0",
+                    f"{name}-reg-1",
+                    name.replace('-', '_'),
+                    f"{name.replace('-', '_')}-reg",
+                    f"{name.replace('-', '_')}-reg-0",
+                    name.replace('_', '-'),
+                    f"{name.replace('_', '-')}-reg",
+                    f"{name.replace('_', '-')}-reg-0",
                 ]
                 for v in variants:
                     if v in registrations:
                         return registrations[v]
                     if v.lower() in reg_lower_map:
                         return reg_lower_map[v.lower()]
+                # Búsqueda por base_name si el parser ya normalizó
+                for reg_key, reg_data in registrations.items():
+                    if reg_data.get('base_name', '').lower() == name.lower():
+                        return reg_data
+                return None
                 return None
 
             for t in trunks:

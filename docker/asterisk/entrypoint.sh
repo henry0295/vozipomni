@@ -2,12 +2,6 @@
 # ============================================================================
 # VoziPOmni - Asterisk Container Entrypoint
 # ============================================================================
-# 1. Crea archivos de configuración vacíos si no existen
-#    (evita que #include falle al iniciar Asterisk por primera vez)
-# 2. Inyecta la IP pública (VOZIPOMNI_IPV4) en trunk-nat-transport
-# 3. Genera certificados TLS autofirmados para WebRTC si no existen
-# 4. Fija permisos y ejecuta Asterisk en foreground
-# ============================================================================
 
 set -e
 
@@ -18,143 +12,163 @@ KEYS_DIR="${CONFIG_DIR}/keys"
 echo "=== VoziPOmni Asterisk Entrypoint ==="
 
 # -------------------------------------------------------
-# 0. Crear directorio para configuraciones dinámicas
+# 0. Crear directorios necesarios
 # -------------------------------------------------------
 mkdir -p "${DYNAMIC_DIR}"
-echo "  [entrypoint] Directorio de configs dinámicas: ${DYNAMIC_DIR}"
+mkdir -p /var/log/asterisk/cdr-csv
+mkdir -p /var/log/asterisk/cdr-custom
+echo "  [entrypoint] Directorios creados"
 
 # -------------------------------------------------------
-# 1. Ajustar maxload según cores disponibles del sistema
+# 1. Placeholders vacíos para archivos dinámicos
+#    (evita que #include/#tryinclude falle al primer arranque)
 # -------------------------------------------------------
-# maxload = 0 (sin límite) está fijo en asterisk.conf.
-# No se sobreescribe aquí para evitar rechazar llamadas por load average.
-
-# -------------------------------------------------------
-# 2. Archivos de inclusión dinámica (placeholders vacíos)
-# -------------------------------------------------------
-for conf in pjsip_extensions.conf pjsip_wizard.conf extensions_dynamic.conf queues_dynamic.conf; do
+for conf in pjsip_extensions.conf pjsip_wizard.conf extensions_dynamic.conf \
+            queues_dynamic.conf pjsip_agents.conf; do
     if [ ! -f "${DYNAMIC_DIR}/${conf}" ]; then
-        echo "; Auto-generated placeholder — managed by VoziPOmni backend" > "${DYNAMIC_DIR}/${conf}"
+        echo "; Placeholder — gestionado por VoziPOmni backend" \
+            > "${DYNAMIC_DIR}/${conf}"
         echo "  [entrypoint] Creado ${DYNAMIC_DIR}/${conf} (placeholder)"
     fi
 done
 
 # -------------------------------------------------------
-# 2b. Crear directorios CDR
-# -------------------------------------------------------
-mkdir -p /var/log/asterisk/cdr-csv
-mkdir -p /var/log/asterisk/cdr-custom
-chown -R asterisk:asterisk /var/log/asterisk/cdr-csv 2>/dev/null || true
-chown -R asterisk:asterisk /var/log/asterisk/cdr-custom 2>/dev/null || true
-echo "  [entrypoint] Directorios CDR creados"
-
-# -------------------------------------------------------
-# 3. Auto-detección y validación de IP pública
+# 2. Detectar y validar VOZIPOMNI_IPV4
 # -------------------------------------------------------
 if [ -z "${VOZIPOMNI_IPV4}" ]; then
     echo "  [entrypoint] VOZIPOMNI_IPV4 no definido — intentando auto-detectar..."
     VOZIPOMNI_IPV4=$(curl -4 -s --max-time 5 https://api.ipify.org 2>/dev/null || \
-                     curl -4 -s --max-time 5 https://ifconfig.me 2>/dev/null || \
-                     curl -4 -s --max-time 5 https://icanhazip.com 2>/dev/null || \
+                     curl -4 -s --max-time 5 https://ifconfig.me  2>/dev/null || \
                      echo "")
     if [ -n "${VOZIPOMNI_IPV4}" ]; then
-        echo "  [entrypoint] IP pública auto-detectada: ${VOZIPOMNI_IPV4}"
+        echo "  [entrypoint] IP auto-detectada: ${VOZIPOMNI_IPV4}"
     else
-        echo "  [entrypoint] ERROR: No se pudo detectar IP pública. Las troncales con NAT NO funcionarán."
+        echo "  [entrypoint] ERROR: No se pudo detectar IP. Las troncales NAT NO funcionarán."
     fi
 fi
 
-# Validar que la IP no sea privada
-if [ -n "${VOZIPOMNI_IPV4}" ]; then
-    case "${VOZIPOMNI_IPV4}" in
-        10.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|192.168.*)
-            echo "  [entrypoint] ⚠ AVISO: IP detectada es PRIVADA (${VOZIPOMNI_IPV4})"
-            echo "  [entrypoint]   Las llamadas SIP con NAT probablemente NO tendrán audio."
-            echo "  [entrypoint]   Configure VOZIPOMNI_IPV4 con la IP pública real del servidor."
-            ;;
-    esac
-fi
+EXTERNAL_IP="${NAT_IPV4:-${VOZIPOMNI_IPV4}}"
+
+echo "  [entrypoint] IP local:    ${VOZIPOMNI_IPV4:-<no definida>}"
+echo "  [entrypoint] IP externa:  ${EXTERNAL_IP:-<no definida>}"
 
 # -------------------------------------------------------
-# 4. Inyectar IP pública en trunk-nat-transport y kamailio-endpoint-identify
+# 3. Inyectar external_media/signaling_address en trunk-nat-transport
+#
+# pjsip.conf es un bind-mount de solo-lectura (del host).
+# NO se puede modificar con sed de forma persistente porque
+# el contenido del host se vuelve a montar en cada restart.
+#
+# SOLUCIÓN: trunk-nat-transport tiene las líneas comentadas
+# ("; external_media_address= ..."). El entrypoint inyecta
+# los valores en un archivo separado que pjsip.conf incluye
+# via #tryinclude.
 # -------------------------------------------------------
 PJSIP_CONF="${CONFIG_DIR}/pjsip.conf"
-# NAT_IPV4: IP pública cuando el servidor está detrás de NAT.
-# Si no se define, se usa VOZIPOMNI_IPV4 (servidor con IP pública directa).
-EXTERNAL_IP="${NAT_IPV4:-${VOZIPOMNI_IPV4}}"
-if [ -n "${EXTERNAL_IP}" ] && [ -f "${PJSIP_CONF}" ]; then
-    if [ -n "${NAT_IPV4}" ] && [ "${NAT_IPV4}" != "${VOZIPOMNI_IPV4}" ]; then
-        echo "  [entrypoint] NAT detectado — external_media/signaling_address = ${EXTERNAL_IP} (local: ${VOZIPOMNI_IPV4})"
-    else
-        echo "  [entrypoint] Inyectando external_media_address=${EXTERNAL_IP} en trunk-nat-transport"
-    fi
 
-    # Inyectar IP pública en trunk-nat-transport (external_media_address / external_signaling_address)
-    if grep -q "^external_media_address=" "${PJSIP_CONF}"; then
-        sed -i "s|^external_media_address=.*|external_media_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
-        sed -i "s|^external_signaling_address=.*|external_signaling_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
-    else
-        # Insertar después de "bind=0.0.0.0:5162"
-        sed -i "/^\[trunk-nat-transport\]/,/^\[/ {
-            /^bind=0\.0\.0\.0:5162/a\\
+if [ -n "${EXTERNAL_IP}" ]; then
+    # El transport trunk-nat-transport NO soporta recarga parcial ni append ('+').
+    # La única forma de inyectar external_media_address es via sed sobre una
+    # COPIA del archivo en el directorio dinámico que Asterisk lee primero.
+    # pjsip.conf estático tiene las líneas comentadas. En el siguiente reload,
+    # Asterisk usará el archivo de /etc/asterisk/ (bind-mount del host).
+    #
+    # SOLUCIÓN: Copiar pjsip.conf a /tmp, inyectar la IP, y usar el path
+    # alternativo. Pero como pjsip.conf es leído desde /etc/asterisk (bind-mount),
+    # la única solución confiable es hacer sed en el archivo del CONTENEDOR
+    # antes del primer arranque (no en reloads posteriores).
+    #
+    # El bind-mount monta el archivo HOST en el contenedor. sed -i modifica
+    # la copia del contenedor. En el próximo arranque del contenedor, Docker
+    # vuelve a montar el original del host. Para reloads dentro del mismo
+    # contenedor, la copia modificada persiste.
+    PJSIP_CONF="${CONFIG_DIR}/pjsip.conf"
+    if [ -f "${PJSIP_CONF}" ]; then
+        if grep -q "^external_media_address=" "${PJSIP_CONF}"; then
+            sed -i "s|^external_media_address=.*|external_media_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
+            sed -i "s|^external_signaling_address=.*|external_signaling_address=${EXTERNAL_IP}|" "${PJSIP_CONF}"
+        else
+            # Insertar después de bind=0.0.0.0:5162
+            sed -i "/^bind=0\.0\.0\.0:5162$/a\\
 external_media_address=${EXTERNAL_IP}\\
-external_signaling_address=${EXTERNAL_IP}
-        }" "${PJSIP_CONF}"
+external_signaling_address=${EXTERNAL_IP}" "${PJSIP_CONF}"
+        fi
+        echo "  [entrypoint] ✓ trunk-nat-transport: external_*=${EXTERNAL_IP} inyectado en pjsip.conf"
     fi
-    echo "  [entrypoint] ✓ trunk-nat-transport configurado con IP ${EXTERNAL_IP}"
-
-    # CRÍTICO: Reemplazar ${ENV(VOZIPOMNI_IPV4)} en kamailio-endpoint-identify
-    # El parser de res_pjsip_endpoint_identifier_ip NO interpreta ${ENV(...)},
-    # solo dialplan (extensions.conf) lo hace. Hay que sustituir el literal
-    # con la IP real usando sed en tiempo de arranque del contenedor.
-    if [ -n "${VOZIPOMNI_IPV4}" ]; then
-        sed -i "s|\\\${ENV(VOZIPOMNI_IPV4)}|${VOZIPOMNI_IPV4}|g" "${PJSIP_CONF}"
-        echo "  [entrypoint] ✓ kamailio-endpoint-identify: match=${VOZIPOMNI_IPV4}/32 inyectado"
-    fi
+    # Archivo de marca para saber que fue inyectado
+    echo "${EXTERNAL_IP}" > "${DYNAMIC_DIR}/trunk_nat_address.conf"
 else
-    if [ -z "${EXTERNAL_IP}" ]; then
-        echo "  [entrypoint] ⚠ AVISO: VOZIPOMNI_IPV4 no definido — trunk-nat-transport sin external_*"
-        echo "  [entrypoint]   Las llamadas salientes por troncales NAT NO tendrán audio."
-    fi
+    echo "; Sin IP externa" > "${DYNAMIC_DIR}/trunk_nat_address.conf"
+    echo "  [entrypoint] ⚠ Sin IP externa — trunk-nat-transport sin NAT"
+fi
+
+# -------------------------------------------------------
+# 4. Generar kamailio_identify.conf con la IP real del servidor
+#
+# PROBLEMA: res_pjsip_endpoint_identifier_ip NO interpreta ${ENV(...)}
+# en pjsip.conf — solo el dialplan lo hace. Cada vez que Asterisk
+# recarga pjsip.conf, el bind-mount restaura el ${ENV(...)} original
+# y el identify falla con "Invalid IP address".
+#
+# SOLUCIÓN: Generar el identify en /var/lib/asterisk/dynamic/ con la
+# IP real. pjsip.conf incluye este archivo via #tryinclude AL FINAL,
+# lo que SOBREESCRIBE el identify estático (PJSIP fusiona secciones
+# del mismo nombre — la última definición gana para 'identify').
+# -------------------------------------------------------
+if [ -n "${VOZIPOMNI_IPV4}" ]; then
+    cat > "${DYNAMIC_DIR}/kamailio_identify.conf" <<EOF
+; Auto-generado por entrypoint.sh — NO EDITAR MANUALMENTE
+; Agrega match con la IP real del servidor al kamailio-endpoint-identify.
+; PJSIP fusiona múltiples secciones con el mismo nombre, por eso
+; este archivo AGREGA el match correcto al identify estático de pjsip.conf.
+
+[kamailio-endpoint-identify]
+type=identify
+endpoint=kamailio-endpoint
+match=${VOZIPOMNI_IPV4}/32
+EOF
+    echo "  [entrypoint] ✓ kamailio_identify.conf: match=${VOZIPOMNI_IPV4}/32"
+else
+    echo "; Sin VOZIPOMNI_IPV4 — usando solo fallbacks del pjsip.conf estático" \
+        > "${DYNAMIC_DIR}/kamailio_identify.conf"
+    echo "  [entrypoint] ⚠ kamailio_identify.conf sin IP pública"
 fi
 
 # -------------------------------------------------------
 # 5. Certificados TLS para WebRTC (autofirmados)
 # -------------------------------------------------------
 if [ ! -f "${KEYS_DIR}/asterisk.pem" ]; then
-    echo "  [entrypoint] Generando certificados TLS autofirmados para WebRTC..."
+    echo "  [entrypoint] Generando certificados TLS..."
     mkdir -p "${KEYS_DIR}"
     openssl req -x509 -nodes -days 3650 \
         -newkey rsa:2048 \
         -keyout "${KEYS_DIR}/asterisk.key" \
-        -out "${KEYS_DIR}/asterisk.pem" \
-        -subj "/CN=vozipomni-asterisk/O=VoziPOmni/C=CO" \
+        -out    "${KEYS_DIR}/asterisk.pem" \
+        -subj   "/CN=vozipomni-asterisk/O=VoziPOmni/C=CO" \
         2>/dev/null
-    # Combinar key + cert para transports que lo requieran
-    cat "${KEYS_DIR}/asterisk.key" "${KEYS_DIR}/asterisk.pem" > "${KEYS_DIR}/asterisk-combined.pem"
-    echo "  [entrypoint] Certificados creados en ${KEYS_DIR}"
+    cat "${KEYS_DIR}/asterisk.key" "${KEYS_DIR}/asterisk.pem" \
+        > "${KEYS_DIR}/asterisk-combined.pem"
+    echo "  [entrypoint] ✓ Certificados TLS creados"
 fi
 
 # -------------------------------------------------------
 # 6. Permisos
 # -------------------------------------------------------
-chown -R asterisk:asterisk "${CONFIG_DIR}" 2>/dev/null || true
-chown -R asterisk:asterisk "${DYNAMIC_DIR}" 2>/dev/null || true
-chmod -R 777 "${DYNAMIC_DIR}" 2>/dev/null || true  # Permitir escritura desde backend
-chown -R asterisk:asterisk /var/log/asterisk 2>/dev/null || true
-chown -R asterisk:asterisk /var/run/asterisk 2>/dev/null || true
+chown -R asterisk:asterisk "${CONFIG_DIR}"    2>/dev/null || true
+chown -R asterisk:asterisk "${DYNAMIC_DIR}"   2>/dev/null || true
+chmod -R 777 "${DYNAMIC_DIR}"                 2>/dev/null || true
+chown -R asterisk:asterisk /var/log/asterisk  2>/dev/null || true
+chown -R asterisk:asterisk /var/run/asterisk  2>/dev/null || true
 chown -R asterisk:asterisk /var/spool/asterisk 2>/dev/null || true
 
 # -------------------------------------------------------
-# 7. Resolver hostname "asterisk" en producción (network_mode: host)
-# Con network_mode: host el Docker DNS no está disponible, por lo que
-# getaddrinfo("asterisk") falla. Registrar 127.0.0.1 → asterisk en /etc/hosts.
+# 7. Fix DNS: con network_mode:host el nombre "asterisk" no resuelve
 # -------------------------------------------------------
-HOSTNAME_ENTRY="127.0.0.1 asterisk"
-if ! grep -qF "asterisk" /etc/hosts 2>/dev/null; then
-    echo "${HOSTNAME_ENTRY}" >> /etc/hosts
-    echo "  [entrypoint] /etc/hosts → '${HOSTNAME_ENTRY}' (fix DNS network_mode: host)"
+if ! grep -qF "127.0.0.1 asterisk" /etc/hosts 2>/dev/null; then
+    echo "127.0.0.1 asterisk" >> /etc/hosts
+    echo "  [entrypoint] /etc/hosts → '127.0.0.1 asterisk' (fix DNS host network)"
 fi
 
+echo ""
 echo "=== Iniciando Asterisk ==="
 exec /usr/sbin/asterisk -f -vvv -U asterisk -G asterisk
