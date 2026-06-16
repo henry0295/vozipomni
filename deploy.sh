@@ -761,7 +761,7 @@ EOF
 configure_firewall() {
     log_info "Configurando firewall..."
 
-    local PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 5061/tcp 5161/udp 5162/udp 5038/tcp 8080/tcp 8088/tcp 8089/tcp 8765/tcp 10000:23100/udp"
+    local PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 5061/tcp 5161/udp 5162/udp 5038/tcp 8080/tcp 8088/tcp 8089/tcp 8765/tcp 10000:10300/udp 22222/udp 23000:23300/udp"
 
     if command -v ufw &>/dev/null; then
         for port in $PORTS; do
