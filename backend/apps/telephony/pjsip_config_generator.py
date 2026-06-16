@@ -188,8 +188,10 @@ class PJSIPConfigGenerator:
     
     def _generate_no_nat_provider_config(self, trunk):
         """
-        Configuración para proveedor sin NAT (ej: VPS con IP pública)
-        Usa trunk-transport (puerto 5060)
+        Configuración para proveedor sin NAT (ej: VPS con IP pública directa).
+        Usa trunk-transport (puerto 5161).
+        
+        NOTA: Si el servidor tiene IP privada (detrás de NAT), usar nat_provider en su lugar.
         """
         config_lines = [
             f"; {'='*70}",
@@ -200,7 +202,10 @@ class PJSIPConfigGenerator:
             "",
             f"[{trunk.name}]",
             "type=wizard",
-            "transport=trunk-transport",  # Puerto 5060, sin NAT
+            # Para proveedores que esperan puerto 5060 estándar,
+            # usar trunk-transport (5161). Si hay problemas de registro,
+            # verificar que el softswitch acepte el puerto 5161 como source.
+            "transport=trunk-transport",
             f"accepts_registrations={'yes' if trunk.accepts_registrations else 'no'}",
             f"accepts_auth={'yes' if trunk.accepts_auth else 'no'}",
             f"sends_registrations={'yes' if trunk.sends_registration else 'no'}",
@@ -529,7 +534,13 @@ class PJSIPConfigGenerator:
     
     def reload_pjsip(self):
         """
-        Recarga la configuración PJSIP en Asterisk via AMI
+        Recarga la configuración PJSIP Wizard en Asterisk via AMI.
+        
+        Secuencia correcta para que el wizard procese el nuevo pjsip_wizard.conf:
+        1. res_pjsip_config_wizard.so  — re-lee el wizard.conf y aplica objetos
+        2. res_pjsip.so                — aplica los objetos al stack SIP
+        3. pjsip reload                — CLI fallback para forzar aplicación
+        4. module reload res_pjsip_outbound_registration.so — fuerza re-registro
         
         Returns:
             tuple: (success: bool, message: str)
@@ -542,21 +553,27 @@ class PJSIPConfigGenerator:
             if not ami.connect():
                 return False, "No se pudo conectar a Asterisk AMI"
             
-            # 1. Recargar el módulo wizard primero para que re-lea la config
+            # 1. Recargar wizard primero — re-procesa pjsip_wizard.conf
             ami.reload_module('res_pjsip_config_wizard.so')
-            time.sleep(1)
+            time.sleep(2)  # Esperar más — el wizard necesita tiempo para crear objetos
             
-            # 2. Recargar res_pjsip.so para aplicar los cambios
+            # 2. Recargar res_pjsip.so — aplica los objetos creados por el wizard
             ami.reload_module('res_pjsip.so')
             time.sleep(1)
             
-            # 3. Ejecutar 'pjsip reload' como fallback final vía CLI
+            # 3. CLI pjsip reload — fallback para asegurar que todo está aplicado
             ami._send_command("Action: Command\r\nCommand: pjsip reload\r\n\r\n")
             ami._read_command_response(timeout=5)
+            time.sleep(1)
+            
+            # 4. Recargar el módulo de registro saliente — CRÍTICO para que
+            #    el trunk intente registrarse inmediatamente sin esperar el retry_interval
+            ami.reload_module('res_pjsip_outbound_registration.so')
+            time.sleep(2)
             
             ami.disconnect()
             
-            logger.info("✓ PJSIP recargado exitosamente (wizard + pjsip reload)")
+            logger.info("✓ PJSIP recargado exitosamente (wizard + pjsip reload + outbound_registration)")
             return True, "PJSIP recargado exitosamente"
                 
         except Exception as e:

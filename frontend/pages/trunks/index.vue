@@ -727,12 +727,12 @@ const trunkTypeLabels: Record<string, string> = {
 
 const typeDescriptions: Record<string, { text: string; icon: string; color: string }> = {
   nat_provider: {
-    text: 'VozipOmni detrás de NAT (cloud, LAN corporativa). Usa trunk-nat-transport (puerto UDP 5162). Requiere registro y autenticación con el proveedor SIP.',
+    text: '✅ RECOMENDADO si VozipOmni está en una red LAN (IP privada como 192.168.x.x o 10.x.x.x). Usa trunk-nat-transport (puerto UDP 5162). Incluye external_media_address para NAT traversal. Si tienes IP privada y usas otro tipo, las llamadas conectan PERO SIN AUDIO.',
     icon: 'i-heroicons-cloud',
     color: 'blue'
   },
   no_nat_provider: {
-    text: 'VozipOmni con IP pública (VPS) conectado a proveedor SIP en Internet. Sin tratamiento NAT, puerto UDP 5161. Requiere registro y autenticación.',
+    text: '⚠️ Solo si VozipOmni tiene IP pública DIRECTA (VPS con IP pública). Si tienes IP privada (192.168.x/10.x) usa "Proveedor con NAT". Puerto UDP 5161.',
     icon: 'i-heroicons-globe-alt',
     color: 'sky'
   },
@@ -747,7 +747,7 @@ const typeDescriptions: Record<string, { text: string; icon: string; color: stri
     color: 'emerald'
   },
   custom: {
-    text: 'Configuración PJSIP Wizard manual. El administrador escribe la configuración raw en la pestaña Avanzado.',
+    text: 'Configuración PJSIP Wizard manual. Solo acepta sintaxis PJSIP Wizard (type=wizard). Las configuraciones chan_sip (type=peer, insecure=) NO son compatibles.',
     icon: 'i-heroicons-code-bracket',
     color: 'orange'
   }

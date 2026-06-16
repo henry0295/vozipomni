@@ -264,8 +264,7 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def regenerate_config(self, request):
         """
-        Regenerar configuración PJSIP y recargar Asterisk
-        
+        Regenerar configuración PJSIP y recargar Asterisk.
         POST /api/telephony/trunks/regenerate_config/
         """
         try:
@@ -283,6 +282,48 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                 'success': False,
                 'message': f'Error: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['post'])
+    def force_register_all(self, request):
+        """
+        Forzar re-registro de TODAS las troncales activas.
+        Útil cuando el endpoint existe pero el registro está atascado.
+        POST /api/telephony/trunks/force_register_all/
+        """
+        import time
+        try:
+            from .pjsip_config_generator import PJSIPConfigGenerator
+
+            generator = PJSIPConfigGenerator()
+
+            # 1. Escribir config actualizada
+            write_ok, write_msg = generator.write_config_file()
+            if not write_ok:
+                return Response({'success': False, 'message': write_msg},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # 2. Reload completo
+            generator.reload_pjsip()
+
+            # 3. Esperar y reportar estado de cada troncal
+            time.sleep(3)
+            trunks = SIPTrunk.objects.filter(is_active=True, sends_registration=True)
+            results = {}
+            ami = AsteriskAMI()
+            if ami.connect():
+                for trunk in trunks:
+                    reg_status = ami.get_trunk_registration_status(trunk.name)
+                    results[trunk.name] = reg_status
+                ami.disconnect()
+
+            return Response({
+                'success': True,
+                'message': 'Configuración regenerada y registro forzado',
+                'trunk_statuses': results
+            })
+        except Exception as e:
+            return Response({'success': False, 'message': f'Error: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['get'])
     def preview_config(self, request, pk=None):
