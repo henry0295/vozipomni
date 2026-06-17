@@ -161,8 +161,13 @@ class PJSIPConfigGenerator:
             config_lines.append(f"inbound_auth/password={trunk.inbound_auth_password}")
         
         # From User/Domain
+        # CRÍTICO: endpoint/from_user es necesario para que el wizard cree el endpoint.
+        # Sin esto, Asterisk PJSIP Wizard omite la creación del endpoint.
         if trunk.from_user:
             config_lines.append(f"endpoint/from_user={trunk.from_user}")
+        elif trunk.outbound_auth_username:
+            # Auto-usar el username de auth como from_user si no está configurado
+            config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
         if trunk.from_domain:
             config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
         
@@ -202,9 +207,6 @@ class PJSIPConfigGenerator:
             "",
             f"[{trunk.name}]",
             "type=wizard",
-            # Para proveedores que esperan puerto 5060 estándar,
-            # usar trunk-transport (5161). Si hay problemas de registro,
-            # verificar que el softswitch acepte el puerto 5161 como source.
             "transport=trunk-transport",
             f"accepts_registrations={'yes' if trunk.accepts_registrations else 'no'}",
             f"accepts_auth={'yes' if trunk.accepts_auth else 'no'}",
@@ -245,6 +247,12 @@ class PJSIPConfigGenerator:
         if trunk.outbound_auth_username:
             config_lines.append(f"outbound_auth/username={trunk.outbound_auth_username}")
             config_lines.append(f"outbound_auth/password={trunk.outbound_auth_password}")
+            # CRÍTICO: endpoint/from_user es necesario para que el wizard cree el endpoint.
+            # Sin esto, Asterisk PJSIP Wizard omite la creación del endpoint cuando
+            # la troncal solo envía registros (sends_registrations=yes) pero no los acepta.
+            # from_user define el usuario del header SIP From en llamadas salientes.
+            if not trunk.from_user:
+                config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
         
         if trunk.accepts_auth and trunk.inbound_auth_username:
             config_lines.append(f"inbound_auth/username={trunk.inbound_auth_username}")
