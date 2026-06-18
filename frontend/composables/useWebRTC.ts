@@ -74,9 +74,6 @@ export const useWebRTC = () => {
   // UA accessor (singleton module-level variable)
   const ua = { get value() { return _ua } }
 
-  // Computed
-  const hasActiveCall = computed(() => currentSession.value !== null)
-  const canMakeCall = computed(() => isRegistered.value && !hasActiveCall.value)
 
   // Configurar y registrar UA
   const register = (config: WebRTCConfig) => {
