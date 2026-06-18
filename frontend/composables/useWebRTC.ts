@@ -31,7 +31,7 @@ export interface WebRTCConfig {
   sipPassword: string
   sipExtension: string
   displayName?: string
-  wsUrl?: string  // URL completa del WebSocket SIP (ej: wss://host/sip/ws); si se omite se construye desde sipServer:sipPort
+  wsUrl?: string
 }
 
 export interface CallSession {
@@ -43,22 +43,36 @@ export interface CallSession {
   isOnHold: boolean
 }
 
+// ─── Singleton state via Nuxt useState ─────────────────────────────────────
+// Usar useState garantiza que TODOS los componentes que llamen useWebRTC()
+// compartan la misma instancia de UA y currentSession.
+// Sin esto, AgentSoftphone y console.vue crean UAs independientes →
+// el evento 'ended' solo llega a la instancia que originó la llamada,
+// y el otro componente queda con currentSession != null (llamada "fantasma").
+// ────────────────────────────────────────────────────────────────────────────
+
+let _ua: any = null             // JsSIP UA — no puede ser useState (no serializable)
+let _callTimer: any = null
+let _remoteAudio: HTMLAudioElement | null = null
+
 export const useWebRTC = () => {
-  // shallowRef + markRaw evitan que Vue envuelva los objetos JsSIP en un deep Proxy,
-  // lo cual causaría TypeError en propiedades non-writable/non-configurable (ej: 'uri').
-  const ua = shallowRef<any>(null)
-  const currentSession = ref<CallSession | null>(null)
-  const isRegistered = ref(false)
-  const isConnecting = ref(false)
-  const registrationStatus = ref('disconnected')
-  const lastError = ref<string | null>(null)
-  const lastCallError = ref<string | null>(null)
-  
-  const callDuration = ref(0)
-  let callTimer: any = null
-  let remoteAudioElement: HTMLAudioElement | null = null
-  
+  // useState comparte estado entre todos los componentes en el mismo proceso SSR/client
+  const currentSession = useState<CallSession | null>('webrtc_session', () => null)
+  const isRegistered = useState<boolean>('webrtc_registered', () => false)
+  const isConnecting = useState<boolean>('webrtc_connecting', () => false)
+  const registrationStatus = useState<string>('webrtc_status', () => 'disconnected')
+  const lastError = useState<string | null>('webrtc_last_error', () => null)
+  const lastCallError = useState<string | null>('webrtc_last_call_error', () => null)
+  const callDuration = useState<number>('webrtc_call_duration', () => 0)
+
   const agentStore = useAgentStore()
+
+  // Computed
+  const hasActiveCall = computed(() => currentSession.value !== null)
+  const canMakeCall = computed(() => isRegistered.value && !hasActiveCall.value)
+
+  // UA accessor (singleton module-level variable)
+  const ua = { get value() { return _ua } }
 
   // Computed
   const hasActiveCall = computed(() => currentSession.value !== null)
@@ -66,14 +80,12 @@ export const useWebRTC = () => {
 
   // Configurar y registrar UA
   const register = (config: WebRTCConfig) => {
-    if (ua.value) {
+    if (_ua) {
       console.warn('UA already exists, unregistering first')
       unregister()
     }
 
     try {
-      // Configuración del socket WebSocket
-      // Usar wsUrl directo (proxy nginx) si se proporciona; si no, construir desde sipServer:sipPort
       const wsEndpoint = config.wsUrl || `wss://${config.sipServer}:${config.sipPort}/ws`
       const socket = new JsSIP.WebSocketInterface(wsEndpoint)
       
@@ -87,12 +99,11 @@ export const useWebRTC = () => {
         use_preloaded_route: false
       }
 
-      ua.value = markRaw(new JsSIP.UA(configuration))
+      _ua = markRaw(new JsSIP.UA(configuration))
 
-      // Event listeners
       setupUAEventListeners()
 
-      ua.value.start()
+      _ua.start()
       isConnecting.value = true
       registrationStatus.value = 'connecting'
 
@@ -105,25 +116,25 @@ export const useWebRTC = () => {
 
   // Configurar listeners del UA
   const setupUAEventListeners = () => {
-    if (!ua.value) return
+    if (!_ua) return
 
-    ua.value.on('connecting', () => {
+    _ua.on('connecting', () => {
       console.log('WebRTC: Connecting...')
       registrationStatus.value = 'connecting'
     })
 
-    ua.value.on('connected', () => {
+    _ua.on('connected', () => {
       console.log('WebRTC: Connected')
       registrationStatus.value = 'connected'
     })
 
-    ua.value.on('disconnected', () => {
+    _ua.on('disconnected', () => {
       console.log('WebRTC: Disconnected')
       isRegistered.value = false
       registrationStatus.value = 'disconnected'
     })
 
-    ua.value.on('registered', () => {
+    _ua.on('registered', () => {
       console.log('WebRTC: Registered')
       isRegistered.value = true
       isConnecting.value = false
@@ -131,13 +142,13 @@ export const useWebRTC = () => {
       lastError.value = null
     })
 
-    ua.value.on('unregistered', () => {
+    _ua.on('unregistered', () => {
       console.log('WebRTC: Unregistered')
       isRegistered.value = false
       registrationStatus.value = 'unregistered'
     })
 
-    ua.value.on('registrationFailed', (data: any) => {
+    _ua.on('registrationFailed', (data: any) => {
       console.error('WebRTC: Registration failed', data)
       isRegistered.value = false
       isConnecting.value = false
@@ -145,12 +156,11 @@ export const useWebRTC = () => {
       registrationStatus.value = 'failed'
     })
 
-    ua.value.on('newRTCSession', (data: any) => {
+    _ua.on('newRTCSession', (data: any) => {
       console.log('WebRTC: New RTC Session', data)
       
       const session = data.session
       
-      // Si ya hay una llamada activa, rechazar
       if (currentSession.value) {
         session.terminate()
         return
@@ -220,34 +230,25 @@ export const useWebRTC = () => {
       console.log('WebRTC: Peer connection')
       const pc = data.peerconnection
 
-      // Limpiar audio anterior si existe
-      if (remoteAudioElement) {
-        remoteAudioElement.pause()
-        remoteAudioElement.srcObject = null
-        remoteAudioElement.remove()
-        remoteAudioElement = null
+      if (_remoteAudio) {
+        _remoteAudio.pause()
+        _remoteAudio.srcObject = null
+        _remoteAudio.remove()
+        _remoteAudio = null
       }
 
-      // Crear elemento de audio DENTRO del DOM: los elementos fuera del DOM
-      // son bloqueados por la política de autoplay de Chrome/Firefox incluso
-      // cuando la llamada fue iniciada por un gesto del usuario.
-      remoteAudioElement = document.createElement('audio')
-      remoteAudioElement.autoplay = true
-      remoteAudioElement.setAttribute('playsinline', '')
-      // El elemento se inserta hidden — solo necesita estar en el DOM para
-      // tener permiso de reproducción, no debe ser visible.
-      remoteAudioElement.style.display = 'none'
-      document.body.appendChild(remoteAudioElement)
+      _remoteAudio = document.createElement('audio')
+      _remoteAudio.autoplay = true
+      _remoteAudio.setAttribute('playsinline', '')
+      _remoteAudio.style.display = 'none'
+      document.body.appendChild(_remoteAudio)
 
-      // Escuchar tracks cuando lleguen (después del SDP exchange).
       pc.addEventListener('track', (event: RTCTrackEvent) => {
         if (event.track.kind !== 'audio') return
         console.log('WebRTC: Remote audio track received')
-        // event.streams[0] ya contiene el track — usarlo directamente es más
-        // fiable que crear un MediaStream vacío y añadir tracks después.
         const stream = event.streams[0] ?? new MediaStream([event.track])
-        remoteAudioElement!.srcObject = stream
-        remoteAudioElement!.play().catch((err: any) => {
+        _remoteAudio!.srcObject = stream
+        _remoteAudio!.play().catch((err: any) => {
           console.warn('WebRTC: Audio autoplay bloqueado:', err)
         })
       })
@@ -256,7 +257,7 @@ export const useWebRTC = () => {
 
   // Hacer llamada
   const call = (number: string) => {
-    if (!ua.value || !isRegistered.value) {
+    if (!_ua || !isRegistered.value) {
       return { success: false, error: 'Not registered' }
     }
 
@@ -265,26 +266,15 @@ export const useWebRTC = () => {
     }
 
     try {
-      const eventHandlers = {
-        progress: () => console.log('WebRTC: Call progress'),
-        ended: () => console.log('WebRTC: Call ended'),
-        confirmed: () => console.log('WebRTC: Call confirmed')
-      }
-
       const options = {
-        eventHandlers,
-        mediaConstraints: {
-          audio: true,
-          video: false
-        },
+        mediaConstraints: { audio: true, video: false },
         pcConfig: {
           iceServers: buildIceServers(),
           iceTransportPolicy: 'all' as RTCIceTransportPolicy
         }
       }
 
-      ua.value.call(`sip:${number}@${ua.value.configuration.uri.host}`, options)
-      
+      _ua.call(`sip:${number}@${_ua.configuration.uri.host}`, options)
       return { success: true }
     } catch (err: any) {
       lastError.value = err.message
@@ -397,7 +387,8 @@ export const useWebRTC = () => {
     }
 
     try {
-      currentSession.value.session.refer(`sip:${targetNumber}@${ua.value.configuration.uri.host}`)
+      const host = _ua?.configuration?.uri?.host || ''
+      currentSession.value.session.refer(`sip:${targetNumber}@${host}`)
       return { success: true }
     } catch (err: any) {
       lastError.value = err.message
@@ -422,9 +413,9 @@ export const useWebRTC = () => {
 
   // Desregistrar
   const unregister = () => {
-    if (ua.value) {
-      ua.value.stop()
-      ua.value = null
+    if (_ua) {
+      _ua.stop()
+      _ua = null
     }
     isRegistered.value = false
     isConnecting.value = false
@@ -436,15 +427,15 @@ export const useWebRTC = () => {
   // Timer de llamada
   const startCallTimer = () => {
     callDuration.value = 0
-    callTimer = setInterval(() => {
+    _callTimer = setInterval(() => {
       callDuration.value++
     }, 1000)
   }
 
   const stopCallTimer = () => {
-    if (callTimer) {
-      clearInterval(callTimer)
-      callTimer = null
+    if (_callTimer) {
+      clearInterval(_callTimer)
+      _callTimer = null
     }
     callDuration.value = 0
   }
@@ -452,11 +443,11 @@ export const useWebRTC = () => {
   // Manejar fin de llamada
   const handleCallEnded = () => {
     // Limpiar audio remoto y remover del DOM
-    if (remoteAudioElement) {
-      remoteAudioElement.pause()
-      remoteAudioElement.srcObject = null
-      remoteAudioElement.remove()
-      remoteAudioElement = null
+    if (_remoteAudio) {
+      _remoteAudio.pause()
+      _remoteAudio.srcObject = null
+      _remoteAudio.remove()
+      _remoteAudio = null
     }
     
     stopCallTimer()
