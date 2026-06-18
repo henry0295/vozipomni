@@ -217,15 +217,16 @@
             @disposition-saved="handleDispositionSaved"
           />
 
-          <!-- Notas rápidas -->
-          <UCard>
+          <!-- Notas rápidas — solo visibles cuando NO hay llamada activa (no solapar con disposición) -->
+          <UCard v-if="!agentStore.currentCall" :ui="{ body: { padding: 'p-3' }, header: { padding: 'px-3 py-2' } }">
             <template #header>
-              <h3 class="text-sm font-semibold">Notas Rápidas</h3>
+              <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Notas Rápidas</h3>
             </template>
             <UTextarea
               v-model="quickNotes"
-              :rows="5"
+              :rows="4"
               placeholder="Notas durante la llamada..."
+              :ui="{ base: 'text-sm' }"
             />
           </UCard>
         </div>
@@ -608,25 +609,27 @@ onUnmounted(() => {
 .console-main {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 
-/* ── Grid de 3 columnas: izq(295px) | centro(1fr) | der(295px) ── */
+/* ── Grid de 3 columnas: izq(290px) | centro(1fr) | der(320px) ── */
 .console-grid {
   display: grid;
-  grid-template-columns: 295px 1fr 295px;
+  grid-template-columns: 290px 1fr 320px;
   height: 100%;
   overflow: hidden;
 }
 
-/* ── Columna izquierda: estado + softphone ── */
+/* ── Columna izquierda: softphone ── */
 .console-left {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  gap: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #fff;
   border-right: 1px solid #e5e7eb;
+  scrollbar-width: thin;
 }
 
 :global(.dark) .console-left {
@@ -640,7 +643,9 @@ onUnmounted(() => {
   flex-direction: column;
   padding: 0.75rem;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #f9fafb;
+  scrollbar-width: thin;
 }
 
 :global(.dark) .console-center {
@@ -651,11 +656,13 @@ onUnmounted(() => {
 .console-right {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.75rem;
+  gap: 0.5rem;
+  padding: 0.5rem;
   overflow-y: auto;
+  overflow-x: hidden;
   background: #fff;
   border-left: 1px solid #e5e7eb;
+  scrollbar-width: thin;
 }
 
 /* Evitar que los hijos se encojan y corten su contenido */
@@ -666,5 +673,23 @@ onUnmounted(() => {
 :global(.dark) .console-right {
   background: #1f2937;
   border-color: #374151;
+}
+
+/* Scrollbar fina en webkit */
+.console-left::-webkit-scrollbar,
+.console-center::-webkit-scrollbar,
+.console-right::-webkit-scrollbar {
+  width: 4px;
+}
+.console-left::-webkit-scrollbar-track,
+.console-center::-webkit-scrollbar-track,
+.console-right::-webkit-scrollbar-track {
+  background: transparent;
+}
+.console-left::-webkit-scrollbar-thumb,
+.console-center::-webkit-scrollbar-thumb,
+.console-right::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
 }
 </style>

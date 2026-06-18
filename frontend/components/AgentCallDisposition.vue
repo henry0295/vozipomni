@@ -1,135 +1,78 @@
 <template>
   <div class="call-disposition-panel">
-    <UCard>
+    <UCard :ui="{ body: { padding: 'p-3' }, header: { padding: 'px-3 py-2' } }">
       <template #header>
-        <h3 class="text-lg font-semibold">Disposición de Llamada</h3>
+        <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Resultado de la llamada *</h3>
       </template>
 
-      <div v-if="showDisposition" class="space-y-4">
-        <!-- Información de la llamada -->
-        <div class="p-4 bg-blue-50 rounded-lg">
-          <div class="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <p class="text-gray-600">Cliente:</p>
-              <p class="font-semibold">{{ safeCallInfo.customer || 'Desconocido' }}</p>
-            </div>
-            <div>
-              <p class="text-gray-600">Número:</p>
-              <p class="font-semibold">{{ safeCallInfo.number }}</p>
-            </div>
-            <div>
-              <p class="text-gray-600">Duración:</p>
-              <p class="font-semibold">{{ safeCallInfo.duration }}</p>
-            </div>
-            <div>
-              <p class="text-gray-600">Campaña:</p>
-              <p class="font-semibold">{{ safeCallInfo.campaign || 'N/A' }}</p>
-            </div>
+      <div v-if="showDisposition" class="space-y-3">
+        <!-- Disposiciones disponibles — grid 2 columnas compacto -->
+        <div class="grid grid-cols-2 gap-1.5">
+          <button
+            v-for="disposition in dispositions"
+            :key="disposition.code"
+            class="disposition-btn"
+            :class="selectedDisposition?.code === disposition.code ? 'disposition-btn--active' : ''"
+            @click="selectDisposition(disposition)"
+          >
+            <span class="disposition-name">{{ disposition.name }}</span>
+            <span v-if="disposition.description" class="disposition-desc">{{ disposition.description }}</span>
+          </button>
+        </div>
+
+        <!-- Callback — solo cuando lo requiere la disposición -->
+        <div v-if="selectedDisposition?.requires_callback" class="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-2.5 space-y-1.5">
+          <p class="text-xs font-semibold text-blue-700 dark:text-blue-300">Programar callback</p>
+          <div class="grid grid-cols-2 gap-1.5">
+            <UInput v-model="callbackDate" type="date" size="sm" />
+            <UInput v-model="callbackTime" type="time" size="sm" />
           </div>
         </div>
 
-        <!-- Disposiciones disponibles -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Resultado de la llamada *</label>
-          <div class="grid grid-cols-2 gap-2">
-            <UButton
-              v-for="disposition in dispositions"
-              :key="disposition.code"
-              block
-              :color="selectedDisposition?.code === disposition.code ? 'primary' : 'gray'"
-              :variant="selectedDisposition?.code === disposition.code ? 'solid' : 'outline'"
-              @click="selectDisposition(disposition)"
-            >
-              <div class="text-left w-full">
-                <p class="font-medium">{{ disposition.name }}</p>
-                <p v-if="disposition.description" class="text-xs opacity-75">{{ disposition.description }}</p>
-              </div>
-            </UButton>
-          </div>
-        </div>
-
-        <!-- Callback - si la disposición lo requiere -->
-        <div v-if="selectedDisposition?.requires_callback" class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Programar callback</label>
-          <div class="grid grid-cols-2 gap-2">
-            <UInput
-              v-model="callbackDate"
-              type="date"
-              placeholder="Fecha"
-            />
-            <UInput
-              v-model="callbackTime"
-              type="time"
-              placeholder="Hora"
-            />
-          </div>
-        </div>
-
-        <!-- Notas -->
-        <div class="space-y-2">
-          <label class="text-sm font-medium text-gray-700">Notas de la llamada</label>
+        <!-- Notas de la llamada -->
+        <div class="space-y-1">
+          <label class="text-xs font-medium text-gray-600 dark:text-gray-400">Notas de la llamada</label>
           <UTextarea
             v-model="notes"
-            :rows="4"
+            :rows="3"
             placeholder="Ingrese observaciones o detalles importantes de la llamada..."
+            :ui="{ base: 'text-sm' }"
           />
         </div>
 
-        <!-- Información adicional del contacto -->
-        <div v-if="currentCampaign?.form_fields" class="space-y-3 p-4 bg-gray-50 rounded-lg">
-          <p class="text-sm font-medium text-gray-700">Información del Contacto</p>
-          <div
-            v-for="field in currentCampaign.form_fields"
-            :key="field.name"
-            class="space-y-1"
-          >
-            <label class="text-sm text-gray-600">{{ field.label }}</label>
-            <UInput
-              v-if="field.type === 'text' || field.type === 'email' || field.type === 'tel'"
-              v-model="formData[field.name]"
-              :type="field.type"
-              :placeholder="field.placeholder"
-            />
-            <UTextarea
-              v-else-if="field.type === 'textarea'"
-              v-model="formData[field.name]"
-              :rows="2"
-              :placeholder="field.placeholder"
-            />
-            <USelect
-              v-else-if="field.type === 'select'"
-              v-model="formData[field.name]"
-              :options="field.options"
-            />
+        <!-- Campos del formulario de campaña -->
+        <div v-if="currentCampaign?.form_fields?.length" class="space-y-2 p-2.5 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <p class="text-xs font-medium text-gray-600 dark:text-gray-400">Información del Contacto</p>
+          <div v-for="field in currentCampaign.form_fields" :key="field.name" class="space-y-0.5">
+            <label class="text-xs text-gray-500">{{ field.label }}</label>
+            <UInput v-if="field.type !== 'textarea' && field.type !== 'select'" v-model="formData[field.name]" :type="field.type" size="sm" :placeholder="field.placeholder" />
+            <UTextarea v-else-if="field.type === 'textarea'" v-model="formData[field.name]" :rows="2" size="sm" :placeholder="field.placeholder" />
+            <USelect v-else v-model="formData[field.name]" :options="field.options" size="sm" />
           </div>
         </div>
 
-        <!-- Botones de acción -->
-        <div class="flex gap-2 pt-2">
-          <UButton
-            block
-            size="lg"
-            color="primary"
-            :disabled="!selectedDisposition || isSaving"
-            :loading="isSaving"
-            @click="saveDisposition"
-          >
-            Guardar y Continuar
-          </UButton>
-        </div>
+        <!-- Guardar -->
+        <UButton
+          block
+          size="sm"
+          color="primary"
+          :disabled="!selectedDisposition || isSaving"
+          :loading="isSaving"
+          @click="saveDisposition"
+        >
+          Guardar y Continuar
+        </UButton>
 
-        <!-- Timer de wrapup -->
-        <div class="text-center">
-          <p class="text-xs text-gray-500">
-            Tiempo restante: <span class="font-mono font-semibold">{{ wrapupTimeRemaining }}s</span>
-          </p>
-        </div>
+        <!-- Timer wrapup -->
+        <p class="text-center text-xs text-gray-400">
+          Tiempo restante: <span class="font-mono font-semibold">{{ wrapupTimeRemaining }}s</span>
+        </p>
       </div>
 
-      <!-- Estado sin llamada para disposición -->
-      <div v-else class="text-center py-8 text-gray-500">
-        <UIcon name="i-heroicons-clipboard-document-list" class="h-12 w-12 mx-auto mb-2 opacity-50" />
-        <p>No hay llamada para calificar</p>
+      <!-- Sin llamada -->
+      <div v-else class="py-6 text-center text-gray-400">
+        <UIcon name="i-heroicons-clipboard-document-list" class="h-10 w-10 mx-auto mb-1.5 opacity-40" />
+        <p class="text-xs">No hay llamada para calificar</p>
       </div>
     </UCard>
   </div>
@@ -394,5 +337,63 @@ onUnmounted(() => {
 <style scoped>
 .call-disposition-panel {
   height: 100%;
+}
+
+/* Botones de disposición compactos con altura fija */
+.disposition-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.disposition-btn:hover {
+  border-color: #6366f1;
+  background: #f5f3ff;
+}
+
+.disposition-btn--active {
+  border-color: #6366f1;
+  background: #6366f1;
+  color: #fff;
+}
+
+.disposition-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.disposition-desc {
+  font-size: 0.6875rem;
+  opacity: 0.75;
+  line-height: 1.2;
+  margin-top: 1px;
+}
+
+:global(.dark) .disposition-btn {
+  background: #1f2937;
+  border-color: #374151;
+  color: #f9fafb;
+}
+
+:global(.dark) .disposition-btn:hover {
+  border-color: #818cf8;
+  background: #312e81;
+}
+
+:global(.dark) .disposition-btn--active {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  color: #fff;
 }
 </style>

@@ -1,54 +1,55 @@
 <template>
-  <div class="agent-softphone">
-    <UCard>
+  <div class="agent-softphone p-2.5">
+    <UCard :ui="{ body: { padding: 'p-3' }, header: { padding: 'px-3 py-2' } }">
       <template #header>
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-semibold flex items-center gap-2">
-            <UIcon name="i-heroicons-phone" />
+          <h3 class="text-sm font-semibold flex items-center gap-1.5">
+            <UIcon name="i-heroicons-phone" class="h-4 w-4" />
             Teléfono
           </h3>
-          <UBadge :color="connectionColor" size="sm">
+          <UBadge :color="connectionColor" size="xs">
             {{ connectionStatus }}
           </UBadge>
         </div>
       </template>
 
       <!-- Estado sin llamada activa -->
-      <div v-if="!hasActiveCall" class="space-y-4">
+      <div v-if="!hasActiveCall" class="space-y-3">
         <!-- Marcador -->
-        <div class="space-y-3">
+        <div class="space-y-2">
           <UInput
             v-model="dialNumber"
-            size="xl"
+            size="lg"
             placeholder="Número a marcar"
             :disabled="!canMakeCall"
             @keyup.enter="makeCall"
           >
             <template #leading>
-              <UIcon name="i-heroicons-phone" />
+              <UIcon name="i-heroicons-phone" class="h-4 w-4" />
             </template>
           </UInput>
 
-          <!-- Teclado numérico -->
-          <div class="grid grid-cols-3 gap-2">
+          <!-- Teclado numérico compacto -->
+          <div class="grid grid-cols-3 gap-1.5">
             <UButton
               v-for="digit in ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']"
               :key="digit"
-              size="lg"
+              size="sm"
               color="gray"
               variant="outline"
               :disabled="!canMakeCall"
+              class="h-9 text-base font-semibold"
               @click="addDigit(digit)"
             >
               {{ digit }}
             </UButton>
           </div>
 
-          <!-- Botones de acción -->
+          <!-- Botones Llamar / Borrar -->
           <div class="grid grid-cols-2 gap-2">
             <UButton
               block
-              size="lg"
+              size="md"
               color="green"
               icon="i-heroicons-phone"
               :disabled="!canMakeCall || !dialNumber"
@@ -58,7 +59,7 @@
             </UButton>
             <UButton
               block
-              size="lg"
+              size="md"
               color="gray"
               variant="outline"
               icon="i-heroicons-backspace"
@@ -71,9 +72,9 @@
         </div>
 
         <!-- Llamada rápida a otros agentes -->
-        <div class="pt-4 border-t border-gray-200">
-          <p class="text-sm font-medium text-gray-700 mb-3">Llamada Rápida</p>
-          <div class="grid grid-cols-2 gap-2">
+        <div v-if="quickContacts.length" class="pt-2 border-t border-gray-200 dark:border-gray-700">
+          <p class="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Llamada Rápida</p>
+          <div class="grid grid-cols-2 gap-1.5">
             <UButton
               v-for="contact in quickContacts"
               :key="contact.extension"
@@ -83,8 +84,8 @@
               :disabled="!canMakeCall"
               @click="quickCall(contact.extension)"
             >
-              <div class="text-left">
-                <p class="font-medium">{{ contact.name }}</p>
+              <div class="text-left w-full overflow-hidden">
+                <p class="font-medium text-xs truncate">{{ contact.name }}</p>
                 <p class="text-xs opacity-75">Ext: {{ contact.extension }}</p>
               </div>
             </UButton>
@@ -93,35 +94,35 @@
       </div>
 
       <!-- Llamada activa -->
-      <div v-else class="space-y-4">
+      <div v-else class="space-y-3">
         <!-- Información de la llamada -->
-        <div class="text-center py-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-          <div class="mb-4">
+        <div class="text-center py-3 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg">
+          <div class="mb-2">
             <UAvatar
               :alt="currentSession?.remoteIdentity"
-              size="2xl"
+              size="lg"
               class="mx-auto"
             />
           </div>
-          <h4 class="text-2xl font-bold text-gray-800 mb-1">
+          <h4 class="text-base font-bold text-gray-800 dark:text-gray-100 mb-0.5 px-2 truncate">
             {{ currentSession?.remoteIdentity }}
           </h4>
-          <p class="text-sm text-gray-600 mb-3">
+          <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">
             {{ callDirectionLabel }}
           </p>
           <div class="flex items-center justify-center gap-2">
             <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span class="text-lg font-mono text-gray-700">
+            <span class="text-base font-mono font-semibold text-gray-700 dark:text-gray-200">
               {{ formatDuration(callDuration) }}
             </span>
           </div>
         </div>
 
         <!-- Llamada entrante sin contestar -->
-        <div v-if="!currentSession?.isEstablished && currentSession?.direction === 'incoming'" class="grid grid-cols-2 gap-3">
+        <div v-if="!currentSession?.isEstablished && currentSession?.direction === 'incoming'" class="grid grid-cols-2 gap-2">
           <UButton
             block
-            size="xl"
+            size="md"
             color="green"
             icon="i-heroicons-phone"
             @click="answerCall"
@@ -130,7 +131,7 @@
           </UButton>
           <UButton
             block
-            size="xl"
+            size="md"
             color="red"
             icon="i-heroicons-phone-x-mark"
             @click="rejectCall"
@@ -139,11 +140,11 @@
           </UButton>
         </div>
 
-        <!-- Botón Colgar: siempre visible durante llamada activa (entrante o saliente) -->
+        <!-- Botón Colgar -->
         <UButton
           v-if="currentSession?.isEstablished || currentSession?.direction === 'outgoing'"
           block
-          size="xl"
+          size="md"
           color="red"
           icon="i-heroicons-phone-x-mark"
           @click="hangupCall"
@@ -151,12 +152,13 @@
           Colgar
         </UButton>
 
-        <!-- Controles de llamada establecida (mute, hold, DTMF, transfer, conferencia) -->
-        <div v-if="currentSession?.isEstablished" class="space-y-3">
+        <!-- Controles de llamada establecida -->
+        <div v-if="currentSession?.isEstablished" class="space-y-2">
           <!-- Controles principales -->
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-3 gap-1.5">
             <UButton
               block
+              size="sm"
               :color="currentSession?.isMuted ? 'red' : 'gray'"
               variant="soft"
               :icon="currentSession?.isMuted ? 'i-heroicons-microphone-slash' : 'i-heroicons-microphone'"
@@ -167,6 +169,7 @@
 
             <UButton
               block
+              size="sm"
               :color="currentSession?.isOnHold ? 'yellow' : 'gray'"
               variant="soft"
               :icon="currentSession?.isOnHold ? 'i-heroicons-play' : 'i-heroicons-pause'"
@@ -177,6 +180,7 @@
 
             <UButton
               block
+              size="sm"
               color="gray"
               variant="soft"
               icon="i-heroicons-calculator"
@@ -203,19 +207,21 @@
           </div>
 
           <!-- Transferencia -->
-          <div class="p-3 bg-blue-50 rounded-lg space-y-2">
-            <p class="text-sm font-medium text-blue-800 mb-2">Transferir a:</p>
-            <div class="flex gap-2">
+          <div class="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-2.5 space-y-1.5">
+            <p class="text-xs font-semibold text-blue-700 dark:text-blue-300">Transferir a:</p>
+            <div class="flex gap-1.5">
               <UInput
                 v-model="transferNumber"
                 placeholder="Extensión o número"
+                size="sm"
                 class="flex-1"
               >
                 <template #leading>
-                  <UIcon name="i-heroicons-arrow-right-circle" />
+                  <UIcon name="i-heroicons-arrow-right-circle" class="h-3.5 w-3.5" />
                 </template>
               </UInput>
               <UButton
+                size="sm"
                 color="blue"
                 variant="soft"
                 icon="i-heroicons-arrow-right-circle"
@@ -225,6 +231,7 @@
                 Rápida
               </UButton>
               <UButton
+                size="sm"
                 color="indigo"
                 variant="soft"
                 icon="i-heroicons-users"
@@ -236,15 +243,17 @@
           </div>
 
           <!-- Conferencia a 3 -->
-          <div class="p-3 bg-purple-50 rounded-lg">
-            <p class="text-sm font-medium text-purple-800 mb-2">Conferencia a 3:</p>
-            <div class="flex gap-2">
+          <div class="rounded-lg border border-purple-200 bg-purple-50 dark:bg-purple-900/20 p-2.5 space-y-1.5">
+            <p class="text-xs font-semibold text-purple-700 dark:text-purple-300">Conferencia a 3:</p>
+            <div class="flex gap-1.5">
               <UInput
                 v-model="conferenceNumber"
                 placeholder="Número del 3er participante"
+                size="sm"
                 class="flex-1"
               />
               <UButton
+                size="sm"
                 color="purple"
                 variant="soft"
                 icon="i-heroicons-user-group"
