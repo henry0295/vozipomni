@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed, markRaw } from 'vue'
+import { computed, markRaw } from 'vue'
 import JsSIP from 'jssip'
 
 // Construye la lista de ICE servers: STUN público + TURN propio si está configurado.
@@ -70,6 +70,7 @@ export const useWebRTC = () => {
   // Computed
   const hasActiveCall = computed(() => currentSession.value !== null)
   const canMakeCall = computed(() => isRegistered.value && !hasActiveCall.value)
+  
 
   // UA accessor (singleton module-level variable)
   const ua = { get value() { return _ua } }
