@@ -1361,6 +1361,28 @@ PYEOF
     $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>/dev/null || true
     log_success "Dialplan recargado"
 
+    # 8b. Corregir dtmf_mode de troncales: rfc2833 → rfc4733
+    # rfc2833 es el nombre de chan_sip; PJSIP requiere rfc4733. Si una troncal
+    # tiene rfc2833 en la BD, el wizard no crea el endpoint y la llamada falla.
+    log_info "Verificando dtmf_mode de troncales SIP..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null || true
+from apps.telephony.models import SIPTrunk
+updated = SIPTrunk.objects.filter(dtmf_mode='rfc2833').update(dtmf_mode='rfc4733')
+if updated:
+    print(f'dtmf_mode corregido: rfc2833 → rfc4733 en {updated} troncal(es)')
+else:
+    print('dtmf_mode OK (todas las troncales usan rfc4733)')
+PYEOF
+
+    # 8c. Recargar configuración PJSIP para aplicar cambios de troncales
+    log_info "Recargando configuración PJSIP..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null || true
+from apps.telephony.pjsip_config_generator import PJSIPConfigGenerator
+gen = PJSIPConfigGenerator()
+ok, msg = gen.save_and_reload()
+print(f'PJSIP reload: {"OK" if ok else "ERROR"} — {msg}')
+PYEOF
+
     # 9. Recolectar archivos estáticos
     log_info "Recolectando archivos estáticos..."
     $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py collectstatic --noinput --clear 2>&1 | \

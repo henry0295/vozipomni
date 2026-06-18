@@ -118,7 +118,7 @@ class SIPTrunk(models.Model):
     
     DTMF_CHOICES = [
         ('rfc4733', 'RFC4733 (Recomendado)'),
-        ('rfc2833', 'RFC2833'),
+        ('rfc2833', 'RFC2833 (legacy chan_sip — usar rfc4733 para PJSIP)'),
         ('inband', 'Inband'),
         ('info', 'SIP INFO'),
         ('auto', 'Auto'),
@@ -199,7 +199,8 @@ class SIPTrunk(models.Model):
     )
     dtmf_mode = models.CharField(
         max_length=20, 
-        choices=DTMF_CHOICES, 
+        choices=DTMF_CHOICES,
+        default='rfc4733',  # rfc4733 es el nombre correcto para PJSIP (rfc2833 era chan_sip)
         default='rfc4733', 
         verbose_name='Modo DTMF'
     )

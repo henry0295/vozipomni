@@ -35,6 +35,20 @@ class PJSIPConfigGenerator:
             return None
         name = trunk.caller_id_name if trunk.caller_id_name else trunk.caller_id
         return f'"{name}" <{trunk.caller_id}>'
+
+    @staticmethod
+    def _pjsip_dtmf_mode(trunk_dtmf_mode: str) -> str:
+        """
+        PJSIP usa 'rfc4733' donde chan_sip usaba 'rfc2833'.
+        Son el mismo estándar (RFC 4733 reemplaza RFC 2833) pero Asterisk PJSIP
+        solo acepta el nombre 'rfc4733' — si se usa 'rfc2833' el wizard
+        parsea el valor, falla silenciosamente y NO crea el endpoint.
+        
+        Este método garantiza que siempre se use el nombre correcto para PJSIP.
+        """
+        if trunk_dtmf_mode == 'rfc2833':
+            return 'rfc4733'
+        return trunk_dtmf_mode or 'rfc4733'
     
     def _apply_callerid_config(self, trunk, config_lines):
         """
@@ -134,7 +148,7 @@ class PJSIPConfigGenerator:
         if trunk.codec:
             codecs = trunk.codec.replace(' ', '')
             config_lines.append(f"endpoint/allow=!all,{codecs}")
-        config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
+        config_lines.append(f"endpoint/dtmf_mode={self._pjsip_dtmf_mode(trunk.dtmf_mode)}")
         
         # Context
         context_value = trunk.get_context_value()
@@ -233,7 +247,7 @@ class PJSIPConfigGenerator:
         # Códecs - !all limpia codecs por defecto
         if trunk.codec:
             config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
-        config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
+        config_lines.append(f"endpoint/dtmf_mode={self._pjsip_dtmf_mode(trunk.dtmf_mode)}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
         
         if trunk.language:
@@ -322,7 +336,7 @@ class PJSIPConfigGenerator:
         # Códecs - !all limpia codecs por defecto
         if trunk.codec:
             config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
-        config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
+        config_lines.append(f"endpoint/dtmf_mode={self._pjsip_dtmf_mode(trunk.dtmf_mode)}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
         config_lines.append(f"endpoint/language={trunk.language}")
         
@@ -388,7 +402,7 @@ class PJSIPConfigGenerator:
         # Códecs - !all limpia codecs por defecto
         if trunk.codec:
             config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
-        config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
+        config_lines.append(f"endpoint/dtmf_mode={self._pjsip_dtmf_mode(trunk.dtmf_mode)}")
         config_lines.append(f"endpoint/language={trunk.language}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
         
@@ -445,7 +459,7 @@ class PJSIPConfigGenerator:
         # Códecs - !all limpia codecs por defecto
         if trunk.codec:
             config_lines.append(f"endpoint/allow=!all,{trunk.codec.replace(' ', '')}")
-        config_lines.append(f"endpoint/dtmf_mode={trunk.dtmf_mode}")
+        config_lines.append(f"endpoint/dtmf_mode={self._pjsip_dtmf_mode(trunk.dtmf_mode)}")
         config_lines.append(f"endpoint/context={trunk.get_context_value()}")
         
         if trunk.language:
