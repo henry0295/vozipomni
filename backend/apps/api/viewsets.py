@@ -49,7 +49,9 @@ class CampaignViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'description']
-    filterset_fields = ['campaign_type', 'status', 'dialer_type']
+    # agents: permite filtrar campañas por agente asignado (usado por el panel de agente)
+    # Ejemplo: /api/campaigns/?agents=5&status=active
+    filterset_fields = ['campaign_type', 'status', 'dialer_type', 'agents']
     
     @extend_schema(
         summary="Iniciar campaña",
@@ -692,12 +694,42 @@ class AgentViewSet(viewsets.ModelViewSet):
 
 
 class ContactViewSet(viewsets.ModelViewSet):
-    queryset = Contact.objects.select_related('contact_list').prefetch_related('notes')
     serializer_class = serializers.ContactSerializer
     permission_classes = [IsAdminOrSupervisorOrReadOnly]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['first_name', 'last_name', 'phone', 'email', 'company']
     filterset_fields = ['contact_list', 'status']
+
+    def get_queryset(self):
+        """
+        Extiende el queryset para soportar filtro por campaña.
+        El panel de agente filtra por ?campaign={id} para obtener los
+        contactos asignados a la campaña (a través de contact_list).
+        También soporta ?status__in=pending,callback como filtro múltiple.
+        """
+        qs = Contact.objects.select_related('contact_list').prefetch_related('notes')
+
+        # Filtro por campaña: busca el contact_list de la campaña
+        campaign_id = self.request.query_params.get('campaign')
+        if campaign_id:
+            from apps.campaigns.models import Campaign
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                if campaign.contact_list_id:
+                    qs = qs.filter(contact_list_id=campaign.contact_list_id)
+                else:
+                    qs = qs.none()
+            except Campaign.DoesNotExist:
+                qs = qs.none()
+
+        # Filtro múltiple de status: ?status__in=pending,callback
+        status_in = self.request.query_params.get('status__in')
+        if status_in:
+            statuses = [s.strip() for s in status_in.split(',') if s.strip()]
+            if statuses:
+                qs = qs.filter(status__in=statuses)
+
+        return qs
 
 
 class ContactListViewSet(viewsets.ModelViewSet):

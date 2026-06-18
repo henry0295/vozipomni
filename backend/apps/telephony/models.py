@@ -201,7 +201,6 @@ class SIPTrunk(models.Model):
         max_length=20, 
         choices=DTMF_CHOICES,
         default='rfc4733',  # rfc4733 es el nombre correcto para PJSIP (rfc2833 era chan_sip)
-        default='rfc4733', 
         verbose_name='Modo DTMF'
     )
     
