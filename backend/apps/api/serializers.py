@@ -418,11 +418,62 @@ class CallSerializer(serializers.ModelSerializer):
     duration = serializers.ReadOnlyField()
     agent_name = serializers.CharField(source='agent.user.get_full_name', read_only=True)
     campaign_name = serializers.CharField(source='campaign.name', read_only=True)
+    duration_formatted = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = Call
         fields = '__all__'
-        read_only_fields = ['start_time', 'answer_time', 'end_time', 'wait_time', 'talk_time', 'hold_time']
+        read_only_fields = ['start_time', 'answer_time', 'end_time', 'wait_time', 'talk_time', 'hold_time', 'unique_id', 'is_recorded']
+    
+    def get_duration_formatted(self, obj):
+        """Duración formateada HH:MM:SS"""
+        duration = obj.duration
+        if duration:
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            seconds = duration % 60
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return "00:00:00"
+    
+    def validate_caller_id(self, value):
+        """Validar formato de caller_id"""
+        if not value:
+            raise serializers.ValidationError('El caller_id es requerido')
+        # Remover caracteres no numéricos excepto +
+        cleaned = value.strip().replace(' ', '').replace('-', '')
+        if not cleaned or (not cleaned[0] == '+' and not cleaned.isdigit()):
+            raise serializers.ValidationError('Formato de número inválido')
+        return cleaned
+    
+    def validate_called_number(self, value):
+        """Validar formato de called_number"""
+        if not value:
+            raise serializers.ValidationError('El número destino es requerido')
+        cleaned = value.strip().replace(' ', '').replace('-', '')
+        if not cleaned or (not cleaned[0] == '+' and not cleaned.isdigit()):
+            raise serializers.ValidationError('Formato de número inválido')
+        return cleaned
+    
+    def validate(self, attrs):
+        """Validaciones a nivel de objeto"""
+        # Si hay agent, debe existir y estar activo
+        agent = attrs.get('agent')
+        if agent and not agent.is_active:
+            raise serializers.ValidationError({'agent': 'El agente no está activo'})
+        
+        # Si hay campaign, debe estar activa
+        campaign = attrs.get('campaign')
+        if campaign and campaign.status not in ['active', 'paused']:
+            raise serializers.ValidationError({'campaign': 'La campaña no está activa'})
+        
+        # Validar tiempos
+        if attrs.get('end_time') and attrs.get('start_time'):
+            if attrs['end_time'] < attrs['start_time']:
+                raise serializers.ValidationError(
+                    {'end_time': 'La hora de fin no puede ser anterior a la hora de inicio'}
+                )
+        
+        return attrs
 
 
 class RecordingSerializer(serializers.ModelSerializer):

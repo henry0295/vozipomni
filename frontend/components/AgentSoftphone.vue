@@ -465,11 +465,28 @@ const rejectCall = () => {
   if (!result.success) alert(`Error al rechazar: ${result.error}`)
 }
 
-const hangupCall = () => {
+const hangupCall = async () => {
   const result = webrtc.hangup()
   if (!result.success) {
     alert(`Error al colgar: ${result.error}`)
   } else {
+    // Notificar al backend para colgar el canal en Asterisk
+    // Esto asegura que la llamada termine en ambos extremos
+    const callData = agentStore.currentCall
+    if (callData?.callId) {
+      try {
+        const { $api } = useNuxtApp()
+        await $api('/calls/hangup/', {
+          method: 'POST',
+          body: { call_id: callData.callId }
+        })
+        console.log('Hangup enviado al backend correctamente')
+      } catch (err) {
+        console.warn('No se pudo notificar hangup al backend:', err)
+        // No bloquear la UI, la llamada WebRTC ya se cortó
+      }
+    }
+    
     dialNumber.value = ''
     transferNumber.value = ''
     conferenceNumber.value = ''

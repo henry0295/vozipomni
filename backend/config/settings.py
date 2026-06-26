@@ -233,10 +233,10 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': config('THROTTLE_ANON', default='20/minute'),
-        'user': config('THROTTLE_USER', default='300/minute'),
-        'login': config('THROTTLE_LOGIN', default='5/minute'),
-    },
+        'anon': '20/minute',   # IPs sin autenticar
+        'user': '200/minute',  # usuarios autenticados
+        'login': '5/minute',   # solo para el endpoint de login
+    }
 }
 
 # JWT Configuration

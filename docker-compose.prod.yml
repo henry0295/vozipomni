@@ -44,13 +44,13 @@ x-django-env: &django-env
   DB_NAME: ${POSTGRES_DB:-vozipomni}
   DB_USER: ${POSTGRES_USER:-vozipomni_user}
   DB_PASSWORD: ${POSTGRES_PASSWORD:-vozipomni_db_2026}
-  DB_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
+  DB_HOST: postgres  # Nombre del servicio Docker, no IP
   DB_PORT: "5432"
-  DATABASE_URL: postgresql://${POSTGRES_USER:-vozipomni_user}:${POSTGRES_PASSWORD:-vozipomni_db_2026}@${VOZIPOMNI_IPV4:-127.0.0.1}:5432/${POSTGRES_DB:-vozipomni}
-  REDIS_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@${VOZIPOMNI_IPV4:-127.0.0.1}:6379/0
-  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@${VOZIPOMNI_IPV4:-127.0.0.1}:6379/0
-  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@${VOZIPOMNI_IPV4:-127.0.0.1}:6379/1
-  ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-vozipomni_user}:${POSTGRES_PASSWORD:-vozipomni_db_2026}@postgres:5432/${POSTGRES_DB:-vozipomni}
+  REDIS_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
+  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
+  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/1
+  ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}  # Asterisk en host mode, acceso via IP
   ASTERISK_AMI_PORT: "5038"
   ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:-admin}
   ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
@@ -81,13 +81,17 @@ x-django-common: &django-common
 services:
 
   # ──────────────────────────────────────────────────────────────────────────
-  # DATA STORES (PostgreSQL, Redis) — network_mode: host
+  # DATA STORES (PostgreSQL, Redis) — Red bridge aislada
+  # SEGURIDAD: Solo accesibles desde localhost o red interna
   # ──────────────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:14-alpine
     container_name: vozipomni_postgres
     dns: 8.8.8.8
-    network_mode: host
+    networks:
+      - backend
+    ports:
+      - "127.0.0.1:5432:5432"  # Solo accesible desde localhost
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vozipomni}
       POSTGRES_USER: ${POSTGRES_USER:-vozipomni_user}
@@ -108,18 +112,20 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '1.0'
+          memory: 2G
+          cpus: '2.0'
         reservations:
           memory: 512M
-          cpus: '0.25'
 
   redis:
     image: redis:7-alpine
     container_name: vozipomni_redis
     dns: 8.8.8.8
-    network_mode: host
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-vozipomni_redis_2026} --bind 0.0.0.0
+    networks:
+      - backend
+    ports:
+      - "127.0.0.1:6379:6379"  # Solo accesible desde localhost
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-vozipomni_redis_2026} --bind 0.0.0.0 --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: ${TZ:-America/Bogota}
     volumes:
@@ -133,18 +139,23 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '0.5'
+          memory: 1G
+          cpus: '1.0'
         reservations:
-          memory: 128M
-          cpus: '0.05'
+          memory: 256M
+          cpus: '0.1'
 
   # ──────────────────────────────────────────────────────────────────────────
-  # DJANGO APPLICATION SERVICES — network_mode: host
+  # DJANGO APPLICATION SERVICES — Red bridge aislada
   # ──────────────────────────────────────────────────────────────────────────
   backend:
     <<: *django-common
     container_name: vozipomni_backend
+    networks:
+      - backend
+      - voip
+    ports:
+      - "127.0.0.1:8000:8000"  # Solo accesible desde localhost
     command: ["sh", "-c", "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-4} --timeout ${GUNICORN_TIMEOUT:-120} --access-logfile - --error-logfile -"]
     environment:
       <<: *django-env
@@ -170,17 +181,21 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
-          cpus: '1.0'
+          memory: 2G
+          cpus: '2.0'
         reservations:
-          memory: 256M
-          cpus: '0.25'
+          memory: 512M
+          cpus: '0.5'
 
   # Django Channels / WebSocket — Daphne ASGI server (port 8001)
   # Nginx proxy_pass /ws/ → http://127.0.0.1:8001
   daphne:
     <<: *django-common
     container_name: vozipomni_daphne
+    networks:
+      - backend
+    ports:
+      - "127.0.0.1:8001:8001"  # Solo accesible desde localhost
     command: ["daphne", "-b", "0.0.0.0", "-p", "8001", "config.asgi:application"]
     environment:
       <<: *django-env
@@ -215,6 +230,9 @@ services:
   celery_worker:
     <<: *django-common
     container_name: vozipomni_celery_worker
+    networks:
+      - backend
+      - voip
     command: celery -A config worker --loglevel=${CELERY_LOG_LEVEL:-info} --concurrency=${CELERY_CONCURRENCY:-4}
     environment:
       <<: *django-env
@@ -235,14 +253,16 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: '1.0'
+          memory: 1G
+          cpus: '2.0'
         reservations:
-          memory: 128M
+          memory: 256M
 
   celery_beat:
     <<: *django-common
     container_name: vozipomni_celery_beat
+    networks:
+      - backend
     command: celery -A config beat --loglevel=${CELERY_LOG_LEVEL:-info} --scheduler django_celery_beat.schedulers:DatabaseScheduler
     environment:
       <<: *django-env
@@ -259,10 +279,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
-          cpus: '0.25'
+          memory: 512M
+          cpus: '0.5'
         reservations:
-          memory: 64M
+          memory: 128M
 
   # ──────────────────────────────────────────────────────────────────────────
   # TELEPHONY — network_mode: host (rendimiento VoIP)
@@ -303,10 +323,11 @@ services:
     deploy:
       resources:
         limits:
+          memory: 4G
+          cpus: '4.0'
+        reservations:
           memory: 1G
           cpus: '1.0'
-        reservations:
-          memory: 256M
 
   kamailio:
     build:
@@ -570,12 +591,28 @@ volumes:
     driver: local
   asterisk_configs:
     driver: local
-  prometheus_data:
-    driver: local
-  grafana_data:
-    driver: local
 
 # =============================================================================
-# NOTA: No se define "networks:" porque TODOS los servicios usan
-#   network_mode: host en producción para máximo rendimiento VoIP.
+# NETWORKS - Aislamiento de seguridad
 # =============================================================================
+# backend: Red interna para PostgreSQL, Redis, Django, Celery
+# voip:    Red compartida entre Django y servicios VoIP (para acceso a AMI)
+#
+# NOTAS:
+#   - Servicios VoIP (Asterisk, Kamailio, RTPEngine) usan network_mode: host
+#     por rendimiento, NO están en estas redes.
+#   - Backend se conecta a AMI via VOZIPOMNI_IPV4 (127.0.0.1 en host)
+# =============================================================================
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/24
+  voip:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/24

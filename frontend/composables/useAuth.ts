@@ -59,6 +59,11 @@ export const useAuth = () => {
       console.error('Error al cerrar sesión:', err)
     } finally {
       authStore.clearAuth()
+      
+      // Redirigir al login después de limpiar la sesión
+      if (process.client) {
+        window.location.href = '/auth/login'
+      }
     }
   }
 

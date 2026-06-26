@@ -169,8 +169,14 @@ export const useAgentStore = defineStore('agent', {
     // Finalizar llamada — pasa a estado wrapup para que el agente
     // registre la disposición. El timer de 10s vive en AgentCallDisposition.vue.
     endCall() {
+      const callData = this.currentCall
       this.currentCall = null
       this.status = 'wrapup'
+      
+      // Incrementar contador de llamadas
+      if (callData) {
+        this.stats.callsToday++
+      }
       // NO hacer setTimeout aquí — AgentCallDisposition tiene su propio
       // wrapupTimer de 10s y llama changeStatus('available') al guardar.
       // Dos timers compitiendo causaban doble llamada a la API y race conditions.

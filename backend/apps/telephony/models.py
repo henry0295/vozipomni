@@ -78,6 +78,20 @@ class Call(models.Model):
             # Índices originales (renombrados en migración 0004)
             models.Index(fields=['start_time'], name='calls_start_t_e6c81a_idx'),
             models.Index(fields=['agent', 'start_time'], name='calls_agent_i_3202a5_idx'),
+            models.Index(fields=['campaign', 'start_time'], name='calls_campaig_d50e84_idx'),
+            models.Index(fields=['status'], name='calls_status_79e8c6_idx'),
+            models.Index(fields=['direction', 'status'], name='calls_directi_4d42f1_idx'),
+        ]
+    
+    def __str__(self):
+        return f"{self.caller_id} -> {self.called_number} ({self.get_status_display()})"
+    
+    @property
+    def duration(self):
+        """Calcular duración total de la llamada"""
+        if self.end_time and self.start_time:
+            return int((self.end_time - self.start_time).total_seconds())
+        return 0
             models.Index(fields=['campaign', 'start_time'], name='calls_campaig_a1fb2d_idx'),
             # Índices de rendimiento (migración 0010)
             models.Index(fields=['start_time', 'status'], name='calls_start_status_idx'),
