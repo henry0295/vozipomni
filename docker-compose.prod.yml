@@ -590,6 +590,10 @@ volumes:
     driver: local
   asterisk_configs:
     driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
 
 # =============================================================================
 # NETWORKS - Aislamiento de seguridad
