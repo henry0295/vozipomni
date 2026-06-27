@@ -1022,6 +1022,51 @@ class CallViewSet(viewsets.ModelViewSet):
         
         return call
     
+    @action(detail=True, methods=['post'], url_path='heartbeat')
+    def heartbeat(self, request, pk=None):
+        """Recibir heartbeat de llamada activa para detectar llamadas huérfanas
+        
+        El frontend envía heartbeat cada 30s durante una llamada activa.
+        Esto permite detectar llamadas huérfanas si el cliente se desconecta.
+        """
+        import logging
+        from django.utils import timezone
+        _log = logging.getLogger(__name__)
+        
+        try:
+            call = self.get_object()
+            
+            # Actualizar timestamp de último heartbeat
+            if not call.metadata:
+                call.metadata = {}
+            
+            call.metadata['last_heartbeat'] = timezone.now().isoformat()
+            
+            # Actualizar métricas de calidad si se envían
+            quality_metrics = request.data.get('quality_metrics')
+            if quality_metrics:
+                call.metadata['quality_metrics'] = quality_metrics
+            
+            # Actualizar duración reportada por el cliente
+            duration = request.data.get('duration')
+            if duration:
+                call.metadata['client_duration'] = duration
+            
+            call.save(update_fields=['metadata'])
+            
+            return Response({
+                'status': 'ok',
+                'call_id': call.call_id,
+                'server_time': timezone.now().isoformat()
+            })
+            
+        except Exception as e:
+            _log.exception(f'Error en heartbeat para llamada pk={pk}')
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=False, methods=['post'], url_path='hangup')
     def hangup_call_by_id(self, request):
         """Colgar una llamada activa via AMI Hangup usando call_id

@@ -54,6 +54,11 @@ export interface CallSession {
 let _ua: any = null             // JsSIP UA — no puede ser useState (no serializable)
 let _callTimer: any = null
 let _remoteAudio: HTMLAudioElement | null = null
+let _heartbeatInterval: any = null
+let _reconnectAttempts = 0
+let _reconnectTimer: any = null
+const MAX_RECONNECT_ATTEMPTS = 5
+const HEARTBEAT_INTERVAL_MS = 30000 // 30 segundos
 
 export const useWebRTC = () => {
   // useState comparte estado entre todos los componentes en el mismo proceso SSR/client
@@ -64,6 +69,8 @@ export const useWebRTC = () => {
   const lastError = useState<string | null>('webrtc_last_error', () => null)
   const lastCallError = useState<string | null>('webrtc_last_call_error', () => null)
   const callDuration = useState<number>('webrtc_call_duration', () => 0)
+  const callQualityMetrics = useState<any>('webrtc_quality_metrics', () => null)
+  const lastConfig = useState<WebRTCConfig | null>('webrtc_last_config', () => null)
 
   const agentStore = useAgentStore()
 
@@ -84,6 +91,9 @@ export const useWebRTC = () => {
     }
 
     try {
+      // Guardar configuración para reconexión automática
+      lastConfig.value = config
+      
       const wsEndpoint = config.wsUrl || `wss://${config.sipServer}:${config.sipPort}/ws`
       const socket = new JsSIP.WebSocketInterface(wsEndpoint)
       
@@ -130,6 +140,23 @@ export const useWebRTC = () => {
       console.log('WebRTC: Disconnected')
       isRegistered.value = false
       registrationStatus.value = 'disconnected'
+      
+      // Intentar reconexión automática si hay configuración guardada
+      if (lastConfig.value && _reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        _reconnectAttempts++
+        const delay = Math.min(1000 * Math.pow(2, _reconnectAttempts), 30000)
+        console.log(`WebRTC: Reconnecting in ${delay/1000}s (attempt ${_reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`)
+        
+        _reconnectTimer = setTimeout(() => {
+      _reconnectAttempts = 0  // Reset contador de reconexión al registrarse exitosamente
+      if (_reconnectTimer) {
+        clearTimeout(_reconnectTimer)
+        _reconnectTimer = null
+      }
+          console.log('WebRTC: Attempting to reconnect...')
+          register(lastConfig.value!)
+        }, delay)
+      }
     })
 
     _ua.on('registered', () => {
@@ -199,6 +226,9 @@ export const useWebRTC = () => {
       
       // Iniciar timer
       startCallTimer()
+      
+      // Iniciar heartbeat
+      startHeartbeat()
       
       // Actualizar estado del agente
       agentStore.startCall({
@@ -416,7 +446,16 @@ export const useWebRTC = () => {
       _ua = null
     }
     isRegistered.value = false
-    isConnecting.value = false
+    lastConfig.value = null
+    _reconnectAttempts = 0
+    
+    if (_reconnectTimer) {
+      clearTimeout(_reconnectTimer)
+      _reconnectTimer = null
+    }
+    
+    stopCallTimer()
+    stopHeartbeatvalue = false
     registrationStatus.value = 'disconnected'
     currentSession.value = null
     stopCallTimer()
@@ -437,9 +476,132 @@ export const useWebRTC = () => {
     }
     callDuration.value = 0
   }
+  
+  // ========================================================================
+  // HEARTBEAT Y MÉTRICAS DE CALIDAD
+  // ========================================================================
+  
+  /**
+   * Obtener métricas de calidad WebRTC usando getStats()
+   * Extrae: jitter, pérdida de paquetes, latencia (RTT)
+   */
+  const getQualityMetrics = async () => {
+    if (!currentSession.value?.session?.connection) {
+      return null
+    }
+    
+    try {
+      const pc = currentSession.value.session.connection as RTCPeerConnection
+      const stats = await pc.getStats()
+      
+      let jitter = 0
+      let packetsLost = 0
+      let packetsReceived = 0
+      let roundTripTime = 0
+      
+      stats.forEach((report: any) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+          jitter = report.jitter || 0
+          packetsLost = report.packetsLost || 0
+          packetsReceived = report.packetsReceived || 0
+        }
+        
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          roundTripTime = report.currentRoundTripTime || 0
+        }
+      })
+      
+      const packetLossRate = packetsReceived > 0 
+        ? packetsLost / (packetsLost + packetsReceived) 
+        : 0
+      
+      return {
+        jitter,
+        packetsLost,
+        packetsReceived,
+        packetLossRate: parseFloat(packetLossRate.toFixed(4)),
+        roundTripTime: parseFloat((roundTripTime * 1000).toFixed(2)), // ms
+        timestamp: new Date().toISOString()
+      }
+    } catch (error) {
+      console.error('Error obteniendo métricas de calidad:', error)
+      return null
+    }
+  }
+  
+  /**
+   * Enviar heartbeat al backend para detectar llamadas huérfanas
+   * Se ejecuta cada 30 segundos durante una llamada activa
+   */
+  const sendHeartbeat = async () => {
+    if (!currentSession.value) return
+    
+    const metrics = await getQualityMetrics()
+    
+    try {
+      const { $api } = useNuxtApp()
+      const callId = currentSession.value.session.id
+      
+      // Buscar el call_id en el backend usando el session.id
+      // En producción, deberías guardar el call_id del backend al crear la llamada
+      // Por ahora, enviamos el session.id como referencia
+      const response = await $api(`/api/calls/heartbeat/`, {
+        method: 'POST',
+        body: {
+          session_id: callId,
+          duration: callDuration.value,
+          quality_metrics: metrics,
+          status: 'alive'
+        }
+      })
+      
+      // Guardar métricas en el estado para mostrar en UI
+      if (metrics) {
+        callQualityMetrics.value = metrics
+      }
+      
+      console.log(`Heartbeat enviado: duración ${callDuration.value}s, RTT ${metrics?.roundTripTime}ms`)
+    } catch (error) {
+      console.error('Error enviando heartbeat:', error)
+    }
+  }
+  
+  /**
+   * Iniciar envío de heartbeat cada 30 segundos
+   */
+  const startHeartbeat = () => {
+    if (_heartbeatInterval) {
+      clearInterval(_heartbeatInterval)
+    }
+    
+    // Enviar primer heartbeat inmediatamente
+    sendHeartbeat()
+    
+    // Luego cada 30 segundos
+    _heartbeatInterval = setInterval(() => {
+      sendHeartbeat()
+    }, HEARTBEAT_INTERVAL_MS)
+    
+    console.log('Heartbeat iniciado (cada 30s)')
+  }
+  
+  /**
+   * Detener envío de heartbeat
+   */
+  const stopHeartbeat = () => {
+    if (_heartbeatInterval) {
+      clearInterval(_heartbeatInterval)
+      _heartbeatInterval = null
+    }
+    callQualityMetrics.value = null
+    console.log('Heartbeat detenido')
+  }
 
   // Manejar fin de llamada
   const handleCallEnded = () => {
+    // Detener heartbeat
+    stopHeartbeat()
+    
     // Limpiar audio remoto y remover del DOM
     if (_remoteAudio) {
       _remoteAudio.pause()
@@ -477,6 +639,7 @@ export const useWebRTC = () => {
     lastError,
     lastCallError,
     callDuration,
+    callQualityMetrics,
     hasActiveCall,
     canMakeCall,
 
@@ -491,6 +654,8 @@ export const useWebRTC = () => {
     toggleHold,
     transfer,
     sendDTMF,
-    formatDuration
+    formatDuration,
+    getQualityMetrics,
+    sendHeartbeat
   }
 }

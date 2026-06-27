@@ -143,6 +143,85 @@ def deliver_webhook(self, endpoint_id: int, event_type: str, payload: dict, atte
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Detección de Llamadas Huérfanas
+# ──────────────────────────────────────────────────────────────────────────────
+
+@shared_task(name='apps.telephony.tasks.detect_orphan_calls')
+def detect_orphan_calls():
+    """
+    Detectar llamadas huérfanas sin heartbeat en los últimos 2 minutos.
+    
+    Una llamada se considera huérfana si:
+    - Estado: initiated, ringing o answered
+    - No ha recibido heartbeat en los últimos 2 minutos
+    - El cliente se desconectó sin colgar
+    
+    Se ejecuta cada 5 minutos vía Celery Beat.
+    """
+    from apps.telephony.models import Call
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    threshold = timezone.now() - timedelta(minutes=2)
+    
+    # Buscar llamadas activas
+    active_calls = Call.objects.filter(
+        status__in=['initiated', 'ringing', 'answered']
+    )
+    
+    orphan_calls = []
+    for call in active_calls:
+        last_heartbeat_str = call.metadata.get('last_heartbeat') if call.metadata else None
+        
+        # Si nunca recibió heartbeat y tiene más de 2 minutos, es huérfana
+        if not last_heartbeat_str:
+            if call.start_time and call.start_time < threshold:
+                orphan_calls.append(call)
+            continue
+        
+        # Convertir string ISO a datetime
+        try:
+            from django.utils.dateparse import parse_datetime
+            last_heartbeat = parse_datetime(last_heartbeat_str)
+            
+            if last_heartbeat and last_heartbeat < threshold:
+                orphan_calls.append(call)
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error parseando heartbeat para {call.call_id}: {e}")
+            continue
+    
+    # Marcar llamadas huérfanas
+    count = 0
+    for call in orphan_calls:
+        last_heartbeat = call.metadata.get('last_heartbeat', 'Nunca') if call.metadata else 'Nunca'
+        
+        logger.warning(
+            f"📞 Llamada huérfana detectada: {call.call_id} | "
+            f"Agente: {call.agent.agent_id if call.agent else 'N/A'} | "
+            f"Duración estimada: {(timezone.now() - call.start_time).total_seconds():.0f}s | "
+            f"Último heartbeat: {last_heartbeat}"
+        )
+        
+        # Marcar como failed
+        call.status = 'failed'
+        if not call.metadata:
+            call.metadata = {}
+        call.metadata['orphan_reason'] = 'No heartbeat received'
+        call.metadata['orphan_detected_at'] = timezone.now().isoformat()
+        call.save(update_fields=['status', 'metadata'])
+        
+        count += 1
+    
+    if count > 0:
+        logger.info(f"✓ Se detectaron y marcaron {count} llamadas huérfanas")
+    
+    return {
+        'orphan_calls_detected': count,
+        'orphan_call_ids': [call.call_id for call in orphan_calls]
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Callbacks - procesar devoluciones de llamada pendientes
 # ──────────────────────────────────────────────────────────────────────────────
 

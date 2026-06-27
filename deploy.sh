@@ -668,6 +668,7 @@ EOF
     DB_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     SECRET_KEY=$(openssl rand -base64 50 | tr -d "=+/")
+    AMI_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-20)
     ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-12)
 
     cat > "$INSTALL_DIR/.env" <<EOF
@@ -695,7 +696,7 @@ CELERY_LOG_LEVEL=info
 CELERY_CONCURRENCY=4
 
 ASTERISK_AMI_USER=admin
-ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
+ASTERISK_AMI_PASSWORD=$AMI_PASSWORD
 
 NUXT_PUBLIC_API_BASE=/api
 NUXT_PUBLIC_WS_BASE=/ws
@@ -748,7 +749,7 @@ Password: $ADMIN_PASSWORD
 
 PostgreSQL: vozipomni_user / $DB_PASSWORD (puerto 5432)
 Redis:      $REDIS_PASSWORD (puerto 6379)
-AMI:        admin / vozipomni_ami_2026 (puerto 5038)
+AMI:        admin / $AMI_PASSWORD (puerto 5038)
 ════════════════════════════════════════════════════════════
 EOF
     chmod 600 "$INSTALL_DIR/credentials.txt"
@@ -757,26 +758,128 @@ EOF
     log_success "Credenciales generadas y .env creado"
 }
 
-# ─── 6. Configurar firewall ─────────────────────────────────────────────────
+# ─── 6. Configurar firewall + Seguridad ─────────────────────────────────────
 configure_firewall() {
-    log_info "Configurando firewall..."
+    log_info "Configurando firewall y restricciones de seguridad..."
 
-    local PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 5061/tcp 5161/udp 5162/udp 5038/tcp 8080/tcp 8088/tcp 8089/tcp 8765/tcp 10000:10300/udp 22222/udp 23000:23300/udp"
+    # Puertos públicos (accesibles desde internet)
+    local PUBLIC_PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 5061/tcp 8080/tcp"
+    
+    # Puertos RTP (solo para VoIP providers - se puede restringir por IP más adelante)
+    local RTP_PORTS="10000:23100/udp"
 
     if command -v ufw &>/dev/null; then
-        for port in $PORTS; do
+        # Configurar UFW
+        for port in $PUBLIC_PORTS; do
             ufw allow "$port" 2>/dev/null || true
         done
+        ufw allow $RTP_PORTS 2>/dev/null || true
+        
+        # Denegar acceso externo a servicios internos
+        ufw deny 5432/tcp comment 'PostgreSQL - solo localhost' 2>/dev/null || true
+        ufw deny 6379/tcp comment 'Redis - solo localhost' 2>/dev/null || true
+        ufw deny 5038/tcp comment 'AMI - solo localhost' 2>/dev/null || true
+        
         ufw --force enable 2>/dev/null || true
-        log_success "Firewall UFW configurado"
+        log_success "Firewall UFW configurado con restricciones de seguridad"
+        
     elif command -v firewall-cmd &>/dev/null; then
-        for port in $PORTS; do
+        # Configurar firewalld
+        for port in $PUBLIC_PORTS; do
             firewall-cmd --permanent --add-port="$port" 2>/dev/null || true
         done
+        firewall-cmd --permanent --add-port=$RTP_PORTS 2>/dev/null || true
         firewall-cmd --reload 2>/dev/null || true
         log_success "Firewall firewalld configurado"
+        
+    elif command -v iptables &>/dev/null; then
+        # Configurar iptables directamente
+        log_info "Configurando iptables..."
+        
+        # Permitir tráfico loopback
+        iptables -A INPUT -i lo -j ACCEPT 2>/dev/null || true
+        
+        # Permitir conexiones establecidas
+        iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+        
+        # Permitir puertos públicos
+        iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 5060 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 5060 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 5061 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null || true
+        
+        # RTP
+        iptables -A INPUT -p udp --dport 10000:23100 -j ACCEPT 2>/dev/null || true
+        
+        # BLOQUEAR puertos internos desde externa
+        iptables -A INPUT -p tcp --dport 5432 ! -s 127.0.0.1 -j DROP 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 6379 ! -s 127.0.0.1 -j DROP 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 5038 ! -s 127.0.0.1 -j DROP 2>/dev/null || true
+        
+        # Guardar reglas
+        if command -v netfilter-persistent &>/dev/null; then
+            netfilter-persistent save 2>/dev/null || true
+        elif command -v iptables-save &>/dev/null; then
+            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+        fi
+        
+        log_success "iptables configurado con restricciones de seguridad"
     else
-        log_warning "No se detectó firewall. Configure puertos manualmente."
+        log_warning "No se detectó firewall. CRÍTICO: Configure puertos manualmente"
+    fi
+}
+
+# ─── 6.1. Configurar fail2ban para proteger AMI ────────────────────────────
+configure_fail2ban() {
+    log_info "Configurando fail2ban para protección AMI..."
+    
+    # Verificar si fail2ban está instalado
+    if ! command -v fail2ban-client &>/dev/null; then
+        log_info "Instalando fail2ban..."
+        if [ -f /etc/debian_version ]; then
+            apt-get update -qq && apt-get install -y fail2ban 2>/dev/null || true
+        elif [ -f /etc/redhat-release ]; then
+            yum install -y fail2ban 2>/dev/null || dnf install -y fail2ban 2>/dev/null || true
+        else
+            log_warning "No se pudo instalar fail2ban automáticamente"
+            return 0
+        fi
+    fi
+    
+    # Crear filtro para AMI
+    cat > /etc/fail2ban/filter.d/asterisk-ami.conf <<'FAIL2BAN_FILTER'
+[Definition]
+failregex = .*Failed attempt from <HOST>.*
+            .*Invalid username or password for .* from <HOST>.*
+            .*Authentication failed from <HOST>.*
+ignoreregex =
+FAIL2BAN_FILTER
+    
+    # Configurar jail para AMI
+    cat > /etc/fail2ban/jail.d/asterisk-ami.conf <<'FAIL2BAN_JAIL'
+[asterisk-ami]
+enabled = true
+port = 5038
+filter = asterisk-ami
+logpath = /var/log/asterisk/messages
+          /opt/vozipomni/logs/asterisk/*.log
+maxretry = 3
+findtime = 600
+bantime = 3600
+action = iptables-allports[name=AMI, protocol=all]
+FAIL2BAN_JAIL
+    
+    # Reiniciar fail2ban
+    systemctl enable fail2ban 2>/dev/null || true
+    systemctl restart fail2ban 2>/dev/null || true
+    
+    if systemctl is-active --quiet fail2ban; then
+        log_success "fail2ban configurado y activo para protección AMI"
+    else
+        log_warning "fail2ban instalado pero no se pudo iniciar"
     fi
 }
 
@@ -1469,6 +1572,8 @@ main() {
     generate_env
     echo ""
     configure_firewall
+    echo ""
+    configure_fail2ban
     echo ""
     setup_https_automatic
     echo ""

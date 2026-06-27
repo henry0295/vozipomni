@@ -67,6 +67,12 @@ app.conf.beat_schedule = {
         'task': 'recordings.scan_unlinked_recordings',
         'schedule': 300.0,  # cada 5 minutos
     },
+    
+    # Detectar llamadas huérfanas sin heartbeat cada 5 minutos
+    'detect-orphan-calls': {
+        'task': 'apps.telephony.tasks.detect_orphan_calls',
+        'schedule': 300.0,  # cada 5 minutos
+    },
 }
 
 @app.task(bind=True, ignore_result=True)
