@@ -71,7 +71,6 @@ x-django-common: &django-common
     context: ./backend
     dockerfile: Dockerfile
   dns: 8.8.8.8
-  network_mode: host
   <<: *restart-policy
   logging: *default-logging
 
