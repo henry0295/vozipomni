@@ -124,28 +124,30 @@
           />
 
           <UTabs v-model="activeTab" :items="tabItems">
-            <template #default="{ item }">
-              <div v-if="item.slot === 'basic'" class="space-y-4 pt-4">
+            <template #basic>
+              <div class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Información Básica</h4>
-                  <div class="grid grid-cols-2 gap-4">
-                    <UFormGroup label="Nombre" class="col-span-2" required>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <UFormGroup label="Nombre" class="md:col-span-2" required>
                       <UInput v-model="form.name" placeholder="Ej: Colombia Nacional" />
                     </UFormGroup>
-                    <UFormGroup class="col-span-2">
+                    <UFormGroup class="md:col-span-2">
                       <UCheckbox v-model="form.is_active" label="Ruta Activa" />
                     </UFormGroup>
                   </div>
                 </div>
               </div>
+            </template>
 
-              <div v-if="item.slot === 'pattern'" class="space-y-4 pt-4">
+            <template #pattern>
+              <div class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Patrón de Marcado</h4>
-                  <UFormGroup label="Patrón de Discado" help="Patrón regex para coincidir. Ej: ^2[0-9]{9}$" required>
-                    <UInput v-model="form.pattern" placeholder="Ej: ^[0-9]{7,}$" />
+                  <UFormGroup label="Patrón de Discado" help="Patrón regex para coincidir. Ej: _2XXXXXXXXX" required>
+                    <UInput v-model="form.pattern" placeholder="Ej: _X." />
                   </UFormGroup>
-                  <div class="grid grid-cols-2 gap-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <UFormGroup label="Prefijo a Agregar" help="Dígitos a agregar al inicio">
                       <UInput v-model="form.prepend" placeholder="Ej: 57" />
                     </UFormGroup>
@@ -155,21 +157,27 @@
                   </div>
                 </div>
               </div>
+            </template>
 
-              <div v-if="item.slot === 'trunk'" class="space-y-4 pt-4">
+            <template #trunk>
+              <div class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración de Troncal</h4>
                   <UFormGroup label="Troncal" required>
-                    <USelect
+                    <USelectMenu
                       v-model="form.trunk"
                       :options="trunkOptions"
+                      value-attribute="value"
+                      option-attribute="label"
                       placeholder="Seleccione una troncal"
                     />
                   </UFormGroup>
                 </div>
               </div>
+            </template>
 
-              <div v-if="item.slot === 'config'" class="space-y-4 pt-4">
+            <template #config>
+              <div class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración Avanzada</h4>
                   <UFormGroup label="Prefijo Caller ID (Opcional)" help="Prefijo para el número que se muestra en la llamada">

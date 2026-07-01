@@ -166,6 +166,48 @@ class IVRSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
 
+    def validate_menu_options(self, value):
+        """Normaliza opciones legacy de IVR y valida estructura nueva."""
+        if not isinstance(value, dict):
+            raise serializers.ValidationError('menu_options debe ser un objeto JSON con teclas como 0-9, *, #.')
+
+        normalized = {}
+        valid_types = {'queue', 'extension', 'ivr', 'voicemail', 'announcement', 'custom_destination'}
+
+        for digit, option in value.items():
+            digit_str = str(digit)
+            if len(digit_str) != 1 or digit_str not in '0123456789*#':
+                raise serializers.ValidationError(f'Tecla inválida en menu_options: {digit_str}')
+
+            # Compatibilidad con formato antiguo: {"1": "100"}
+            if isinstance(option, str):
+                normalized[digit_str] = {
+                    'type': 'extension',
+                    'destination': option,
+                    'spoken': '',
+                }
+                continue
+
+            if not isinstance(option, dict):
+                raise serializers.ValidationError(f'La opción {digit_str} debe ser string o objeto.')
+
+            opt_type = option.get('type', 'extension')
+            destination = str(option.get('destination', '')).strip()
+            spoken = str(option.get('spoken', '')).strip()
+
+            if opt_type not in valid_types:
+                raise serializers.ValidationError(f'Tipo inválido en tecla {digit_str}: {opt_type}')
+            if not destination:
+                raise serializers.ValidationError(f'La tecla {digit_str} debe tener destination.')
+
+            normalized[digit_str] = {
+                'type': opt_type,
+                'destination': destination,
+                'spoken': spoken,
+            }
+
+        return normalized
+
 
 class ExtensionSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()
@@ -258,6 +300,34 @@ class InboundRouteSerializer(serializers.ModelSerializer):
     
     def get_status(self, obj):
         return 'Activo' if obj.is_active else 'Inactivo'
+
+    def validate(self, attrs):
+        destination_type = attrs.get('destination_type', getattr(self.instance, 'destination_type', None))
+        destination = attrs.get('destination', getattr(self.instance, 'destination', ''))
+
+        if not destination_type or not destination:
+            return attrs
+
+        destination = str(destination).strip()
+
+        if destination_type == 'ivr' and not IVR.objects.filter(extension=destination, is_active=True).exists():
+            raise serializers.ValidationError({'destination': 'El IVR seleccionado no existe o está inactivo.'})
+
+        if destination_type == 'queue':
+            from apps.queues.models import Queue
+            if not Queue.objects.filter(name=destination, is_active=True).exists():
+                raise serializers.ValidationError({'destination': 'La cola seleccionada no existe o está inactiva.'})
+
+        if destination_type == 'extension' and not Extension.objects.filter(extension=destination, is_active=True).exists():
+            raise serializers.ValidationError({'destination': 'La extensión seleccionada no existe o está inactiva.'})
+
+        if destination_type == 'voicemail' and not Voicemail.objects.filter(mailbox=destination, is_active=True).exists():
+            raise serializers.ValidationError({'destination': 'El buzón seleccionado no existe o está inactivo.'})
+
+        if destination_type == 'custom_destination' and not CustomDestination.objects.filter(name=destination, is_active=True).exists():
+            raise serializers.ValidationError({'destination': 'El destino personalizado no existe o está inactivo.'})
+
+        return attrs
 
 
 class OutboundRouteSerializer(serializers.ModelSerializer):

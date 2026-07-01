@@ -316,6 +316,12 @@ class IVR(models.Model):
     
     # Audio de bienvenida
     welcome_message = models.CharField(max_length=500, blank=True, verbose_name='Mensaje bienvenida')
+    spoken = models.CharField(
+        max_length=500,
+        blank=True,
+        verbose_name='Spoken',
+        help_text='Audio adicional (Playback) antes del menú. Ej: custom/ivr-spoken-principal'
+    )
     invalid_message = models.CharField(max_length=500, blank=True, verbose_name='Mensaje opción inválida')
     timeout_message = models.CharField(max_length=500, blank=True, verbose_name='Mensaje timeout')
     
@@ -415,6 +421,7 @@ class InboundRoute(models.Model):
         ('extension', 'Extensión'),
         ('voicemail', 'Buzón de Voz'),
         ('announcement', 'Anuncio'),
+        ('custom_destination', 'Destino Personalizado'),
     ]
     
     did = models.CharField(max_length=50, unique=True, verbose_name='DID/Número')

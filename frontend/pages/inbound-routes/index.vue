@@ -125,7 +125,7 @@
 
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- TAB 1: INFORMACIÓN BÁSICA -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-information-circle"
@@ -152,7 +152,7 @@
           </template>
 
           <!-- TAB 2: IDENTIFICACIÓN DID -->
-          <template #identificacion="{ item }">
+          <template #identificacion>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-phone"
@@ -188,7 +188,7 @@
           </template>
 
           <!-- TAB 3: DESTINO -->
-          <template #destino="{ item }">
+          <template #destino>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-arrow-right-circle"
@@ -203,16 +203,34 @@
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <UFormGroup label="Tipo de Destino" required>
-                    <USelect
+                    <USelectMenu
                       v-model="form.destination_type"
                       :options="destinationTypes"
                       option-attribute="label"
                       value-attribute="value"
+                      @update:model-value="onDestinationTypeChange"
                     />
                   </UFormGroup>
 
-                  <UFormGroup label="Destino" required help="Nombre de cola, extensión, IVR, etc.">
-                    <UInput v-model="form.destination" placeholder="sales-queue, 100, ivr_main" />
+                  <UFormGroup
+                    label="Destino"
+                    required
+                    :help="destinationHelpText"
+                  >
+                    <USelectMenu
+                      v-if="currentDestinationOptions.length"
+                      v-model="form.destination"
+                      :options="currentDestinationOptions"
+                      option-attribute="label"
+                      value-attribute="value"
+                      searchable
+                      placeholder="Seleccione un destino"
+                    />
+                    <UInput
+                      v-else
+                      v-model="form.destination"
+                      placeholder="Ingrese destino manual"
+                    />
                   </UFormGroup>
                 </div>
               </div>
@@ -223,8 +241,15 @@
                   <h4 class="font-medium text-blue-800 dark:text-blue-200">Condición de Horario (Opcional)</h4>
                 </div>
                 
-                <UFormGroup label="Condición de Horario" help="Nombre de una condición de horario para ruteo condicional">
-                  <UInput v-model="form.time_condition" placeholder="business_hours" />
+                <UFormGroup label="Condición de Horario" help="Opcional. Define ruteo según horario comercial">
+                  <USelectMenu
+                    v-model="form.time_condition"
+                    :options="timeConditionOptions"
+                    option-attribute="label"
+                    value-attribute="value"
+                    searchable
+                    placeholder="Sin condición de horario"
+                  />
                 </UFormGroup>
 
                 <p class="text-sm text-blue-700 dark:text-blue-300">
@@ -287,7 +312,8 @@ const destinationTypes = [
   { label: 'Cola', value: 'queue' },
   { label: 'Extensión', value: 'extension' },
   { label: 'Buzón de Voz', value: 'voicemail' },
-  { label: 'Anuncio', value: 'announcement' }
+  { label: 'Anuncio', value: 'announcement' },
+  { label: 'Destino Personalizado', value: 'custom_destination' }
 ]
 
 const routes = ref<InboundRoute[]>([])
@@ -298,6 +324,15 @@ const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const ivrOptions = ref<{ label: string; value: string }[]>([])
+const queueOptions = ref<{ label: string; value: string }[]>([])
+const extensionOptions = ref<{ label: string; value: string }[]>([])
+const voicemailOptions = ref<{ label: string; value: string }[]>([])
+const customDestinationOptions = ref<{ label: string; value: string }[]>([])
+const announcementOptions = ref<{ label: string; value: string }[]>([])
+const timeConditionOptions = ref<{ label: string; value: string }[]>([
+  { label: 'Sin condición de horario', value: '' }
+])
 
 const { apiFetch } = useApi()
 
@@ -319,6 +354,38 @@ const form = ref({
   is_active: true
 })
 
+const currentDestinationOptions = computed(() => {
+  switch (form.value.destination_type) {
+    case 'ivr':
+      return ivrOptions.value
+    case 'queue':
+      return queueOptions.value
+    case 'extension':
+      return extensionOptions.value
+    case 'voicemail':
+      return voicemailOptions.value
+    case 'custom_destination':
+      return customDestinationOptions.value
+    case 'announcement':
+      return announcementOptions.value
+    default:
+      return []
+  }
+})
+
+const destinationHelpText = computed(() => {
+  if (currentDestinationOptions.value.length) {
+    return 'Seleccione uno de los destinos creados en el sistema'
+  }
+
+  switch (form.value.destination_type) {
+    case 'announcement':
+      return 'Nombre del audio en Asterisk (sin extensión), por ejemplo: custom/bienvenida'
+    default:
+      return 'Ingrese el identificador del destino'
+  }
+})
+
 const filteredRoutes = computed(() => {
   return routes.value.filter(route => {
     const matchesSearch =
@@ -331,13 +398,19 @@ const filteredRoutes = computed(() => {
 
 const openCreateModal = () => {
   resetForm()
+  loadDestinationCatalogs()
   isModalOpen.value = true
 }
 
 const editRoute = (route: InboundRoute) => {
   form.value = { ...route }
   editingId.value = route.id
+  loadDestinationCatalogs()
   isModalOpen.value = true
+}
+
+const onDestinationTypeChange = () => {
+  form.value.destination = ''
 }
 
 const saveRoute = async () => {
@@ -394,6 +467,60 @@ const loadRoutes = async () => {
   loading.value = false
 }
 
+const loadDestinationCatalogs = async () => {
+  const [ivrRes, queueRes, extRes, vmRes, customRes, tcRes] = await Promise.all([
+    apiFetch<any>('/telephony/ivr/'),
+    apiFetch<any>('/queues/'),
+    apiFetch<any>('/telephony/extensions/'),
+    apiFetch<any>('/telephony/voicemail/'),
+    apiFetch<any>('/telephony/custom-destinations/'),
+    apiFetch<any>('/telephony/time-conditions/'),
+  ])
+
+  const ivrList = Array.isArray(ivrRes.data.value) ? ivrRes.data.value : (ivrRes.data.value?.results || [])
+  const queueList = Array.isArray(queueRes.data.value) ? queueRes.data.value : (queueRes.data.value?.results || [])
+  const extList = Array.isArray(extRes.data.value) ? extRes.data.value : (extRes.data.value?.results || [])
+  const vmList = Array.isArray(vmRes.data.value) ? vmRes.data.value : (vmRes.data.value?.results || [])
+  const customList = Array.isArray(customRes.data.value) ? customRes.data.value : (customRes.data.value?.results || [])
+  const tcList = Array.isArray(tcRes.data.value) ? tcRes.data.value : (tcRes.data.value?.results || [])
+
+  ivrOptions.value = ivrList.map((item: any) => ({
+    label: `${item.name} (${item.extension})`,
+    value: item.extension,
+  }))
+
+  queueOptions.value = queueList.map((item: any) => ({
+    label: `${item.name} (${item.extension || 'sin ext'})`,
+    value: item.name,
+  }))
+
+  extensionOptions.value = extList.map((item: any) => ({
+    label: `${item.extension} - ${item.name}`,
+    value: item.extension,
+  }))
+
+  voicemailOptions.value = vmList.map((item: any) => ({
+    label: `${item.mailbox} - ${item.name}`,
+    value: item.mailbox,
+  }))
+
+  customDestinationOptions.value = customList.map((item: any) => ({
+    label: `${item.name} (${item.context},${item.extension},${item.priority})`,
+    value: item.name,
+  }))
+
+  announcementOptions.value = [
+    { label: 'beep', value: 'beep' },
+    { label: 'demo-congrats', value: 'demo-congrats' },
+    { label: 'custom/bienvenida', value: 'custom/bienvenida' },
+  ]
+
+  timeConditionOptions.value = [
+    { label: 'Sin condición de horario', value: '' },
+    ...tcList.map((item: any) => ({ label: item.name, value: item.name })),
+  ]
+}
+
 const resetForm = () => {
   form.value = {
     did: '',
@@ -407,7 +534,9 @@ const resetForm = () => {
   editingId.value = null
 }
 
-onMounted(() => loadRoutes())
+onMounted(async () => {
+  await Promise.all([loadRoutes(), loadDestinationCatalogs()])
+})
 
 const getDestinationTypeLabel = (type: string) => {
   return destinationTypes.find(t => t.value === type)?.label || type

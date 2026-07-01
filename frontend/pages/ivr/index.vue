@@ -123,7 +123,7 @@
 
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- TAB 1: INFORMACIÓN BÁSICA -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-information-circle"
@@ -146,7 +146,7 @@
           </template>
 
           <!-- TAB 2: MENSAJES -->
-          <template #mensajes="{ item }">
+          <template #mensajes>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-speaker-wave"
@@ -164,6 +164,10 @@
                 />
               </UFormGroup>
 
+              <UFormGroup label="Spoken (Audio adicional)" help="Playback opcional antes del menú principal. Ej: custom/ivr-spoken-principal">
+                <UInput v-model="form.spoken" placeholder="custom/ivr-spoken-principal" />
+              </UFormGroup>
+
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <UFormGroup label="Mensaje - Opción Inválida" help="Se reproduce cuando presionan una opción incorrecta">
                   <UInput v-model="form.invalid_message" placeholder="Opción no válida, intente nuevamente" />
@@ -177,7 +181,7 @@
           </template>
 
           <!-- TAB 3: OPCIONES DE MENÚ -->
-          <template #opciones="{ item }">
+          <template #opciones>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-list-bullet"
@@ -201,7 +205,7 @@
                 </div>
                 
                 <div class="space-y-3 max-h-96 overflow-y-auto">
-                  <div v-for="(key) in Object.keys(form.menu_options)" :key="key" class="border rounded p-3 bg-gray-50 dark:bg-gray-800">
+                  <div v-for="(key) in menuOptionKeys" :key="key" class="border rounded p-3 bg-gray-50 dark:bg-gray-800 space-y-3">
                     <div class="flex justify-between items-center mb-2">
                       <span class="font-semibold">Tecla {{ key }}</span>
                       <UButton
@@ -212,13 +216,47 @@
                         @click="deleteMenuOption(key)"
                       />
                     </div>
-                    <UInput
-                      v-model="form.menu_options[key]"
-                      placeholder="Destino (ej: sales-queue, extension:100, ivr:main)"
-                      size="sm"
-                    />
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <UFormGroup label="Tipo Destino" required>
+                        <USelectMenu
+                          :model-value="getMenuOptionType(key)"
+                          :options="menuDestinationTypes"
+                          value-attribute="value"
+                          option-attribute="label"
+                          @update:model-value="(value) => updateMenuOptionField(key, 'type', String(value))"
+                        />
+                      </UFormGroup>
+
+                      <UFormGroup label="Destino" required class="md:col-span-2">
+                        <USelectMenu
+                          v-if="getDestinationOptionsByType(getMenuOptionType(key)).length"
+                          :model-value="getMenuOption(key).destination"
+                          :options="getDestinationOptionsByType(getMenuOptionType(key))"
+                          value-attribute="value"
+                          option-attribute="label"
+                          searchable
+                          placeholder="Seleccione destino"
+                          @update:model-value="(value) => updateMenuOptionField(key, 'destination', String(value))"
+                        />
+                        <UInput
+                          v-else
+                          :model-value="getMenuOption(key).destination"
+                          placeholder="Destino manual"
+                          @update:model-value="(value) => updateMenuOptionField(key, 'destination', String(value))"
+                        />
+                      </UFormGroup>
+                    </div>
+
+                    <UFormGroup label="Spoken de la opción (opcional)" help="Texto o nombre corto para referencia operativa">
+                      <UInput
+                        :model-value="getMenuOption(key).spoken"
+                        placeholder="Ej: Ventas"
+                        @update:model-value="(value) => updateMenuOptionField(key, 'spoken', String(value))"
+                      />
+                    </UFormGroup>
                   </div>
-                  <div v-if="Object.keys(form.menu_options).length === 0" class="text-center text-gray-500 text-sm py-8">
+                  <div v-if="menuOptionKeys.length === 0" class="text-center text-gray-500 text-sm py-8">
                     No hay opciones configuradas. Haz clic en "Agregar Opción" para crear una.
                   </div>
                 </div>
@@ -227,7 +265,7 @@
           </template>
 
           <!-- TAB 4: CONFIGURACIÓN -->
-          <template #configuracion="{ item }">
+          <template #configuracion>
             <div class="space-y-5 py-4">
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
                 <h4 class="font-medium text-gray-800">Parámetros de Tiempo y Reintentos</h4>
@@ -257,7 +295,8 @@
                   <ul class="text-sm space-y-1">
                     <li><strong>Timeout:</strong> Tiempo que el sistema espera antes de repetir el mensaje</li>
                     <li><strong>Intentos:</strong> Después de alcanzar el máximo, se puede transferir a operadora o colgar</li>
-                    <li><strong>Destinos válidos:</strong> nombre_cola, extension:100, ivr:nombre, voicemail:100</li>
+                    <li><strong>Spoken:</strong> Puede usar un audio adicional para guiar mejor al cliente antes de capturar opciones</li>
+                    <li><strong>Destinos válidos:</strong> Cola, Extensión, IVR, Buzón, Anuncio, Destino Personalizado</li>
                   </ul>
                 </template>
               </UAlert>
@@ -294,13 +333,16 @@ interface IVR {
   name: string
   extension: string
   welcome_message: string
+  spoken: string
   invalid_message: string
   timeout_message: string
   timeout: number
   max_attempts: number
-  menu_options: Record<string, string>
+  menu_options: Record<string, any>
   is_active: boolean
 }
+
+type MenuOptionType = 'queue' | 'extension' | 'ivr' | 'voicemail' | 'announcement' | 'custom_destination'
 
 const ivrs = ref<IVR[]>([])
 const loading = ref(false)
@@ -310,6 +352,11 @@ const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const queueOptions = ref<{ label: string; value: string }[]>([])
+const extensionOptions = ref<{ label: string; value: string }[]>([])
+const ivrOptions = ref<{ label: string; value: string }[]>([])
+const voicemailOptions = ref<{ label: string; value: string }[]>([])
+const customDestinationOptions = ref<{ label: string; value: string }[]>([])
 
 const { apiFetch } = useApi()
 
@@ -326,13 +373,25 @@ const form = ref({
   name: '',
   extension: '',
   welcome_message: '',
+  spoken: '',
   invalid_message: 'Opción no válida, intente nuevamente',
   timeout_message: 'Se agotó el tiempo',
   timeout: 5,
   max_attempts: 3,
-  menu_options: {},
+  menu_options: {} as Record<string, any>,
   is_active: true
 })
+
+const menuDestinationTypes = [
+  { label: 'Cola', value: 'queue' },
+  { label: 'Extensión', value: 'extension' },
+  { label: 'IVR', value: 'ivr' },
+  { label: 'Buzón de Voz', value: 'voicemail' },
+  { label: 'Anuncio', value: 'announcement' },
+  { label: 'Destino Personalizado', value: 'custom_destination' },
+]
+
+const menuOptionKeys = computed(() => Object.keys(form.value.menu_options).sort())
 
 const filteredIVRs = computed(() => {
   return ivrs.value.filter(ivr => {
@@ -346,12 +405,18 @@ const filteredIVRs = computed(() => {
 
 const openCreateModal = () => {
   resetForm()
+  loadDestinationCatalogs()
   isModalOpen.value = true
 }
 
 const editIVR = (ivr: IVR) => {
-  form.value = { ...ivr, menu_options: { ...ivr.menu_options } }
+  form.value = {
+    ...ivr,
+    spoken: ivr.spoken || '',
+    menu_options: normalizeMenuOptions(ivr.menu_options),
+  }
   editingId.value = ivr.id
+  loadDestinationCatalogs()
   isModalOpen.value = true
 }
 
@@ -372,17 +437,21 @@ const loadIVRs = async () => {
 const saveIVR = async () => {
   isSaving.value = true
   error.value = null
+  const payload = {
+    ...form.value,
+    menu_options: normalizeMenuOptions(form.value.menu_options),
+  }
   try {
     if (editingId.value) {
       const { error: saveError } = await apiFetch(`/telephony/ivr/${editingId.value}/`, {
         method: 'PUT',
-        body: form.value
+        body: payload
       })
       if (saveError.value) throw new Error('Error al guardar el IVR')
     } else {
       const { error: saveError } = await apiFetch('/telephony/ivr/', {
         method: 'POST',
-        body: form.value
+        body: payload
       })
       if (saveError.value) throw new Error('Error al guardar el IVR')
     }
@@ -414,6 +483,7 @@ const resetForm = () => {
     name: '',
     extension: '',
     welcome_message: '',
+    spoken: '',
     invalid_message: 'Opción no válida, intente nuevamente',
     timeout_message: 'Se agotó el tiempo',
     timeout: 5,
@@ -425,13 +495,121 @@ const resetForm = () => {
 }
 
 const addMenuOption = () => {
-  const nextKey = String(Object.keys(form.value.menu_options).length + 1)
-  form.value.menu_options[nextKey] = ''
+  const keys = Object.keys(form.value.menu_options).map(k => Number(k)).filter(Number.isFinite)
+  const nextKey = String((keys.length ? Math.max(...keys) : 0) + 1)
+  form.value.menu_options[nextKey] = {
+    type: 'extension',
+    destination: '',
+    spoken: '',
+  }
 }
 
 const deleteMenuOption = (key: string) => {
   delete form.value.menu_options[key]
 }
 
-onMounted(() => loadIVRs())
+const normalizeMenuOptions = (options: Record<string, any> | undefined) => {
+  const normalized: Record<string, any> = {}
+  const source = options || {}
+
+  Object.entries(source).forEach(([digit, option]) => {
+    if (typeof option === 'string') {
+      normalized[digit] = {
+        type: 'extension',
+        destination: option,
+        spoken: '',
+      }
+      return
+    }
+
+    if (option && typeof option === 'object') {
+      normalized[digit] = {
+        type: option.type || 'extension',
+        destination: option.destination || '',
+        spoken: option.spoken || '',
+      }
+      return
+    }
+
+    normalized[digit] = {
+      type: 'extension',
+      destination: '',
+      spoken: '',
+    }
+  })
+
+  return normalized
+}
+
+const getMenuOption = (digit: string) => {
+  const option = form.value.menu_options[digit]
+  if (!option || typeof option !== 'object') {
+    form.value.menu_options[digit] = { type: 'extension', destination: '', spoken: '' }
+  }
+  return form.value.menu_options[digit]
+}
+
+const getMenuOptionType = (digit: string): MenuOptionType => {
+  return getMenuOption(digit).type || 'extension'
+}
+
+const updateMenuOptionField = (digit: string, field: 'type' | 'destination' | 'spoken', value: string) => {
+  const option = getMenuOption(digit)
+  option[field] = value
+  if (field === 'type') {
+    option.destination = ''
+  }
+}
+
+const getDestinationOptionsByType = (type: string) => {
+  switch (type) {
+    case 'queue':
+      return queueOptions.value
+    case 'extension':
+      return extensionOptions.value
+    case 'ivr':
+      return ivrOptions.value.filter(item => item.value !== form.value.extension)
+    case 'voicemail':
+      return voicemailOptions.value
+    case 'custom_destination':
+      return customDestinationOptions.value
+    case 'announcement':
+      return [
+        { label: 'beep', value: 'beep' },
+        { label: 'demo-congrats', value: 'demo-congrats' },
+        { label: 'custom/ivr-bienvenida', value: 'custom/ivr-bienvenida' },
+      ]
+    default:
+      return []
+  }
+}
+
+const loadDestinationCatalogs = async () => {
+  const [ivrRes, queueRes, extRes, vmRes, customRes] = await Promise.all([
+    apiFetch<any>('/telephony/ivr/'),
+    apiFetch<any>('/queues/'),
+    apiFetch<any>('/telephony/extensions/'),
+    apiFetch<any>('/telephony/voicemail/'),
+    apiFetch<any>('/telephony/custom-destinations/'),
+  ])
+
+  const ivrList = Array.isArray(ivrRes.data.value) ? ivrRes.data.value : (ivrRes.data.value?.results || [])
+  const queueList = Array.isArray(queueRes.data.value) ? queueRes.data.value : (queueRes.data.value?.results || [])
+  const extList = Array.isArray(extRes.data.value) ? extRes.data.value : (extRes.data.value?.results || [])
+  const vmList = Array.isArray(vmRes.data.value) ? vmRes.data.value : (vmRes.data.value?.results || [])
+  const customList = Array.isArray(customRes.data.value) ? customRes.data.value : (customRes.data.value?.results || [])
+
+  ivrOptions.value = ivrList.map((item: any) => ({ label: `${item.name} (${item.extension})`, value: item.extension }))
+  queueOptions.value = queueList.map((item: any) => ({ label: `${item.name} (${item.extension || 'sin ext'})`, value: item.name }))
+  extensionOptions.value = extList.map((item: any) => ({ label: `${item.extension} - ${item.name}`, value: item.extension }))
+  voicemailOptions.value = vmList.map((item: any) => ({ label: `${item.mailbox} - ${item.name}`, value: item.mailbox }))
+  customDestinationOptions.value = customList.map((item: any) => ({
+    label: `${item.name} (${item.context},${item.extension},${item.priority})`,
+    value: item.name,
+  }))
+}
+
+onMounted(async () => {
+  await Promise.all([loadIVRs(), loadDestinationCatalogs()])
+})
 </script>

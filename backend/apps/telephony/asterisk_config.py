@@ -10,7 +10,7 @@ import os
 import logging
 from pathlib import Path
 from django.conf import settings
-from .models import Extension, InboundRoute, OutboundRoute, Voicemail, MusicOnHold, TimeCondition, IVR
+from .models import Extension, InboundRoute, OutboundRoute, Voicemail, MusicOnHold, TimeCondition, IVR, CustomDestination
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +269,14 @@ class AsteriskConfigGenerator:
                     config.append(f" same => n,VoiceMail({route.destination}@default)")
                 elif route.destination_type == 'announcement':
                     config.append(f" same => n,Playback({route.destination})")
+                elif route.destination_type == 'custom_destination':
+                    custom_dest = CustomDestination.objects.filter(name=route.destination, is_active=True).first()
+                    if custom_dest:
+                        config.append(
+                            f" same => n,Goto({custom_dest.context},{custom_dest.extension},{custom_dest.priority})"
+                        )
+                    else:
+                        config.append(f" same => n,NoOp(Custom Destination no encontrado: {route.destination})")
                 
                 config.extend([
                     " same => n,Hangup()",
@@ -331,6 +339,9 @@ class AsteriskConfigGenerator:
             
             if ivr_obj.welcome_message:
                 config.append(f" same => n,Playback({ivr_obj.welcome_message})")
+
+            if ivr_obj.spoken:
+                config.append(f" same => n,Playback({ivr_obj.spoken})")
             
             config.extend([
                 f" same => n,Set(TIMEOUT(response)={ivr_obj.timeout})",
@@ -342,14 +353,35 @@ class AsteriskConfigGenerator:
             # Opciones del menú
             if isinstance(ivr_obj.menu_options, dict):
                 for digit, option in ivr_obj.menu_options.items():
-                    dest_type = option.get('type', 'extension')
-                    dest_value = option.get('destination', '')
+                    # Compatibilidad:
+                    # - Formato nuevo: {"1": {"type": "queue", "destination": "ventas"}}
+                    # - Formato legacy: {"1": "100"}
+                    if isinstance(option, dict):
+                        dest_type = option.get('type', 'extension')
+                        dest_value = option.get('destination', '')
+                    else:
+                        dest_type = 'extension'
+                        dest_value = str(option)
+
                     if dest_type == 'queue':
                         config.append(f"exten => {digit},1,Queue({dest_value},tT,,,300)")
                     elif dest_type == 'extension':
                         config.append(f"exten => {digit},1,Dial(PJSIP/{dest_value},30,trg)")
                     elif dest_type == 'ivr':
                         config.append(f"exten => {digit},1,Goto(ivr-{dest_value},s,1)")
+                    elif dest_type == 'voicemail':
+                        config.append(f"exten => {digit},1,VoiceMail({dest_value}@default)")
+                    elif dest_type == 'announcement':
+                        config.append(f"exten => {digit},1,Playback({dest_value})")
+                    elif dest_type == 'custom_destination':
+                        custom_dest = CustomDestination.objects.filter(name=dest_value, is_active=True).first()
+                        if custom_dest:
+                            config.append(
+                                f"exten => {digit},1,Goto({custom_dest.context},{custom_dest.extension},{custom_dest.priority})"
+                            )
+                        else:
+                            config.append(f"exten => {digit},1,NoOp(Custom Destination no encontrado: {dest_value})")
+                            config.append(" same => n,Playback(invalid)")
                     config.append(f" same => n,Hangup()")
             
             # Invalid option
