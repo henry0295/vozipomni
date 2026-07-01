@@ -122,15 +122,15 @@
         </template>
 
         <UTabs :items="formTabs" v-model="activeTab">
-          <!-- TAB 1: INFORMACIÓN BÁSICA -->
-          <template #basica>
+          <!-- TAB 1: SECCIÓN 1 - DATOS BÁSICOS Y AUDIO PRINCIPAL -->
+          <template #seccion1>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-information-circle"
                 color="blue"
                 variant="subtle"
-                title="IVR - Menú de Voz Interactivo"
-                description="Configure un menú telefónico interactivo que permite a los llamantes seleccionar opciones mediante el teclado DTMF."
+                title="Sección 1 - Datos básicos y audio principal"
+                description="Define nombre, descripción, extensión y audio principal del IVR."
               />
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -142,27 +142,45 @@
                   <UInput v-model="form.extension" placeholder="100" />
                 </UFormGroup>
               </div>
+
+              <UFormGroup label="Descripción" help="Comentario opcional para identificar el propósito del IVR">
+                <UTextarea v-model="form.description" :rows="2" placeholder="IVR principal de atención al cliente" />
+              </UFormGroup>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Fuente de Audio Principal" help="Interno: audio ya cargado. Externo: archivo nuevo/referencia externa.">
+                  <USelectMenu
+                    v-model="form.audio_source"
+                    :options="[
+                      { label: 'Archivo interno', value: 'internal' },
+                      { label: 'Archivo externo', value: 'external' }
+                    ]"
+                    value-attribute="value"
+                    option-attribute="label"
+                  />
+                </UFormGroup>
+
+                <UFormGroup
+                  :label="form.audio_source === 'external' ? 'Archivo Externo Principal' : 'Archivo Interno Principal'"
+                  required
+                  help="Nombre/ruta de audio en Asterisk. Ej: custom/ivr-bienvenida"
+                >
+                  <UInput v-model="form.welcome_message" placeholder="custom/ivr-bienvenida" />
+                </UFormGroup>
+              </div>
             </div>
           </template>
 
-          <!-- TAB 2: MENSAJES -->
-          <template #mensajes>
+          <!-- TAB 2: SECCIÓN 2 - TIMEOUT E INVÁLIDOS -->
+          <template #seccion2>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-speaker-wave"
                 color="purple"
                 variant="subtle"
-                title="Mensajes de Audio"
-                description="Configure los mensajes que se reproducirán al llamante en diferentes situaciones."
+                title="Sección 2 - Timeout e inválidos"
+                description="Configura reintentos, audios y destinos de fallback para timeout y opción inválida."
               />
-
-              <UFormGroup label="Mensaje de Bienvenida" required help="Se reproduce al entrar al IVR">
-                <UTextarea 
-                  v-model="form.welcome_message" 
-                  placeholder="Bienvenido a nuestro centro de contacto. Para ventas presione 1, para soporte presione 2..."
-                  :rows="3"
-                />
-              </UFormGroup>
 
               <UFormGroup label="Spoken (Audio adicional)" help="Playback opcional antes del menú principal. Ej: custom/ivr-spoken-principal">
                 <UInput v-model="form.spoken" placeholder="custom/ivr-spoken-principal" />
@@ -177,18 +195,92 @@
                   <UInput v-model="form.timeout_message" placeholder="Se agotó el tiempo de respuesta" />
                 </UFormGroup>
               </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Timeout</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Time out (segundos)" help="Tiempo de espera por DTMF tras el audio principal">
+                    <UInput v-model.number="form.timeout" type="number" min="1" max="60" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Time out retries" help="Cantidad de intentos de timeout antes del destino final">
+                    <UInput v-model.number="form.timeout_retries" type="number" min="1" max="10" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Tipo de destino timeout" required>
+                    <USelectMenu
+                      v-model="form.timeout_destination_type"
+                      :options="menuDestinationTypes"
+                      value-attribute="value"
+                      option-attribute="label"
+                    />
+                  </UFormGroup>
+
+                  <UFormGroup label="Destino timeout" required>
+                    <USelectMenu
+                      v-if="getDestinationOptionsByType(form.timeout_destination_type).length"
+                      v-model="form.timeout_destination"
+                      :options="getDestinationOptionsByType(form.timeout_destination_type)"
+                      value-attribute="value"
+                      option-attribute="label"
+                      searchable
+                      placeholder="Seleccione destino timeout"
+                    />
+                    <UInput
+                      v-else
+                      v-model="form.timeout_destination"
+                      placeholder="Destino manual timeout"
+                    />
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Opción Inválida</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Invalid retries" help="Cantidad de intentos de opción inválida antes del destino final">
+                    <UInput v-model.number="form.invalid_retries" type="number" min="1" max="10" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Tipo de destino inválido" required>
+                    <USelectMenu
+                      v-model="form.invalid_destination_type"
+                      :options="menuDestinationTypes"
+                      value-attribute="value"
+                      option-attribute="label"
+                    />
+                  </UFormGroup>
+
+                  <UFormGroup label="Destino inválido" required class="md:col-span-2">
+                    <USelectMenu
+                      v-if="getDestinationOptionsByType(form.invalid_destination_type).length"
+                      v-model="form.invalid_destination"
+                      :options="getDestinationOptionsByType(form.invalid_destination_type)"
+                      value-attribute="value"
+                      option-attribute="label"
+                      searchable
+                      placeholder="Seleccione destino inválido"
+                    />
+                    <UInput
+                      v-else
+                      v-model="form.invalid_destination"
+                      placeholder="Destino manual inválido"
+                    />
+                  </UFormGroup>
+                </div>
+              </div>
             </div>
           </template>
 
-          <!-- TAB 3: OPCIONES DE MENÚ -->
-          <template #opciones>
+          <!-- TAB 3: SECCIÓN 3 - OPCIONES DTMF -->
+          <template #seccion3>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-list-bullet"
                 color="amber"
                 variant="subtle"
-                title="Opciones del Menú DTMF"
-                description="Configure las teclas y sus destinos. Ejemplo: 1 → Cola de Ventas, 2 → Cola de Soporte, 0 → Operadora."
+                title="Sección 3 - Opciones DTMF"
+                description="Asigne cada tecla (0-9, *, #) a un tipo de destino y un destino específico."
               />
 
               <div class="border border-gray-200 rounded-lg p-4">
@@ -218,6 +310,16 @@
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <UFormGroup label="DTMF" required>
+                        <USelectMenu
+                          :model-value="key"
+                          :options="dtmfKeyOptions"
+                          value-attribute="value"
+                          option-attribute="label"
+                          @update:model-value="(value) => changeMenuOptionKey(key, String(value))"
+                        />
+                      </UFormGroup>
+
                       <UFormGroup label="Tipo Destino" required>
                         <USelectMenu
                           :model-value="getMenuOptionType(key)"
@@ -228,7 +330,7 @@
                         />
                       </UFormGroup>
 
-                      <UFormGroup label="Destino" required class="md:col-span-2">
+                      <UFormGroup label="Destino" required>
                         <USelectMenu
                           v-if="getDestinationOptionsByType(getMenuOptionType(key)).length"
                           :model-value="getMenuOption(key).destination"
@@ -264,79 +366,9 @@
             </div>
           </template>
 
-          <!-- TAB 4: CONFIGURACIÓN -->
-          <template #configuracion>
+          <!-- TAB 4: ESTADO -->
+          <template #estado>
             <div class="space-y-5 py-4">
-              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
-                <h4 class="font-medium text-gray-800">Parámetros de Tiempo y Reintentos</h4>
-                
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <UFormGroup label="Timeout (segundos)" help="Tiempo máximo de espera por una opción">
-                    <UInput v-model.number="form.timeout" type="number" min="1" max="30" />
-                  </UFormGroup>
-
-                  <UFormGroup label="Reintentos por Timeout" help="Intentos por no ingresar DTMF antes de ejecutar el destino timeout">
-                    <UInput v-model.number="form.timeout_retries" type="number" min="1" max="10" />
-                  </UFormGroup>
-
-                  <UFormGroup label="Tipo Destino Timeout" required>
-                    <USelectMenu
-                      v-model="form.timeout_destination_type"
-                      :options="menuDestinationTypes"
-                      value-attribute="value"
-                      option-attribute="label"
-                    />
-                  </UFormGroup>
-
-                  <UFormGroup label="Destino Timeout" required class="md:col-span-2">
-                    <USelectMenu
-                      v-if="getDestinationOptionsByType(form.timeout_destination_type).length"
-                      v-model="form.timeout_destination"
-                      :options="getDestinationOptionsByType(form.timeout_destination_type)"
-                      value-attribute="value"
-                      option-attribute="label"
-                      searchable
-                      placeholder="Seleccione destino para timeout"
-                    />
-                    <UInput
-                      v-else
-                      v-model="form.timeout_destination"
-                      placeholder="Destino manual para timeout"
-                    />
-                  </UFormGroup>
-
-                  <UFormGroup label="Reintentos por Opción Inválida" help="Intentos por tecla inválida antes de ejecutar el destino inválido">
-                    <UInput v-model.number="form.invalid_retries" type="number" min="1" max="10" />
-                  </UFormGroup>
-
-                  <UFormGroup label="Tipo Destino Inválido" required>
-                    <USelectMenu
-                      v-model="form.invalid_destination_type"
-                      :options="menuDestinationTypes"
-                      value-attribute="value"
-                      option-attribute="label"
-                    />
-                  </UFormGroup>
-
-                  <UFormGroup label="Destino Inválido" required class="md:col-span-2">
-                    <USelectMenu
-                      v-if="getDestinationOptionsByType(form.invalid_destination_type).length"
-                      v-model="form.invalid_destination"
-                      :options="getDestinationOptionsByType(form.invalid_destination_type)"
-                      value-attribute="value"
-                      option-attribute="label"
-                      searchable
-                      placeholder="Seleccione destino para opción inválida"
-                    />
-                    <UInput
-                      v-else
-                      v-model="form.invalid_destination"
-                      placeholder="Destino manual para opción inválida"
-                    />
-                  </UFormGroup>
-                </div>
-              </div>
-
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
                 <h4 class="font-medium text-gray-800">Estado</h4>
                 <UCheckbox v-model="form.is_active" label="IVR Activado" />
@@ -426,14 +458,16 @@ const { apiFetch } = useApi()
 const activeTab = ref(0)
 
 const formTabs = [
-  { slot: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
-  { slot: 'mensajes', label: 'Mensajes', icon: 'i-heroicons-chat-bubble-left-right' },
-  { slot: 'opciones', label: 'Opciones de Menú', icon: 'i-heroicons-list-bullet' },
-  { slot: 'configuracion', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+  { slot: 'seccion1', label: 'Sección 1', icon: 'i-heroicons-identification' },
+  { slot: 'seccion2', label: 'Sección 2', icon: 'i-heroicons-adjustments-horizontal' },
+  { slot: 'seccion3', label: 'Sección 3', icon: 'i-heroicons-list-bullet' },
+  { slot: 'estado', label: 'Estado', icon: 'i-heroicons-cog-6-tooth' }
 ]
 
 const form = ref({
   name: '',
+  description: '',
+  audio_source: 'internal',
   extension: '',
   welcome_message: '',
   spoken: '',
@@ -460,7 +494,25 @@ const menuDestinationTypes = [
   { label: 'Destino Personalizado', value: 'custom_destination' },
 ]
 
-const menuOptionKeys = computed(() => Object.keys(form.value.menu_options).sort())
+const dtmfKeyOptions = [
+  { label: '0', value: '0' },
+  { label: '1', value: '1' },
+  { label: '2', value: '2' },
+  { label: '3', value: '3' },
+  { label: '4', value: '4' },
+  { label: '5', value: '5' },
+  { label: '6', value: '6' },
+  { label: '7', value: '7' },
+  { label: '8', value: '8' },
+  { label: '9', value: '9' },
+  { label: '*', value: '*' },
+  { label: '#', value: '#' },
+]
+
+const menuOptionKeys = computed(() => {
+  const order = dtmfKeyOptions.map(item => item.value)
+  return Object.keys(form.value.menu_options).sort((a, b) => order.indexOf(a) - order.indexOf(b))
+})
 
 const filteredIVRs = computed(() => {
   return ivrs.value.filter(ivr => {
@@ -483,6 +535,8 @@ const editIVR = (ivr: IVR) => {
   const invalidRetries = ivr.invalid_retries || ivr.max_attempts || 3
   form.value = {
     ...ivr,
+    description: (ivr as any).description || '',
+    audio_source: 'internal',
     spoken: ivr.spoken || '',
     timeout_retries: timeoutRetries,
     timeout_destination_type: ivr.timeout_destination_type || 'queue',
@@ -517,13 +571,14 @@ const saveIVR = async () => {
   error.value = null
   const timeoutRetries = form.value.timeout_retries || form.value.max_attempts || 3
   const invalidRetries = form.value.invalid_retries || form.value.max_attempts || 3
-  const payload = {
+  const payload: any = {
     ...form.value,
     timeout_retries: timeoutRetries,
     invalid_retries: invalidRetries,
     max_attempts: Math.max(timeoutRetries, invalidRetries),
     menu_options: normalizeMenuOptions(form.value.menu_options),
   }
+  delete payload.audio_source
   try {
     if (editingId.value) {
       const { error: saveError } = await apiFetch(`/telephony/ivr/${editingId.value}/`, {
@@ -564,6 +619,8 @@ const deleteIVR = async (id: number) => {
 const resetForm = () => {
   form.value = {
     name: '',
+    description: '',
+    audio_source: 'internal',
     extension: '',
     welcome_message: '',
     spoken: '',
@@ -584,13 +641,26 @@ const resetForm = () => {
 }
 
 const addMenuOption = () => {
-  const keys = Object.keys(form.value.menu_options).map(k => Number(k)).filter(Number.isFinite)
-  const nextKey = String((keys.length ? Math.max(...keys) : 0) + 1)
-  form.value.menu_options[nextKey] = {
+  const current = new Set(Object.keys(form.value.menu_options))
+  const next = dtmfKeyOptions.find(item => !current.has(item.value))
+  if (!next) {
+    return
+  }
+
+  form.value.menu_options[next.value] = {
     type: 'extension',
     destination: '',
     spoken: '',
   }
+}
+
+const changeMenuOptionKey = (oldKey: string, newKey: string) => {
+  if (oldKey === newKey) return
+  if (form.value.menu_options[newKey]) return
+
+  const option = form.value.menu_options[oldKey]
+  delete form.value.menu_options[oldKey]
+  form.value.menu_options[newKey] = option
 }
 
 const deleteMenuOption = (key: string) => {
