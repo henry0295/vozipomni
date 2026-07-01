@@ -165,7 +165,21 @@
                   required
                   help="Nombre/ruta de audio en Asterisk. Ej: custom/ivr-bienvenida"
                 >
-                  <UInput v-model="form.welcome_message" placeholder="custom/ivr-bienvenida" />
+                  <USelectMenu
+                    v-if="form.audio_source === 'internal' && audioCatalogOptions.length"
+                    v-model="form.welcome_message"
+                    :options="audioCatalogOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                    searchable
+                    :loading="loadingAudioCatalog"
+                    placeholder="Seleccione audio interno"
+                  />
+                  <UInput
+                    v-else
+                    v-model="form.welcome_message"
+                    placeholder="custom/ivr-bienvenida"
+                  />
                 </UFormGroup>
               </div>
             </div>
@@ -409,7 +423,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 definePageMeta({
   middleware: ['auth']
@@ -452,6 +466,8 @@ const extensionOptions = ref<{ label: string; value: string }[]>([])
 const ivrOptions = ref<{ label: string; value: string }[]>([])
 const voicemailOptions = ref<{ label: string; value: string }[]>([])
 const customDestinationOptions = ref<{ label: string; value: string }[]>([])
+const audioCatalogOptions = ref<{ label: string; value: string }[]>([])
+const loadingAudioCatalog = ref(false)
 
 const { apiFetch } = useApi()
 
@@ -527,6 +543,7 @@ const filteredIVRs = computed(() => {
 const openCreateModal = () => {
   resetForm()
   loadDestinationCatalogs()
+  loadAudioCatalog()
   isModalOpen.value = true
 }
 
@@ -549,6 +566,7 @@ const editIVR = (ivr: IVR) => {
   }
   editingId.value = ivr.id
   loadDestinationCatalogs()
+  loadAudioCatalog()
   isModalOpen.value = true
 }
 
@@ -768,7 +786,30 @@ const loadDestinationCatalogs = async () => {
   }))
 }
 
+const loadAudioCatalog = async () => {
+  loadingAudioCatalog.value = true
+  try {
+    const { data, error: fetchError } = await apiFetch<any>(`/telephony/ivr/audio_catalog/?source=${form.value.audio_source}`)
+    if (fetchError.value) {
+      audioCatalogOptions.value = []
+      return
+    }
+
+    const items = Array.isArray(data.value?.items) ? data.value.items : []
+    audioCatalogOptions.value = items.map((item: any) => ({
+      label: String(item.label || item.value || ''),
+      value: String(item.value || item.label || ''),
+    })).filter((item: any) => item.value)
+  } finally {
+    loadingAudioCatalog.value = false
+  }
+}
+
+watch(() => form.value.audio_source, () => {
+  loadAudioCatalog()
+})
+
 onMounted(async () => {
-  await Promise.all([loadIVRs(), loadDestinationCatalogs()])
+  await Promise.all([loadIVRs(), loadDestinationCatalogs(), loadAudioCatalog()])
 })
 </script>

@@ -504,6 +504,62 @@ class IVRViewSet(viewsets.ModelViewSet):
     serializer_class = IVRSerializer
     permission_classes = [IsAdminUserCustom]
 
+    @action(detail=False, methods=['get'])
+    def audio_catalog(self, request):
+        """
+        Catálogo de audios para IVR.
+        Retorna nombres de reproducción Asterisk (sin extensión), útiles para Playback().
+        """
+        import os
+
+        source = (request.query_params.get('source') or 'internal').strip().lower()
+        allowed_ext = {'.wav', '.gsm', '.ulaw', '.alaw', '.sln', '.mp3'}
+        values = set()
+
+        sound_dirs = [
+            '/var/lib/asterisk/sounds',
+            '/var/lib/asterisk/sounds/custom',
+            '/usr/share/asterisk/sounds',
+            '/usr/share/asterisk/sounds/custom',
+        ]
+
+        for base_dir in sound_dirs:
+            if not os.path.isdir(base_dir):
+                continue
+
+            for root, _, files in os.walk(base_dir):
+                for filename in files:
+                    ext = os.path.splitext(filename)[1].lower()
+                    if ext not in allowed_ext:
+                        continue
+
+                    abs_path = os.path.join(root, filename)
+                    rel = os.path.relpath(abs_path, base_dir)
+                    rel_without_ext = os.path.splitext(rel)[0].replace('\\', '/').strip('./')
+                    if not rel_without_ext:
+                        continue
+
+                    # Normalizar a convención Asterisk Playback, priorizando custom/*
+                    if base_dir.endswith('/custom'):
+                        rel_without_ext = f"custom/{rel_without_ext}"
+
+                    values.add(rel_without_ext)
+
+        # También incluir audios ya usados en IVR aunque no estén en FS en este momento.
+        for ivr in IVR.objects.all().only('welcome_message', 'timeout_message', 'invalid_message', 'spoken'):
+            for field_value in [ivr.welcome_message, ivr.timeout_message, ivr.invalid_message, ivr.spoken]:
+                value = (field_value or '').strip()
+                if value:
+                    values.add(value)
+
+        sorted_values = sorted(values)
+        return Response({
+            'source': source,
+            'allow_manual': True,
+            'count': len(sorted_values),
+            'items': [{'label': item, 'value': item} for item in sorted_values],
+        })
+
 
 class ExtensionViewSet(viewsets.ModelViewSet):
     """
