@@ -252,6 +252,7 @@ definePageMeta({
 })
 
 const agentStore = useAgentStore()
+const webRTC = useWebRTC()
 const { getAgents } = useAgents()
 const { requireRole, isAgent } = useAuthorization()
 const colorMode = useColorMode()
@@ -433,6 +434,7 @@ const handleLogin = async () => {
 const handleLogout = async () => {
   if (!confirm('¿Está seguro que desea cerrar la sesión de agente?')) return
 
+  webRTC.unregister()
   await agentStore.logout()
   selectedAgent.value = null
 }

@@ -442,11 +442,21 @@ export const useWebRTC = () => {
   // Desregistrar
   const unregister = () => {
     if (_ua) {
+      lastConfig.value = null
+
+      try {
+        const session = currentSession.value?.session
+        if (session) {
+          session.terminate()
+        }
+      } catch (err) {
+        console.warn('WebRTC: error terminating active session during unregister', err)
+      }
+
       _ua.stop()
       _ua = null
     }
     isRegistered.value = false
-    lastConfig.value = null
     _reconnectAttempts = 0
     
     if (_reconnectTimer) {
@@ -455,10 +465,11 @@ export const useWebRTC = () => {
     }
     
     stopCallTimer()
-    stopHeartbeatvalue = false
+    stopHeartbeat()
     registrationStatus.value = 'disconnected'
     currentSession.value = null
-    stopCallTimer()
+    lastCallError.value = null
+    lastError.value = null
   }
 
   // Timer de llamada
