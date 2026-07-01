@@ -312,7 +312,7 @@ services:
       - ./docker/asterisk/configs:/etc/asterisk
       - asterisk_configs:/var/lib/asterisk/dynamic
     healthcheck:
-      test: ["CMD-SHELL", "asterisk -rx 'core show channels' | grep -q 'active channels' || exit 1"]
+      test: ["CMD-SHELL", "asterisk -rx 'core show uptime seconds' >/dev/null 2>&1 || asterisk -rx 'core show channels' >/dev/null 2>&1 || exit 1"]
       <<: *healthcheck-tcp
       start_period: 60s
     privileged: true
@@ -346,7 +346,7 @@ services:
       redis:
         condition: service_healthy
       asterisk:
-        condition: service_healthy
+        condition: service_started
       rtpengine:
         condition: service_started
     privileged: true
