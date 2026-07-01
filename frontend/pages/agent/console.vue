@@ -437,6 +437,7 @@ const handleLogout = async () => {
   webRTC.unregister()
   await agentStore.logout()
   selectedAgent.value = null
+  await navigateTo('/login')
 }
 
 const handleDispositionSaved = (data: any) => {
