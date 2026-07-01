@@ -1495,16 +1495,23 @@ update_production() {
         grep -v '^$' || true
     log_success "Migraciones aplicadas"
 
-    # 7. Asegurar rol admin correcto
-    log_info "Verificando rol del usuario admin..."
-    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null || true
+    # 7. Asegurar que el usuario admin existe y tiene rol correcto
+    log_info "Verificando usuario admin..."
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<PYEOF 2>/dev/null || true
 from django.contrib.auth import get_user_model
 User = get_user_model()
-updated = User.objects.filter(username='admin', role__in=['agent','analyst']).update(role='admin')
-if updated:
-    print(f'Rol admin corregido para {updated} usuario(s)')
+if not User.objects.filter(username='admin').exists():
+    u = User.objects.create_superuser('admin', 'admin@vozipomni.local', 'admin')
+    u.role = 'admin'
+    u.save(update_fields=['role'])
+    print('Usuario admin creado (contraseña: admin - CAMBIAR)')
 else:
-    print('Rol admin OK')
+    # Verificar y corregir rol si es necesario
+    updated = User.objects.filter(username='admin').exclude(role='admin').update(role='admin')
+    if updated:
+        print(f'Rol admin corregido para {updated} usuario(s)')
+    else:
+        print('Usuario admin OK')
 PYEOF
 
     # 8. Recargar dialplan de Asterisk (recoge cambios en extensions.conf)
