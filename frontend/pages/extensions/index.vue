@@ -125,86 +125,210 @@
       </div>
     </UCard>
 
-    <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" title="Extensión" @close="resetForm">
-      <div class="p-4 space-y-4">
-        <UFormGroup label="Extensión">
-          <UInput v-model="form.extension" placeholder="Ej: 100" />
-        </UFormGroup>
+    <!-- ============================== -->
+    <!-- MODAL CREAR/EDITAR EXTENSIÓN   -->
+    <!-- ============================== -->
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-4xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">
+              {{ editingId ? 'Editar Extensión' : 'Nueva Extensión' }}
+            </h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isModalOpen = false" />
+          </div>
+        </template>
 
-        <UFormGroup label="Nombre">
-          <UInput v-model="form.name" placeholder="Ej: Juan Pérez" />
-        </UFormGroup>
+        <!-- Tabs de secciones -->
+        <UTabs :items="extensionTabs" v-model="activeExtensionTab">
+          <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <!-- Tipo de Extensión -->
+              <UFormGroup label="Tipo de Extensión" required help="Selecciona el dispositivo que usarás para conectarte">
+                <USelectMenu
+                  v-model="form.extension_type"
+                  :options="extensionTypeOptions"
+                  value-attribute="value"
+                  option-attribute="label"
+                  @update:model-value="onTypeChange"
+                />
+              </UFormGroup>
 
-        <UFormGroup label="Tipo de Extensión">
-          <USelect
-            v-model="form.extension_type"
-            :options="[
-              { label: 'SIP (Softphone)', value: 'PJSIP' },
-              { label: 'WebRTC (Navegador)', value: 'WEBRTC' }
-            ]"
-            option-attribute="label"
-            value-attribute="value"
-            @change="onTypeChange"
-          />
-        </UFormGroup>
+              <!-- Descripción del tipo seleccionado -->
+              <UAlert
+                :icon="form.extension_type === 'WEBRTC' ? 'i-heroicons-globe-alt' : 'i-heroicons-device-phone-mobile'"
+                :color="form.extension_type === 'WEBRTC' ? 'blue' : 'green'"
+                variant="subtle"
+                :title="form.extension_type === 'WEBRTC' ? 'WebRTC - Llamadas desde el navegador' : 'SIP - Softphone tradicional'"
+                :description="form.extension_type === 'WEBRTC' 
+                  ? 'RECOMENDADO para agentes que trabajan desde el navegador. Usa WSS (WebSocket Secure) y códecs optimizados (Opus). No requiere configuración de softphone.' 
+                  : 'Para aplicaciones SIP como Zoiper, Linphone, X-Lite. Usa UDP/TCP y códecs tradicionales (ulaw, alaw, g722).'"
+              />
 
-        <UFormGroup label="Contraseña">
-          <UInput v-model="form.secret" type="password" placeholder="Contraseña segura" />
-        </UFormGroup>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Número de Extensión" required help="Ej: 100, 101, 1001">
+                  <UInput v-model="form.extension" placeholder="100" />
+                </UFormGroup>
 
-        <UFormGroup label="Transporte">
-          <USelect
-            v-model="form.transport"
-            :options="[
-              { label: 'UDP (Softphone)', value: 'transport-udp' },
-              { label: 'TCP', value: 'transport-tcp' },
-              { label: 'WSS (WebRTC)', value: 'transport-wss' }
-            ]"
-            option-attribute="label"
-            value-attribute="value"
-          />
-        </UFormGroup>
+                <UFormGroup label="Nombre Completo" required help="Nombre del usuario o agente">
+                  <UInput v-model="form.name" placeholder="Juan Pérez" />
+                </UFormGroup>
+              </div>
 
-        <UFormGroup label="Contexto">
-          <USelect
-            v-model="form.context"
-            :options="[
-              { label: 'from-internal', value: 'from-internal' },
-              { label: 'from-external', value: 'from-external' },
-              { label: 'custom', value: 'custom' }
-            ]"
-            option-attribute="label"
-            value-attribute="value"
-          />
-        </UFormGroup>
+              <UFormGroup label="Caller ID" help="Identificación mostrada en llamadas. Formato: Nombre <Número>">
+                <UInput v-model="form.callerid" placeholder="Juan Perez <100>" />
+              </UFormGroup>
 
-        <UFormGroup label="Caller ID">
-          <UInput v-model="form.callerid" placeholder="Ej: 100 <2001234567>" />
-        </UFormGroup>
+              <div class="flex items-center space-x-4 pt-2">
+                <UCheckbox v-model="form.is_active" label="Extensión Activa" />
+              </div>
+            </div>
+          </template>
 
-        <UFormGroup label="Email">
-          <UInput v-model="form.email" type="email" placeholder="usuario@example.com" />
-        </UFormGroup>
+          <!-- ===== TAB 2: AUTENTICACIÓN ===== -->
+          <template #autenticacion="{ item }">
+            <div class="space-y-5 py-4">
+              <!-- Sección de credenciales -->
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-key" class="text-blue-500" />
+                  <h4 class="font-medium text-gray-800">Credenciales SIP</h4>
+                </div>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.voicemail_enabled" label="Habilitar Buzón de Voz" />
-        </UFormGroup>
+                <UFormGroup label="Contraseña SIP" required help="Mínimo 8 caracteres. Usa letras, números y símbolos.">
+                  <UInput v-model="form.secret" type="password" placeholder="••••••••" />
+                  <template #hint>
+                    <UButton 
+                      size="xs" 
+                      color="gray" 
+                      variant="ghost"
+                      @click="generatePassword"
+                    >
+                      Generar contraseña segura
+                    </UButton>
+                  </template>
+                </UFormGroup>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.is_active" label="Activada" />
-        </UFormGroup>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Transporte" help="Auto-seleccionado según tipo">
+                    <USelectMenu
+                      v-model="form.transport"
+                      :options="transportOptions"
+                      value-attribute="value"
+                      option-attribute="label"
+                      :disabled="form.extension_type === 'WEBRTC'"
+                    />
+                  </UFormGroup>
 
-        <div class="flex gap-2 pt-4">
-          <UButton color="primary" @click="saveExtension" :loading="isSaving">
-            Guardar
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
-            Cancelar
-          </UButton>
-        </div>
-      </div>
-    </USlideover>
+                  <UFormGroup label="Máx. Contactos" help="Dispositivos simultáneos">
+                    <UInput v-model.number="form.max_contacts" type="number" min="1" max="5" />
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <!-- Contexto de marcación -->
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-map" class="text-green-500" />
+                  <h4 class="font-medium text-gray-800">Contexto de Marcación</h4>
+                </div>
+
+                <UFormGroup label="Contexto" help="Define qué puede marcar esta extensión">
+                  <USelectMenu
+                    v-model="form.context"
+                    :options="contextOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                  />
+                </UFormGroup>
+
+                <UAlert 
+                  icon="i-heroicons-information-circle" 
+                  color="blue" 
+                  variant="subtle"
+                  description="from-internal permite llamadas internas y salientes. from-external solo llamadas entrantes. custom requiere dialplan personalizado."
+                />
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== TAB 3: CÓDECS Y AVANZADO ===== -->
+          <template #avanzado="{ item }">
+            <div class="space-y-5 py-4">
+              <UFormGroup label="Códecs de Audio" help="Orden de preferencia, separados por coma">
+                <UInput v-model="form.codecs" placeholder="ulaw,alaw,g722" />
+              </UFormGroup>
+
+              <UAlert 
+                icon="i-heroicons-speaker-wave" 
+                color="blue" 
+                variant="subtle"
+                title="Códecs Recomendados"
+              >
+                <template #description>
+                  <ul class="list-disc list-inside text-sm space-y-1">
+                    <li><strong>WebRTC:</strong> opus,ulaw,alaw (Opus para mejor calidad)</li>
+                    <li><strong>SIP/Softphone:</strong> ulaw,alaw,g722 (compatibilidad máxima)</li>
+                    <li><strong>G.722:</strong> HD voice (mayor ancho de banda)</li>
+                  </ul>
+                </template>
+              </UAlert>
+            </div>
+          </template>
+
+          <!-- ===== TAB 4: BUZÓN DE VOZ ===== -->
+          <template #buzon="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="flex items-center space-x-4">
+                <UCheckbox v-model="form.voicemail_enabled" label="Habilitar Buzón de Voz" />
+              </div>
+
+              <div v-if="form.voicemail_enabled" class="space-y-4 border border-blue-200 bg-blue-50 rounded-lg p-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-envelope" class="text-blue-600" />
+                  <h4 class="font-medium text-blue-800">Configuración del Buzón</h4>
+                </div>
+
+                <UFormGroup 
+                  label="Email para Notificaciones" 
+                  help="Recibirá grabaciones de mensajes de voz"
+                  :required="form.voicemail_enabled"
+                >
+                  <UInput v-model="form.email" type="email" placeholder="usuario@empresa.com" />
+                </UFormGroup>
+
+                <UAlert 
+                  icon="i-heroicons-information-circle" 
+                  color="blue" 
+                  variant="subtle"
+                  description="Los mensajes de voz se enviarán como archivos adjuntos al email configurado. El usuario puede acceder marcando *97 desde su extensión."
+                />
+              </div>
+
+              <UAlert 
+                v-else
+                icon="i-heroicons-no-symbol" 
+                color="gray" 
+                variant="subtle"
+                description="El buzón de voz está deshabilitado. Las llamadas no contestadas seguirán el enrutamiento configurado."
+              />
+            </div>
+          </template>
+        </UTabs>
+
+        <template #footer>
+          <div class="flex justify-end gap-3">
+            <UButton color="gray" variant="outline" @click="isModalOpen = false" :disabled="isSaving">
+              Cancelar
+            </UButton>
+            <UButton color="sky" @click="saveExtension" :loading="isSaving">
+              {{ editingId ? 'Guardar Cambios' : 'Crear Extensión' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -237,8 +361,34 @@ const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const activeExtensionTab = ref(0)
 
 const { apiFetch } = useApi()
+
+// Opciones para tabs del modal
+const extensionTabs = [
+  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
+  { key: 'autenticacion', label: 'Autenticación', icon: 'i-heroicons-key' },
+  { key: 'avanzado', label: 'Códecs y Avanzado', icon: 'i-heroicons-cog' },
+  { key: 'buzon', label: 'Buzón de Voz', icon: 'i-heroicons-envelope' }
+]
+
+const extensionTypeOptions = [
+  { label: 'SIP (Softphone - Zoiper, Linphone, X-Lite)', value: 'PJSIP' },
+  { label: 'WebRTC (Navegador - Agentes web)', value: 'WEBRTC' }
+]
+
+const transportOptions = [
+  { label: 'UDP (Predeterminado)', value: 'transport-udp' },
+  { label: 'TCP', value: 'transport-tcp' },
+  { label: 'WSS (WebRTC)', value: 'transport-wss' }
+]
+
+const contextOptions = [
+  { label: 'from-internal (Llamadas internas y salientes)', value: 'from-internal' },
+  { label: 'from-external (Solo llamadas entrantes)', value: 'from-external' },
+  { label: 'custom (Personalizado)', value: 'custom' }
+]
 
 const form = ref({
   extension: '',
@@ -254,6 +404,17 @@ const form = ref({
   max_contacts: 1,
   codecs: 'ulaw,alaw,g722'
 })
+
+// Generar contraseña segura
+const generatePassword = () => {
+  const length = 12
+  const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'
+  let password = ''
+  for (let i = 0; i < length; i++) {
+    password += charset.charAt(Math.floor(Math.random() * charset.length))
+  }
+  form.value.secret = password
+}
 
 // Auto-ajustar transport al cambiar tipo de extensión
 const onTypeChange = () => {

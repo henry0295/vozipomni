@@ -126,86 +126,219 @@
       </div>
     </UCard>
 
-    <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" title="Cola de Llamadas" @close="resetForm">
-      <div class="p-4 space-y-4">
-        <UFormGroup label="Nombre" required>
-          <UInput v-model="form.name" placeholder="Ej: Soporte General" />
-        </UFormGroup>
+    <!-- ============================== -->
+    <!-- MODAL CREAR/EDITAR COLA        -->
+    <!-- ============================== -->
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-5xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">
+              {{ editingId ? 'Editar Cola' : 'Nueva Cola de Llamadas' }}
+            </h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isModalOpen = false" />
+          </div>
+        </template>
 
-        <UFormGroup label="Extensión" required help="Extensión para discar la cola">
-          <UInput v-model="form.extension" placeholder="Ej: 500" />
-        </UFormGroup>
+        <!-- Tabs de secciones -->
+        <UTabs :items="queueTabs" v-model="activeQueueTab">
+          <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Nombre de la Cola" required help="Nombre descriptivo para la cola">
+                  <UInput v-model="form.name" placeholder="Soporte General" />
+                </UFormGroup>
 
-        <UFormGroup label="Descripción">
-          <UTextarea v-model="form.description" placeholder="Descripción de la cola" :rows="2" />
-        </UFormGroup>
+                <UFormGroup label="Extensión" required help="Número para acceder a la cola">
+                  <UInput v-model="form.extension" placeholder="500" />
+                </UFormGroup>
+              </div>
 
-        <UFormGroup label="Estrategia">
-          <USelect
-            v-model="form.strategy"
-            :options="strategyOptions"
-            option-attribute="label"
-            value-attribute="value"
-          />
-        </UFormGroup>
+              <UFormGroup label="Descripción">
+                <UTextarea v-model="form.description" placeholder="Descripción de la cola" :rows="3" />
+              </UFormGroup>
 
-        <div class="grid grid-cols-2 gap-4">
-          <UFormGroup label="Timeout (seg)" help="Tiempo de timbre por agente">
-            <UInput v-model.number="form.timeout" type="number" min="5" max="300" />
-          </UFormGroup>
+              <!-- Estrategia de distribución -->
+              <UFormGroup label="Estrategia de Distribución" required help="Cómo se distribuyen las llamadas entre agentes">
+                <USelectMenu
+                  v-model="form.strategy"
+                  :options="strategyOptions"
+                  value-attribute="value"
+                  option-attribute="label"
+                />
+              </UFormGroup>
 
-          <UFormGroup label="Reintentar (seg)" help="Espera antes de reintentar">
-            <UInput v-model.number="form.retry" type="number" min="0" max="60" />
-          </UFormGroup>
-        </div>
+              <!-- Descripción de estrategias -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <UAlert 
+                  icon="i-heroicons-bell-alert" 
+                  color="purple" 
+                  variant="subtle"
+                  title="Ring All"
+                  description="Timbran todos los agentes simultáneamente. El primero en contestar toma la llamada."
+                />
+                <UAlert 
+                  icon="i-heroicons-arrow-path" 
+                  color="blue" 
+                  variant="subtle"
+                  title="Round Robin"
+                  description="Distribución circular con memoria. Recuerda el último agente que contestó."
+                />
+                <UAlert 
+                  icon="i-heroicons-chart-bar" 
+                  color="green" 
+                  variant="subtle"
+                  title="Fewest Calls"
+                  description="Prioriza al agente con menos llamadas atendidas."
+                />
+                <UAlert 
+                  icon="i-heroicons-clock" 
+                  color="orange" 
+                  variant="subtle"
+                  title="Least Recent"
+                  description="Llama al agente que más tiempo lleva sin atender una llamada."
+                />
+              </div>
 
-        <div class="grid grid-cols-2 gap-4">
-          <UFormGroup label="Máx. Espera (seg)" help="Tiempo máximo en cola">
-            <UInput v-model.number="form.max_wait_time" type="number" min="0" max="3600" />
-          </UFormGroup>
+              <div class="flex items-center space-x-4 pt-2">
+                <UCheckbox v-model="form.is_active" label="Cola Activa" />
+              </div>
+            </div>
+          </template>
 
-          <UFormGroup label="Máx. Llamadas" help="0 = ilimitado">
-            <UInput v-model.number="form.max_callers" type="number" min="0" />
-          </UFormGroup>
-        </div>
+          <!-- ===== TAB 2: TIEMPOS Y LÍMITES ===== -->
+          <template #tiempos="{ item }">
+            <div class="space-y-5 py-4">
+              <!-- Tiempos de timbre -->
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-clock" class="text-blue-500" />
+                  <h4 class="font-medium text-gray-800">Tiempos de Timbre</h4>
+                </div>
 
-        <div class="grid grid-cols-2 gap-4">
-          <UFormGroup label="Frecuencia Anuncio (seg)">
-            <UInput v-model.number="form.announce_frequency" type="number" min="0" />
-          </UFormGroup>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Timeout (segundos)" help="Tiempo que timbra en cada agente">
+                    <UInput v-model.number="form.timeout" type="number" min="5" max="300" />
+                  </UFormGroup>
 
-          <UFormGroup label="Nivel Servicio (seg)">
-            <UInput v-model.number="form.service_level" type="number" min="0" />
-          </UFormGroup>
-        </div>
+                  <UFormGroup label="Reintentar (segundos)" help="Pausa antes de volver a intentar">
+                    <UInput v-model.number="form.retry" type="number" min="0" max="60" />
+                  </UFormGroup>
+                </div>
 
-        <UFormGroup label="Wrap-up (seg)" help="Tiempo post-llamada antes de recibir otra">
-          <UInput v-model.number="form.wrap_up_time" type="number" min="0" />
-        </UFormGroup>
+                <UAlert 
+                  icon="i-heroicons-information-circle" 
+                  color="blue" 
+                  variant="subtle"
+                  description="Timeout: tiempo que suena en cada agente (30s recomendado). Retry: pausa entre intentos (5s recomendado)."
+                />
+              </div>
 
-        <UFormGroup label="Música en Espera">
-          <UInput v-model="form.music_on_hold" placeholder="default" />
-        </UFormGroup>
+              <!-- Límites -->
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-shield-check" class="text-green-500" />
+                  <h4 class="font-medium text-gray-800">Límites de Cola</h4>
+                </div>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.announce_holdtime" label="Anunciar tiempo de espera" />
-        </UFormGroup>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Tiempo Máximo de Espera (seg)" help="0 = sin límite">
+                    <UInput v-model.number="form.max_wait_time" type="number" min="0" max="3600" />
+                  </UFormGroup>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.is_active" label="Cola Activa" />
-        </UFormGroup>
+                  <UFormGroup label="Máximo de Llamadas en Cola" help="0 = ilimitado">
+                    <UInput v-model.number="form.max_callers" type="number" min="0" />
+                  </UFormGroup>
+                </div>
 
-        <div class="flex gap-2 pt-4">
-          <UButton color="primary" @click="saveQueue" :loading="isSaving">
-            Guardar
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
-            Cancelar
-          </UButton>
-        </div>
-      </div>
-    </USlideover>
+                <UAlert 
+                  icon="i-heroicons-exclamation-triangle" 
+                  color="yellow" 
+                  variant="subtle"
+                  description="Si se supera el tiempo o número máximo, la llamada seguirá el enrutamiento de overflow configurado."
+                />
+              </div>
+
+              <!-- Service Level y Wrap-up -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Nivel de Servicio (seg)" help="Meta de tiempo de respuesta para métricas">
+                  <UInput v-model.number="form.service_level" type="number" min="0" />
+                </UFormGroup>
+
+                <UFormGroup label="Wrap-up Time (seg)" help="Tiempo post-llamada antes de recibir otra">
+                  <UInput v-model.number="form.wrap_up_time" type="number" min="0" />
+                </UFormGroup>
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== TAB 3: ANUNCIOS Y MÚSICA ===== -->
+          <template #anuncios="{ item }">
+            <div class="space-y-5 py-4">
+              <!-- Anuncios -->
+              <div class="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-speaker-wave" class="text-blue-600" />
+                  <h4 class="font-medium text-blue-800">Configuración de Anuncios</h4>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Frecuencia de Anuncios (seg)" help="0 = sin anuncios">
+                    <UInput v-model.number="form.announce_frequency" type="number" min="0" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Anuncios Periódicos (seg)" help="Frecuencia de anuncios repetitivos">
+                    <UInput v-model.number="form.periodic_announce_frequency" type="number" min="0" />
+                  </UFormGroup>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                  <UCheckbox v-model="form.announce_holdtime" label="Anunciar tiempo de espera estimado" />
+                </div>
+
+                <UAlert 
+                  icon="i-heroicons-information-circle" 
+                  color="blue" 
+                  variant="subtle"
+                  description="Los anuncios periódicos informan al cliente sobre su posición en cola y tiempo estimado de espera."
+                />
+              </div>
+
+              <!-- Música en espera -->
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-musical-note" class="text-purple-500" />
+                  <h4 class="font-medium text-gray-800">Música en Espera</h4>
+                </div>
+
+                <UFormGroup label="Clase de MOH" help="Categoría de música on hold">
+                  <UInput v-model="form.music_on_hold" placeholder="default" />
+                </UFormGroup>
+
+                <UAlert 
+                  icon="i-heroicons-musical-note" 
+                  color="purple" 
+                  variant="subtle"
+                  description="La música en espera se reproduce mientras el llamante aguarda a ser atendido. Puedes configurar clases personalizadas en /var/lib/asterisk/moh/"
+                />
+              </div>
+            </div>
+          </template>
+        </UTabs>
+
+        <template #footer>
+          <div class="flex justify-end gap-3">
+            <UButton color="gray" variant="outline" @click="isModalOpen = false" :disabled="isSaving">
+              Cancelar
+            </UButton>
+            <UButton color="sky" @click="saveQueue" :loading="isSaving">
+              {{ editingId ? 'Guardar Cambios' : 'Crear Cola' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -255,8 +388,16 @@ const statusFilter = ref('')
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const activeQueueTab = ref(0)
 
 const { apiFetch } = useApi()
+
+// Tabs del modal
+const queueTabs = [
+  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-queue-list' },
+  { key: 'tiempos', label: 'Tiempos y Límites', icon: 'i-heroicons-clock' },
+  { key: 'anuncios', label: 'Anuncios y Música', icon: 'i-heroicons-speaker-wave' }
+]
 
 const defaultForm = () => ({
   name: '',

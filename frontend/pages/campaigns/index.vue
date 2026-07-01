@@ -123,89 +123,158 @@
       No hay campaÃ±as configuradas
     </div>
 
-    <!-- Modal: Nueva CampaÃ±a -->
-    <UModal v-model="showCreateModal" :prevent-close="saving">
+    <!-- ============================== -->
+    <!-- MODAL: NUEVA CAMPAÑA           -->
+    <!-- ============================== -->
+    <UModal v-model="showCreateModal" :prevent-close="saving" :ui="{ width: 'sm:max-w-5xl' }">
       <UCard>
         <template #header>
           <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold">Nueva CampaÃ±a</h3>
+            <h3 class="text-lg font-semibold">Nueva Campaña</h3>
             <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="showCreateModal = false" />
           </div>
         </template>
 
-        <form class="space-y-4" @submit.prevent="createCampaignAction">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <UFormGroup label="Nombre *" class="col-span-2">
-              <UInput v-model="newCampaign.name" placeholder="Nombre de la campaÃ±a" />
-            </UFormGroup>
+        <!-- Tabs de secciones -->
+        <UTabs :items="campaignTabs" v-model="activeCampaignTab">
+          <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Nombre de la Campaña" required class="col-span-2">
+                  <UInput v-model="newCampaign.name" placeholder="Nombre descriptivo de la campaña" />
+                </UFormGroup>
 
-            <UFormGroup label="DescripciÃ³n" class="col-span-2">
-              <UTextarea v-model="newCampaign.description" placeholder="DescripciÃ³n opcional" :rows="2" />
-            </UFormGroup>
+                <UFormGroup label="Descripción" class="col-span-2">
+                  <UTextarea v-model="newCampaign.description" placeholder="Descripción opcional" :rows="3" />
+                </UFormGroup>
 
-            <UFormGroup label="Tipo de campaÃ±a *">
-              <USelect
-                v-model="newCampaign.campaign_type"
-                :options="campaignTypeOptions"
-                option-attribute="label"
-                value-attribute="value"
+                <UFormGroup label="Tipo de Campaña" required>
+                  <USelectMenu
+                    v-model="newCampaign.campaign_type"
+                    :options="campaignTypeOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                  />
+                </UFormGroup>
+
+                <UFormGroup label="Tipo de Marcación" required>
+                  <USelectMenu
+                    v-model="newCampaign.dialer_type"
+                    :options="dialerTypeOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                  />
+                </UFormGroup>
+              </div>
+
+              <!-- Alertas explicativas -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <UAlert 
+                  icon="i-heroicons-phone-arrow-up-right" 
+                  color="blue" 
+                  variant="subtle"
+                  title="Campaña Outbound"
+                  description="El sistema marca automáticamente a los contactos de la lista configurada."
+                />
+                <UAlert 
+                  icon="i-heroicons-bolt" 
+                  color="green" 
+                  variant="subtle"
+                  title="Marcador Progresivo"
+                  description="Marca contactos de forma automática cuando hay agentes disponibles. Balance óptimo entre eficiencia y experiencia."
+                />
+              </div>
+            </div>
+          </template>
+
+          <!-- ===== TAB 2: RECURSOS ===== -->
+          <template #recursos="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Cola (ACD)" help="Cola de agentes para esta campaña">
+                  <USelectMenu
+                    v-model="newCampaign.queue"
+                    :options="queueOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                    placeholder="Seleccionar cola"
+                  />
+                </UFormGroup>
+
+                <UFormGroup label="Lista de Contactos" help="Base de datos a marcar">
+                  <USelectMenu
+                    v-model="newCampaign.contact_list"
+                    :options="contactListOptions"
+                    value-attribute="value"
+                    option-attribute="label"
+                    placeholder="Seleccionar lista"
+                  />
+                </UFormGroup>
+              </div>
+
+              <UAlert 
+                icon="i-heroicons-information-circle" 
+                color="blue" 
+                variant="subtle"
+                description="Asegúrate de tener una cola con agentes asignados y una lista de contactos cargada antes de iniciar la campaña."
               />
-            </UFormGroup>
+            </div>
+          </template>
 
-            <UFormGroup label="Tipo de marcaciÃ³n">
-              <USelect
-                v-model="newCampaign.dialer_type"
-                :options="dialerTypeOptions"
-                option-attribute="label"
-                value-attribute="value"
+          <!-- ===== TAB 3: PROGRAMACIÓN ===== -->
+          <template #programacion="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Fecha de Inicio" help="Cuándo inicia la campaña">
+                  <UInput v-model="newCampaign.start_date" type="date" />
+                </UFormGroup>
+
+                <UFormGroup label="Fecha de Fin" help="Cuándo finaliza la campaña">
+                  <UInput v-model="newCampaign.end_date" type="date" />
+                </UFormGroup>
+              </div>
+
+              <UAlert 
+                icon="i-heroicons-calendar" 
+                color="yellow" 
+                variant="subtle"
+                description="Puedes dejar las fechas vacías para campaña indefinida. La campaña se pausará automáticamente al llegar a la fecha de fin."
               />
-            </UFormGroup>
+            </div>
+          </template>
 
-            <UFormGroup label="Cola (ACD)">
-              <USelect
-                v-model="newCampaign.queue"
-                :options="queueOptions"
-                option-attribute="label"
-                value-attribute="value"
-                placeholder="Seleccionar cola"
+          <!-- ===== TAB 4: CONFIGURACIÓN AVANZADA ===== -->
+          <template #avanzado="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Llamadas Simultáneas Máx." help="Cuántas llamadas en paralelo">
+                  <UInput v-model.number="newCampaign.max_concurrent_calls" type="number" min="1" max="100" />
+                </UFormGroup>
+
+                <UFormGroup label="Intentos por Contacto" help="Reintentos antes de marcar como fallido">
+                  <UInput v-model.number="newCampaign.max_attempts" type="number" min="1" max="10" />
+                </UFormGroup>
+              </div>
+
+              <UAlert 
+                icon="i-heroicons-cog" 
+                color="purple" 
+                variant="subtle"
+                title="Configuración de Rendimiento"
+                description="Ajusta las llamadas simultáneas según tu capacidad de agentes y líneas disponibles. Más llamadas = mayor throughput pero requiere más recursos."
               />
-            </UFormGroup>
-
-            <UFormGroup label="Lista de contactos">
-              <USelect
-                v-model="newCampaign.contact_list"
-                :options="contactListOptions"
-                option-attribute="label"
-                value-attribute="value"
-                placeholder="Seleccionar lista"
-              />
-            </UFormGroup>
-
-            <UFormGroup label="Fecha inicio">
-              <UInput v-model="newCampaign.start_date" type="date" />
-            </UFormGroup>
-
-            <UFormGroup label="Fecha fin">
-              <UInput v-model="newCampaign.end_date" type="date" />
-            </UFormGroup>
-
-            <UFormGroup label="Llamadas simultÃ¡neas mÃ¡x">
-              <UInput v-model.number="newCampaign.max_concurrent_calls" type="number" min="1" max="100" />
-            </UFormGroup>
-
-            <UFormGroup label="Intentos por contacto">
-              <UInput v-model.number="newCampaign.max_attempts" type="number" min="1" max="10" />
-            </UFormGroup>
-          </div>
-        </form>
+            </div>
+          </template>
+        </UTabs>
 
         <template #footer>
           <div class="flex justify-end gap-3">
             <UButton color="gray" variant="outline" :disabled="saving" @click="showCreateModal = false">
               Cancelar
             </UButton>
-            <UButton :loading="saving" @click="createCampaignAction">
-              Crear campaÃ±a
+            <UButton color="sky" :loading="saving" @click="createCampaignAction">
+              Crear Campaña
             </UButton>
           </div>
         </template>
@@ -220,6 +289,7 @@ definePageMeta({ middleware: ['auth'] })
 const toast = useToast()
 const showCreateModal = ref(false)
 const activeTab = ref(0)
+const activeCampaignTab = ref(0)
 const loading = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
@@ -230,6 +300,14 @@ const tabs = [
   { label: 'Pausadas', value: 'paused' },
   { label: 'Completadas', value: 'completed' },
   { label: 'Todas', value: 'all' }
+]
+
+// Tabs del modal de creación
+const campaignTabs = [
+  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-information-circle' },
+  { key: 'recursos', label: 'Recursos', icon: 'i-heroicons-user-group' },
+  { key: 'programacion', label: 'Programación', icon: 'i-heroicons-calendar' },
+  { key: 'avanzado', label: 'Configuración Avanzada', icon: 'i-heroicons-cog' }
 ]
 
 const emptyForm = () => ({
