@@ -92,24 +92,6 @@ class Call(models.Model):
         if self.end_time and self.start_time:
             return int((self.end_time - self.start_time).total_seconds())
         return 0
-            models.Index(fields=['campaign', 'start_time'], name='calls_campaig_a1fb2d_idx'),
-            # Índices de rendimiento (migración 0010)
-            models.Index(fields=['start_time', 'status'], name='calls_start_status_idx'),
-            models.Index(fields=['agent', 'start_time', 'status'], name='calls_agent_time_idx'),
-            models.Index(fields=['campaign', 'disposition'], name='calls_campaign_disp_idx'),
-            models.Index(fields=['unique_id'], name='calls_uniqueid_idx'),
-            models.Index(fields=['direction', 'status', 'start_time'], name='calls_dir_status_time_idx'),
-        ]
-    
-    def __str__(self):
-        return f"{self.call_id} - {self.caller_id} -> {self.called_number}"
-    
-    @property
-    def duration(self):
-        """Duración total de la llamada"""
-        if self.end_time and self.start_time:
-            return int((self.end_time - self.start_time).total_seconds())
-        return 0
 
 
 class SIPTrunk(models.Model):
