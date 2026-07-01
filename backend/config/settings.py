@@ -7,21 +7,18 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 _SECRET_KEY_DEFAULT = 'vozipomni-insecure-secret-key-change-me'
-SECRET_KEY = config('SECRET_KEY', default='')
-if not SECRET_KEY:
-    raise RuntimeError(
-        'SECRET_KEY is required. '
-        'Generate one with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())" '
-        'and add it to your .env file.'
-    )
-if SECRET_KEY == _SECRET_KEY_DEFAULT:
-    raise RuntimeError(
-        'SECRET_KEY is set to the insecure default value. '
-        'Set a strong SECRET_KEY in your .env file before running.'
-    )
+SECRET_KEY = config('SECRET_KEY', default=_SECRET_KEY_DEFAULT)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
+
+# Validar SECRET_KEY en producción
+if not DEBUG and SECRET_KEY == _SECRET_KEY_DEFAULT:
+    raise RuntimeError(
+        'SECRET_KEY is set to the insecure default value. '
+        'Set a strong SECRET_KEY in your .env file before running in production. '
+        'Generate one with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
+    )
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 # Agregar automáticamente la IP del servidor (inyectada por deploy.sh como VOZIPOMNI_IPV4)
@@ -115,13 +112,19 @@ if _db_url:
     else:
         _DB_NAME = config('DB_NAME', default='vozipomni')
         _DB_USER = config('DB_USER', default='vozipomni_user')
+        # Compatibilidad: acepta contraseñas existentes
         _DB_PASS = config('DB_PASSWORD', default='')
+        if not _DB_PASS:
+            _DB_PASS = config('POSTGRES_PASSWORD', default='')
         _DB_HOST = config('DB_HOST', default='postgres')
         _DB_PORT = config('DB_PORT', default='5432')
 else:
     _DB_NAME = config('DB_NAME', default='vozipomni')
     _DB_USER = config('DB_USER', default='vozipomni_user')
+    # Compatibilidad: acepta contraseñas existentes o de POSTGRES_PASSWORD
     _DB_PASS = config('DB_PASSWORD', default='')
+    if not _DB_PASS:
+        _DB_PASS = config('POSTGRES_PASSWORD', default='')
     _DB_HOST = config('DB_HOST', default='postgres')
     _DB_PORT = config('DB_PORT', default='5432')
 
