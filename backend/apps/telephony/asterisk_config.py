@@ -329,6 +329,29 @@ class AsteriskConfigGenerator:
         # IVRs dinámicos
         ivrs = IVR.objects.filter(is_active=True)
         for ivr_obj in ivrs:
+            def append_ivr_route(dest_type, dest_value, first_step):
+                if dest_type == 'queue':
+                    config.append(f"{first_step},Queue({dest_value},tT,,,300)")
+                elif dest_type == 'extension':
+                    config.append(f"{first_step},Dial(PJSIP/{dest_value},30,trg)")
+                elif dest_type == 'ivr':
+                    config.append(f"{first_step},Goto(ivr-{dest_value},s,1)")
+                elif dest_type == 'voicemail':
+                    config.append(f"{first_step},VoiceMail({dest_value}@default)")
+                elif dest_type == 'announcement':
+                    config.append(f"{first_step},Playback({dest_value})")
+                elif dest_type == 'custom_destination':
+                    custom_dest = CustomDestination.objects.filter(name=dest_value, is_active=True).first()
+                    if custom_dest:
+                        config.append(
+                            f"{first_step},Goto({custom_dest.context},{custom_dest.extension},{custom_dest.priority})"
+                        )
+                    else:
+                        config.append(f"{first_step},NoOp(Custom Destination no encontrado: {dest_value})")
+                        config.append(" same => n,Playback(invalid)")
+                else:
+                    config.append(f"{first_step},NoOp(Tipo destino no soportado: {dest_type})")
+
             config.extend([
                 "",
                 f"; ====== IVR: {ivr_obj.name} ======",
@@ -345,7 +368,8 @@ class AsteriskConfigGenerator:
             
             config.extend([
                 f" same => n,Set(TIMEOUT(response)={ivr_obj.timeout})",
-                f" same => n,Set(ATTEMPTS=0)",
+                " same => n,Set(INVALID_ATTEMPTS=0)",
+                " same => n,Set(TIMEOUT_ATTEMPTS=0)",
                 " same => n(start),Background(main-menu)",
                 f" same => n,WaitExten({ivr_obj.timeout})",
             ])
@@ -363,25 +387,7 @@ class AsteriskConfigGenerator:
                         dest_type = 'extension'
                         dest_value = str(option)
 
-                    if dest_type == 'queue':
-                        config.append(f"exten => {digit},1,Queue({dest_value},tT,,,300)")
-                    elif dest_type == 'extension':
-                        config.append(f"exten => {digit},1,Dial(PJSIP/{dest_value},30,trg)")
-                    elif dest_type == 'ivr':
-                        config.append(f"exten => {digit},1,Goto(ivr-{dest_value},s,1)")
-                    elif dest_type == 'voicemail':
-                        config.append(f"exten => {digit},1,VoiceMail({dest_value}@default)")
-                    elif dest_type == 'announcement':
-                        config.append(f"exten => {digit},1,Playback({dest_value})")
-                    elif dest_type == 'custom_destination':
-                        custom_dest = CustomDestination.objects.filter(name=dest_value, is_active=True).first()
-                        if custom_dest:
-                            config.append(
-                                f"exten => {digit},1,Goto({custom_dest.context},{custom_dest.extension},{custom_dest.priority})"
-                            )
-                        else:
-                            config.append(f"exten => {digit},1,NoOp(Custom Destination no encontrado: {dest_value})")
-                            config.append(" same => n,Playback(invalid)")
+                    append_ivr_route(dest_type, dest_value, f"exten => {digit},1")
                     config.append(f" same => n,Hangup()")
             
             # Invalid option
@@ -389,9 +395,16 @@ class AsteriskConfigGenerator:
                 config.append(f"exten => i,1,Playback({ivr_obj.invalid_message})")
             else:
                 config.append("exten => i,1,Playback(invalid)")
+            invalid_retries = getattr(ivr_obj, 'invalid_retries', ivr_obj.max_attempts)
             config.extend([
-                f" same => n,Set(ATTEMPTS=$[${{ATTEMPTS}}+1])",
-                f" same => n,GotoIf($[${{ATTEMPTS}}<{ivr_obj.max_attempts}]?s,start)",
+                " same => n,Set(INVALID_ATTEMPTS=$[${INVALID_ATTEMPTS}+1])",
+                f" same => n,GotoIf($[${{INVALID_ATTEMPTS}}<{invalid_retries}]?s,start)",
+            ])
+            invalid_destination_type = getattr(ivr_obj, 'invalid_destination_type', '')
+            invalid_destination = getattr(ivr_obj, 'invalid_destination', '')
+            if invalid_destination_type and invalid_destination:
+                append_ivr_route(invalid_destination_type, invalid_destination, " same => n")
+            config.extend([
                 " same => n,Hangup()",
             ])
             
@@ -400,6 +413,15 @@ class AsteriskConfigGenerator:
                 config.append(f"exten => t,1,Playback({ivr_obj.timeout_message})")
             else:
                 config.append("exten => t,1,Playback(vm-goodbye)")
+            timeout_retries = getattr(ivr_obj, 'timeout_retries', ivr_obj.max_attempts)
+            config.extend([
+                " same => n,Set(TIMEOUT_ATTEMPTS=$[${TIMEOUT_ATTEMPTS}+1])",
+                f" same => n,GotoIf($[${{TIMEOUT_ATTEMPTS}}<{timeout_retries}]?s,start)",
+            ])
+            timeout_destination_type = getattr(ivr_obj, 'timeout_destination_type', '')
+            timeout_destination = getattr(ivr_obj, 'timeout_destination', '')
+            if timeout_destination_type and timeout_destination:
+                append_ivr_route(timeout_destination_type, timeout_destination, " same => n")
             config.append(" same => n,Hangup()")
         
         return '\n'.join(config)

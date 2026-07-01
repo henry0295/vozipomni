@@ -208,6 +208,94 @@ class IVRSerializer(serializers.ModelSerializer):
 
         return normalized
 
+    def _validate_destination(self, dest_type, destination, source_label, ivr_extension):
+        if dest_type == 'queue':
+            from apps.queues.models import Queue
+            if not Queue.objects.filter(name=destination, is_active=True).exists():
+                raise serializers.ValidationError({source_label: f'La cola "{destination}" no existe o está inactiva.'})
+            return
+
+        if dest_type == 'extension':
+            if not Extension.objects.filter(extension=destination, is_active=True).exists():
+                raise serializers.ValidationError({source_label: f'La extensión "{destination}" no existe o está inactiva.'})
+            return
+
+        if dest_type == 'ivr':
+            if destination == ivr_extension:
+                raise serializers.ValidationError({source_label: 'Un IVR no puede apuntar a sí mismo.'})
+            if not IVR.objects.filter(extension=destination, is_active=True).exists():
+                raise serializers.ValidationError({source_label: f'El IVR "{destination}" no existe o está inactivo.'})
+            return
+
+        if dest_type == 'voicemail':
+            if not Voicemail.objects.filter(mailbox=destination, is_active=True).exists():
+                raise serializers.ValidationError({source_label: f'El buzón "{destination}" no existe o está inactivo.'})
+            return
+
+        if dest_type == 'announcement':
+            if not str(destination).strip():
+                raise serializers.ValidationError({source_label: 'Debes indicar el audio para announcement.'})
+            return
+
+        if dest_type == 'custom_destination':
+            if not CustomDestination.objects.filter(name=destination, is_active=True).exists():
+                raise serializers.ValidationError({source_label: f'El destino personalizado "{destination}" no existe o está inactivo.'})
+            return
+
+        raise serializers.ValidationError({source_label: f'Tipo de destino no soportado: {dest_type}'})
+
+    def validate(self, attrs):
+        ivr_extension = str(attrs.get('extension', getattr(self.instance, 'extension', ''))).strip()
+        welcome_message = str(attrs.get('welcome_message', getattr(self.instance, 'welcome_message', ''))).strip()
+
+        if not welcome_message:
+            raise serializers.ValidationError({'welcome_message': 'Debes configurar un audio principal para el IVR.'})
+
+        timeout = attrs.get('timeout', getattr(self.instance, 'timeout', 5))
+        if timeout < 1 or timeout > 60:
+            raise serializers.ValidationError({'timeout': 'El timeout debe estar entre 1 y 60 segundos.'})
+
+        legacy_attempts = attrs.get('max_attempts', getattr(self.instance, 'max_attempts', 3))
+        timeout_retries = attrs.get('timeout_retries', legacy_attempts)
+        invalid_retries = attrs.get('invalid_retries', legacy_attempts)
+
+        if timeout_retries < 1 or timeout_retries > 10:
+            raise serializers.ValidationError({'timeout_retries': 'Los reintentos de timeout deben estar entre 1 y 10.'})
+        if invalid_retries < 1 or invalid_retries > 10:
+            raise serializers.ValidationError({'invalid_retries': 'Los reintentos de opción inválida deben estar entre 1 y 10.'})
+
+        attrs['timeout_retries'] = timeout_retries
+        attrs['invalid_retries'] = invalid_retries
+        attrs['max_attempts'] = max(timeout_retries, invalid_retries)
+
+        timeout_destination_type = attrs.get('timeout_destination_type', getattr(self.instance, 'timeout_destination_type', ''))
+        timeout_destination = str(attrs.get('timeout_destination', getattr(self.instance, 'timeout_destination', ''))).strip()
+        invalid_destination_type = attrs.get('invalid_destination_type', getattr(self.instance, 'invalid_destination_type', ''))
+        invalid_destination = str(attrs.get('invalid_destination', getattr(self.instance, 'invalid_destination', ''))).strip()
+
+        if not timeout_destination_type or not timeout_destination:
+            raise serializers.ValidationError({
+                'timeout_destination': 'Debes configurar tipo de destino y destino para timeout.'
+            })
+        if not invalid_destination_type or not invalid_destination:
+            raise serializers.ValidationError({
+                'invalid_destination': 'Debes configurar tipo de destino y destino para opción inválida.'
+            })
+
+        self._validate_destination(timeout_destination_type, timeout_destination, 'timeout_destination', ivr_extension)
+        self._validate_destination(invalid_destination_type, invalid_destination, 'invalid_destination', ivr_extension)
+
+        menu_options = attrs.get('menu_options', getattr(self.instance, 'menu_options', {}))
+        if not isinstance(menu_options, dict) or not menu_options:
+            raise serializers.ValidationError({'menu_options': 'Debes configurar al menos una opción DTMF.'})
+
+        for digit, option in menu_options.items():
+            opt_type = option.get('type', 'extension') if isinstance(option, dict) else 'extension'
+            opt_destination = (option.get('destination', '') if isinstance(option, dict) else str(option)).strip()
+            self._validate_destination(opt_type, opt_destination, f'menu_options.{digit}', ivr_extension)
+
+        return attrs
+
 
 class ExtensionSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()

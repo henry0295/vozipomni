@@ -60,7 +60,7 @@ class SIPTrunkAdmin(admin.ModelAdmin):
 
 @admin.register(IVR)
 class IVRAdmin(admin.ModelAdmin):
-    list_display = ['name', 'extension', 'timeout', 'max_attempts', 'is_active', 'created_at']
+    list_display = ['name', 'extension', 'timeout', 'timeout_retries', 'invalid_retries', 'is_active', 'created_at']
     list_filter = ['is_active', 'created_at']
     search_fields = ['name', 'extension', 'description']
     
@@ -72,6 +72,16 @@ class IVRAdmin(admin.ModelAdmin):
             'fields': ('welcome_message', 'invalid_message', 'timeout_message')
         }),
         ('Configuración', {
-            'fields': ('timeout', 'max_attempts', 'menu_options')
+            'fields': (
+                'timeout',
+                'max_attempts',
+                'timeout_retries',
+                'timeout_destination_type',
+                'timeout_destination',
+                'invalid_retries',
+                'invalid_destination_type',
+                'invalid_destination',
+                'menu_options',
+            )
         }),
     )

@@ -275,8 +275,64 @@
                     <UInput v-model.number="form.timeout" type="number" min="1" max="30" />
                   </UFormGroup>
 
-                  <UFormGroup label="Intentos Máximos" help="Número de intentos antes de colgar o transferir">
-                    <UInput v-model.number="form.max_attempts" type="number" min="1" max="5" />
+                  <UFormGroup label="Reintentos por Timeout" help="Intentos por no ingresar DTMF antes de ejecutar el destino timeout">
+                    <UInput v-model.number="form.timeout_retries" type="number" min="1" max="10" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Tipo Destino Timeout" required>
+                    <USelectMenu
+                      v-model="form.timeout_destination_type"
+                      :options="menuDestinationTypes"
+                      value-attribute="value"
+                      option-attribute="label"
+                    />
+                  </UFormGroup>
+
+                  <UFormGroup label="Destino Timeout" required class="md:col-span-2">
+                    <USelectMenu
+                      v-if="getDestinationOptionsByType(form.timeout_destination_type).length"
+                      v-model="form.timeout_destination"
+                      :options="getDestinationOptionsByType(form.timeout_destination_type)"
+                      value-attribute="value"
+                      option-attribute="label"
+                      searchable
+                      placeholder="Seleccione destino para timeout"
+                    />
+                    <UInput
+                      v-else
+                      v-model="form.timeout_destination"
+                      placeholder="Destino manual para timeout"
+                    />
+                  </UFormGroup>
+
+                  <UFormGroup label="Reintentos por Opción Inválida" help="Intentos por tecla inválida antes de ejecutar el destino inválido">
+                    <UInput v-model.number="form.invalid_retries" type="number" min="1" max="10" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Tipo Destino Inválido" required>
+                    <USelectMenu
+                      v-model="form.invalid_destination_type"
+                      :options="menuDestinationTypes"
+                      value-attribute="value"
+                      option-attribute="label"
+                    />
+                  </UFormGroup>
+
+                  <UFormGroup label="Destino Inválido" required class="md:col-span-2">
+                    <USelectMenu
+                      v-if="getDestinationOptionsByType(form.invalid_destination_type).length"
+                      v-model="form.invalid_destination"
+                      :options="getDestinationOptionsByType(form.invalid_destination_type)"
+                      value-attribute="value"
+                      option-attribute="label"
+                      searchable
+                      placeholder="Seleccione destino para opción inválida"
+                    />
+                    <UInput
+                      v-else
+                      v-model="form.invalid_destination"
+                      placeholder="Destino manual para opción inválida"
+                    />
                   </UFormGroup>
                 </div>
               </div>
@@ -294,7 +350,8 @@
                 <template #description>
                   <ul class="text-sm space-y-1">
                     <li><strong>Timeout:</strong> Tiempo que el sistema espera antes de repetir el mensaje</li>
-                    <li><strong>Intentos:</strong> Después de alcanzar el máximo, se puede transferir a operadora o colgar</li>
+                    <li><strong>Timeout retries:</strong> Define cuántos intentos por silencio antes de enviar a destino timeout</li>
+                    <li><strong>Invalid retries:</strong> Define cuántos intentos por tecla inválida antes de enviar a destino inválido</li>
                     <li><strong>Spoken:</strong> Puede usar un audio adicional para guiar mejor al cliente antes de capturar opciones</li>
                     <li><strong>Destinos válidos:</strong> Cola, Extensión, IVR, Buzón, Anuncio, Destino Personalizado</li>
                   </ul>
@@ -337,6 +394,12 @@ interface IVR {
   invalid_message: string
   timeout_message: string
   timeout: number
+  timeout_retries: number
+  timeout_destination_type: string
+  timeout_destination: string
+  invalid_retries: number
+  invalid_destination_type: string
+  invalid_destination: string
   max_attempts: number
   menu_options: Record<string, any>
   is_active: boolean
@@ -377,6 +440,12 @@ const form = ref({
   invalid_message: 'Opción no válida, intente nuevamente',
   timeout_message: 'Se agotó el tiempo',
   timeout: 5,
+  timeout_retries: 3,
+  timeout_destination_type: 'queue',
+  timeout_destination: '',
+  invalid_retries: 3,
+  invalid_destination_type: 'queue',
+  invalid_destination: '',
   max_attempts: 3,
   menu_options: {} as Record<string, any>,
   is_active: true
@@ -410,9 +479,18 @@ const openCreateModal = () => {
 }
 
 const editIVR = (ivr: IVR) => {
+  const timeoutRetries = ivr.timeout_retries || ivr.max_attempts || 3
+  const invalidRetries = ivr.invalid_retries || ivr.max_attempts || 3
   form.value = {
     ...ivr,
     spoken: ivr.spoken || '',
+    timeout_retries: timeoutRetries,
+    timeout_destination_type: ivr.timeout_destination_type || 'queue',
+    timeout_destination: ivr.timeout_destination || '',
+    invalid_retries: invalidRetries,
+    invalid_destination_type: ivr.invalid_destination_type || 'queue',
+    invalid_destination: ivr.invalid_destination || '',
+    max_attempts: Math.max(timeoutRetries, invalidRetries),
     menu_options: normalizeMenuOptions(ivr.menu_options),
   }
   editingId.value = ivr.id
@@ -437,8 +515,13 @@ const loadIVRs = async () => {
 const saveIVR = async () => {
   isSaving.value = true
   error.value = null
+  const timeoutRetries = form.value.timeout_retries || form.value.max_attempts || 3
+  const invalidRetries = form.value.invalid_retries || form.value.max_attempts || 3
   const payload = {
     ...form.value,
+    timeout_retries: timeoutRetries,
+    invalid_retries: invalidRetries,
+    max_attempts: Math.max(timeoutRetries, invalidRetries),
     menu_options: normalizeMenuOptions(form.value.menu_options),
   }
   try {
@@ -487,6 +570,12 @@ const resetForm = () => {
     invalid_message: 'Opción no válida, intente nuevamente',
     timeout_message: 'Se agotó el tiempo',
     timeout: 5,
+    timeout_retries: 3,
+    timeout_destination_type: 'queue',
+    timeout_destination: '',
+    invalid_retries: 3,
+    invalid_destination_type: 'queue',
+    invalid_destination: '',
     max_attempts: 3,
     menu_options: {},
     is_active: true

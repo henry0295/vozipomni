@@ -310,6 +310,15 @@ class IVR(models.Model):
     """
     Sistema IVR (Interactive Voice Response)
     """
+    DESTINATION_TYPE_CHOICES = [
+        ('queue', 'Cola'),
+        ('extension', 'Extensión'),
+        ('ivr', 'IVR'),
+        ('voicemail', 'Buzón de Voz'),
+        ('announcement', 'Anuncio'),
+        ('custom_destination', 'Destino Personalizado'),
+    ]
+
     name = models.CharField(max_length=100, unique=True, verbose_name='Nombre')
     description = models.TextField(blank=True, verbose_name='Descripción')
     extension = models.CharField(max_length=20, unique=True, verbose_name='Extensión')
@@ -328,6 +337,22 @@ class IVR(models.Model):
     # Configuración
     timeout = models.IntegerField(default=5, verbose_name='Timeout (seg)')
     max_attempts = models.IntegerField(default=3, verbose_name='Intentos máximos')
+    timeout_retries = models.IntegerField(default=3, verbose_name='Reintentos timeout')
+    timeout_destination_type = models.CharField(
+        max_length=20,
+        choices=DESTINATION_TYPE_CHOICES,
+        blank=True,
+        verbose_name='Tipo destino timeout'
+    )
+    timeout_destination = models.CharField(max_length=100, blank=True, verbose_name='Destino timeout')
+    invalid_retries = models.IntegerField(default=3, verbose_name='Reintentos inválido')
+    invalid_destination_type = models.CharField(
+        max_length=20,
+        choices=DESTINATION_TYPE_CHOICES,
+        blank=True,
+        verbose_name='Tipo destino inválido'
+    )
+    invalid_destination = models.CharField(max_length=100, blank=True, verbose_name='Destino inválido')
     
     # Opciones (JSON)
     menu_options = models.JSONField(default=dict, verbose_name='Opciones menú')
