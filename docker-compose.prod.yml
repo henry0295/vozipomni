@@ -162,6 +162,7 @@ services:
       - static_volume:/app/static
       - media_volume:/app/media
       - recordings_volume:/app/recordings
+      - asterisk_lib:/var/lib/asterisk
       - asterisk_configs:/var/lib/asterisk/dynamic
       - ./logs:/app/logs
       - ./docker/asterisk/configs:/etc/asterisk

@@ -182,6 +182,34 @@
                   />
                 </UFormGroup>
               </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-3">
+                <h4 class="font-medium text-gray-800">Carga de audio</h4>
+                <p class="text-sm text-gray-500">
+                  Sube un archivo para dejarlo disponible como <strong>custom/nombre-audio</strong>.
+                </p>
+                <div class="flex flex-wrap items-center gap-3">
+                  <input
+                    ref="audioFileInput"
+                    type="file"
+                    accept=".wav,.gsm,.ulaw,.alaw,.sln,.mp3"
+                    class="hidden"
+                    @change="onAudioFileSelected"
+                  />
+                  <UButton
+                    icon="i-heroicons-arrow-up-tray"
+                    color="gray"
+                    variant="soft"
+                    :loading="uploadingAudio"
+                    @click="audioFileInput?.click()"
+                  >
+                    Subir audio
+                  </UButton>
+                  <span class="text-sm text-gray-600" v-if="selectedAudioFileName">
+                    {{ selectedAudioFileName }}
+                  </span>
+                </div>
+              </div>
             </div>
           </template>
 
@@ -468,6 +496,9 @@ const voicemailOptions = ref<{ label: string; value: string }[]>([])
 const customDestinationOptions = ref<{ label: string; value: string }[]>([])
 const audioCatalogOptions = ref<{ label: string; value: string }[]>([])
 const loadingAudioCatalog = ref(false)
+const uploadingAudio = ref(false)
+const selectedAudioFileName = ref('')
+const audioFileInput = ref<HTMLInputElement | null>(null)
 
 const { apiFetch } = useApi()
 
@@ -802,6 +833,45 @@ const loadAudioCatalog = async () => {
     })).filter((item: any) => item.value)
   } finally {
     loadingAudioCatalog.value = false
+  }
+}
+
+const onAudioFileSelected = async (event: Event) => {
+  const target = event.target as HTMLInputElement
+  const file = target?.files?.[0]
+  if (!file) return
+
+  selectedAudioFileName.value = file.name
+  uploadingAudio.value = true
+  error.value = null
+
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const { data, error: uploadError } = await apiFetch<any>('/telephony/ivr/upload_audio/', {
+      method: 'POST',
+      body: formData,
+    })
+
+    if (uploadError.value) {
+      const detail = (uploadError.value as any)?.data?.detail || 'No se pudo subir el audio'
+      throw new Error(String(detail))
+    }
+
+    const playbackName = String(data.value?.playback_name || '').trim()
+    if (playbackName) {
+      form.value.welcome_message = playbackName
+      form.value.audio_source = 'internal'
+      await loadAudioCatalog()
+    }
+  } catch (e: any) {
+    error.value = e?.message || 'Error al subir audio. Verifica el formato y vuelve a intentar.'
+  } finally {
+    uploadingAudio.value = false
+    if (audioFileInput.value) {
+      audioFileInput.value.value = ''
+    }
   }
 }
 

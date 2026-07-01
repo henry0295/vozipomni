@@ -560,6 +560,73 @@ class IVRViewSet(viewsets.ModelViewSet):
             'items': [{'label': item, 'value': item} for item in sorted_values],
         })
 
+    @action(detail=False, methods=['post'])
+    def upload_audio(self, request):
+        """
+        Subir archivo de audio para IVR y dejarlo disponible para Playback() como custom/<nombre>.
+        Multipart esperado: file=<archivo>, opcional name=<nombre_sin_extension>
+        """
+        import os
+        import re
+
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return Response({'detail': 'Debes adjuntar un archivo en el campo "file".'}, status=status.HTTP_400_BAD_REQUEST)
+
+        original_name = uploaded.name or ''
+        _, ext = os.path.splitext(original_name)
+        ext = ext.lower()
+        allowed_ext = {'.wav', '.gsm', '.ulaw', '.alaw', '.sln', '.mp3'}
+        if ext not in allowed_ext:
+            return Response(
+                {'detail': f'Formato no soportado: {ext or "(sin extensión)"}. Usa: {", ".join(sorted(allowed_ext))}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        base_name = (request.data.get('name') or os.path.splitext(original_name)[0] or '').strip()
+        base_name = re.sub(r'[^a-zA-Z0-9_\-]+', '-', base_name).strip('-').lower()
+        if not base_name:
+            return Response({'detail': 'No se pudo determinar el nombre del audio.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Rutas objetivo (prioridad): volumen de librería de Asterisk, luego /usr/share
+        target_dirs = [
+            '/var/lib/asterisk/sounds/custom',
+            '/usr/share/asterisk/sounds/custom',
+        ]
+
+        target_path = None
+        last_error = None
+        file_bytes = uploaded.read()
+
+        if not file_bytes:
+            return Response({'detail': 'El archivo está vacío.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        for target_dir in target_dirs:
+            try:
+                os.makedirs(target_dir, exist_ok=True)
+                candidate = os.path.join(target_dir, f'{base_name}{ext}')
+                with open(candidate, 'wb+') as destination:
+                    destination.write(file_bytes)
+                target_path = candidate
+                break
+            except Exception as e:
+                last_error = str(e)
+
+        if not target_path:
+            return Response(
+                {'detail': f'No se pudo guardar el audio en rutas de Asterisk. Error: {last_error or "desconocido"}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        playback_name = f'custom/{base_name}'
+        return Response({
+            'success': True,
+            'filename': os.path.basename(target_path),
+            'saved_path': target_path,
+            'playback_name': playback_name,
+            'message': f'Audio cargado correctamente como {playback_name}',
+        }, status=status.HTTP_201_CREATED)
+
 
 class ExtensionViewSet(viewsets.ModelViewSet):
     """

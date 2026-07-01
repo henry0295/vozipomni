@@ -152,6 +152,7 @@ services:
       - ./backend:/app
       - static_volume:/app/static
       - media_volume:/app/media
+      - asterisk_sounds:/var/lib/asterisk/sounds
       - asterisk_dynamic_config:/var/lib/asterisk/dynamic
       - recordings:/app/recordings
     healthcheck:
@@ -327,6 +328,7 @@ services:
       AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
     volumes:
       - ./docker/asterisk/configs:/etc/asterisk:rw
+      - asterisk_sounds:/var/lib/asterisk/sounds:rw
       - asterisk_dynamic_config:/var/lib/asterisk/dynamic:rw
       - recordings:/var/spool/asterisk/monitor:rw
       - asterisk_logs:/var/log/asterisk:rw
@@ -417,5 +419,6 @@ volumes:
   media_volume:
   recordings:
   asterisk_dynamic_config:
+  asterisk_sounds:
   asterisk_logs:
   kamailio_logs:
