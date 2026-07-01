@@ -124,35 +124,75 @@ Para mejor UX, usar `USelectMenu`:
 
 ## 📋 Ejemplos Implementados
 
-### ✅ Modales Actualizados
-1. **Troncales SIP** (`frontend/pages/trunks/index.vue`)
-   - 4 tabs: Información Básica, Autenticación, Media y Códecs, Avanzado
-   - Alertas contextuales según tipo de troncal
-   - Secciones bien delimitadas
+### ✅ Modales Actualizados (11 TOTAL)
 
-2. **Extensiones** (`frontend/pages/extensions/index.vue`)
+#### Primera Oleada (3 modales - Commit 8ab26a4)
+1. **Extensiones** (`frontend/pages/extensions/index.vue`)
    - 4 tabs: Información Básica, Autenticación, Códecs y Avanzado, Buzón de Voz
    - Auto-configuración según tipo (WebRTC vs SIP)
    - Generador de contraseñas seguras
 
-3. **Colas** (`frontend/pages/queues/index.vue`)
+2. **Colas** (`frontend/pages/queues/index.vue`)
    - 3 tabs: Información Básica, Tiempos y Límites, Anuncios y Música
    - Explicaciones de estrategias de distribución
    - Alertas con recomendaciones de configuración
 
-4. **Campañas** (`frontend/pages/campaigns/index.vue`)
+3. **Campañas** (`frontend/pages/campaigns/index.vue`)
    - 4 tabs: Información Básica, Recursos, Programación, Configuración Avanzada
    - Alertas explicativas por tipo de campaña
    - Configuración de recursos relacionados
 
-### ⏳ Modales Pendientes de Actualizar
-- **Agentes** (`frontend/pages/agents/index.vue`)
-- **IVR** (`frontend/pages/ivr/index.vue`)
-- **Rutas Entrantes** (`frontend/pages/inbound-routes/index.vue`)
-- **Rutas Salientes** (`frontend/pages/outbound-routes/index.vue`)
-- **Condiciones de Tiempo** (`frontend/pages/time-conditions/index.vue`)
-- **Webhooks** (`frontend/pages/webhooks/index.vue`)
-- **Destinos Personalizados** (`frontend/pages/custom-destinations/index.vue`)
+#### Segunda Oleada (8 modales - Commit 43ee51e)
+4. **IVR** (`frontend/pages/ivr/index.vue`)
+   - 4 tabs: Básica, Mensajes, Opciones de Menú, Configuración
+   - Gestión dinámica de opciones del menú
+   - Alertas con guías de uso
+
+5. **Agentes** (`frontend/pages/agents/index.vue`) 
+   - 3 tabs: Usuario, Configuración de Agente, Opciones
+   - Validación automática de agent_id y extension
+   - Auto-generación de IDs
+   - Indicadores de disponibilidad en tiempo real
+
+6. **Buzón de Voz** (`frontend/pages/voicemail/index.vue`)
+   - 2 tabs: Básica, Notificaciones
+   - Configuración de email y adjuntos
+   - Límites de mensajes
+
+7. **Condiciones de Horario** (`frontend/pages/time-conditions/index.vue`)
+   - 3 tabs: Básica, Horarios, Destinos
+   - Configuración de rangos horarios
+   - Destinos por condición
+
+8. **Rutas Entrantes** (`frontend/pages/inbound-routes/index.vue`)
+   - 3 tabs: Básica, Identificación, Destino
+   - Patrones DID/CID
+   - Selección de destino
+
+9. **Rutas Salientes** (`frontend/pages/outbound-routes/index.vue`)
+   - 3 tabs: Básica, Patrones, Troncales
+   - Configuración de dial patterns
+   - Selección de trunks
+
+10. **Destinos Personalizados** (`frontend/pages/custom-destinations/index.vue`)
+    - 2 tabs: Básica, Dialplan
+    - Editor de código dialplan
+    - Alertas de seguridad
+
+11. **Webhooks** (`frontend/pages/webhooks/index.vue`)
+    - 3 tabs: Básica, Seguridad, Configuración
+    - Headers personalizados
+    - Retry logic y timeouts
+
+#### Patrón Base
+**Troncales SIP** (`frontend/pages/trunks/index.vue`) - Implementación original
+   - 4 tabs: Información Básica, Autenticación, Media y Códecs, Avanzado
+   - Alertas contextuales según tipo de troncal
+   - Secciones bien delimitadas
+
+### 🎉 Estado: COMPLETO
+
+**Todos los modales de creación/edición del sistema ahora siguen el patrón profesional uniforme.**
 
 ## 🎨 Mejores Prácticas
 
