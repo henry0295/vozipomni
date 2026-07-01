@@ -138,7 +138,7 @@
         <!-- Tabs de secciones -->
         <UTabs :items="campaignTabs" v-model="activeCampaignTab">
           <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <UFormGroup label="Nombre de la Campaña" required class="col-span-2">
@@ -171,25 +171,25 @@
               <!-- Alertas explicativas -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <UAlert 
-                  icon="i-heroicons-phone-arrow-up-right" 
-                  color="blue" 
+                  :icon="selectedCampaignTypeInfo.icon"
+                  :color="selectedCampaignTypeInfo.color"
                   variant="subtle"
-                  title="Campaña Outbound"
-                  description="El sistema marca automáticamente a los contactos de la lista configurada."
+                  :title="selectedCampaignTypeInfo.title"
+                  :description="selectedCampaignTypeInfo.description"
                 />
                 <UAlert 
-                  icon="i-heroicons-bolt" 
-                  color="green" 
+                  :icon="selectedDialerTypeInfo.icon"
+                  :color="selectedDialerTypeInfo.color"
                   variant="subtle"
-                  title="Marcador Progresivo"
-                  description="Marca contactos de forma automática cuando hay agentes disponibles. Balance óptimo entre eficiencia y experiencia."
+                  :title="selectedDialerTypeInfo.title"
+                  :description="selectedDialerTypeInfo.description"
                 />
               </div>
             </div>
           </template>
 
           <!-- ===== TAB 2: RECURSOS ===== -->
-          <template #recursos="{ item }">
+          <template #recursos>
             <div class="space-y-5 py-4">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <UFormGroup label="Cola (ACD)" help="Cola de agentes para esta campaña">
@@ -223,7 +223,7 @@
           </template>
 
           <!-- ===== TAB 3: PROGRAMACIÓN ===== -->
-          <template #programacion="{ item }">
+          <template #programacion>
             <div class="space-y-5 py-4">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <UFormGroup label="Fecha de Inicio" help="Cuándo inicia la campaña">
@@ -245,7 +245,7 @@
           </template>
 
           <!-- ===== TAB 4: CONFIGURACIÓN AVANZADA ===== -->
-          <template #avanzado="{ item }">
+          <template #avanzado>
             <div class="space-y-5 py-4">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <UFormGroup label="Llamadas Simultáneas Máx." help="Cuántas llamadas en paralelo">
@@ -338,6 +338,68 @@ const dialerTypeOptions = [
   { label: 'Manual', value: 'manual' },
   { label: 'Preview', value: 'preview' },
 ]
+
+const campaignTypeInfoMap: Record<string, { title: string; description: string; icon: string; color: 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'red' | 'gray' }> = {
+  outbound: {
+    title: 'Campaña Saliente (Outbound)',
+    description: 'El sistema o el agente origina llamadas hacia los contactos de una lista.',
+    icon: 'i-heroicons-phone-arrow-up-right',
+    color: 'blue'
+  },
+  inbound: {
+    title: 'Campaña Entrante (Inbound)',
+    description: 'Gestiona llamadas entrantes desde DIDs/rutas. Los agentes atienden tráfico que llega al ACD.',
+    icon: 'i-heroicons-phone-arrow-down-left',
+    color: 'green'
+  },
+  manual: {
+    title: 'Campaña Manual',
+    description: 'El agente decide cuándo marcar cada contacto. Máximo control operativo y menor automatización.',
+    icon: 'i-heroicons-hand-raised',
+    color: 'orange'
+  },
+  preview: {
+    title: 'Campaña Preview',
+    description: 'El agente revisa el contacto antes de marcar; ideal para procesos consultivos o de alta calidad.',
+    icon: 'i-heroicons-eye',
+    color: 'purple'
+  }
+}
+
+const dialerTypeInfoMap: Record<string, { title: string; description: string; icon: string; color: 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'red' | 'gray' }> = {
+  progressive: {
+    title: 'Marcación Progresiva',
+    description: 'Marca automáticamente cuando hay agentes disponibles. Balance entre productividad y experiencia.',
+    icon: 'i-heroicons-bolt',
+    color: 'green'
+  },
+  predictive: {
+    title: 'Marcación Predictiva',
+    description: 'Marca anticipando disponibilidad de agentes para maximizar volumen. Requiere control de abandono.',
+    icon: 'i-heroicons-chart-bar-square',
+    color: 'blue'
+  },
+  manual: {
+    title: 'Marcación Manual',
+    description: 'No hay marcado automático. El agente marca contacto por contacto desde la interfaz.',
+    icon: 'i-heroicons-hand-raised',
+    color: 'orange'
+  },
+  preview: {
+    title: 'Marcación Preview',
+    description: 'Presenta datos del contacto antes de marcar para decisiones más precisas del agente.',
+    icon: 'i-heroicons-eye',
+    color: 'purple'
+  }
+}
+
+const selectedCampaignTypeInfo = computed(() => {
+  return campaignTypeInfoMap[newCampaign.value.campaign_type] || campaignTypeInfoMap.outbound
+})
+
+const selectedDialerTypeInfo = computed(() => {
+  return dialerTypeInfoMap[newCampaign.value.dialer_type] || dialerTypeInfoMap.progressive
+})
 
 const queueOptions = ref<{ label: string; value: number }[]>([])
 const contactListOptions = ref<{ label: string; value: number }[]>([])
