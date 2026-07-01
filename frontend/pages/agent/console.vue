@@ -434,10 +434,17 @@ const handleLogin = async () => {
 const handleLogout = async () => {
   if (!confirm('¿Está seguro que desea cerrar la sesión de agente?')) return
 
+  const authStore = useAuthStore()
+
   webRTC.unregister()
-  await agentStore.logout()
-  selectedAgent.value = null
-  await navigateTo('/login')
+
+  try {
+    await agentStore.logout()
+  } finally {
+    authStore.clearAuth()
+    selectedAgent.value = null
+    await navigateTo('/login', { replace: true })
+  }
 }
 
 const handleDispositionSaved = (data: any) => {
