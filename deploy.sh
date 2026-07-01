@@ -1509,10 +1509,23 @@ PYEOF
 
     # 8. Recargar dialplan de Asterisk (recoge cambios en extensions.conf)
     log_info "Recargando dialplan de Asterisk..."
-    timeout 10 $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>/dev/null || {
-        log_warn "Dialplan reload timeout o falló (esperado si Asterisk no responde)"
-    }
-    log_success "Dialplan recargado"
+    (
+        $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>&1 | head -n 3
+    ) &
+    local ast_pid=$!
+    local elapsed=0
+    while kill -0 $ast_pid 2>/dev/null && [ $elapsed -lt 10 ]; do
+        sleep 1
+        elapsed=$((elapsed + 1))
+    done
+    if kill -0 $ast_pid 2>/dev/null; then
+        kill -9 $ast_pid 2>/dev/null || true
+        wait $ast_pid 2>/dev/null || true
+        log_warn "Dialplan reload timeout (10s) - continuando..."
+    else
+        wait $ast_pid 2>/dev/null || true
+        log_success "Dialplan recargado"
+    fi
 
     # 8b. Corregir dtmf_mode de troncales: rfc2833 → rfc4733
     # rfc2833 es el nombre de chan_sip; PJSIP requiere rfc4733. Si una troncal
