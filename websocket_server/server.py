@@ -129,9 +129,9 @@ class WebSocketServer:
             
             SECRET_KEY = os.getenv('SECRET_KEY', '')
             if not SECRET_KEY:
-                # Sin clave secreta configurada, aceptar (modo desarrollo)
-                logger.warning("SECRET_KEY no configurado — omitiendo validación JWT")
-                return {'role': 'admin', 'user_id': None}
+                # Sin clave secreta configurada, RECHAZAR por seguridad
+                logger.error("SECRET_KEY no configurado — rechazando conexión WebSocket")
+                return None
             
             # Decodificar JWT (formato: header.payload.signature)
             parts = token.split('.')

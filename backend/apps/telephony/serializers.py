@@ -289,7 +289,17 @@ class VoicemailSerializer(serializers.ModelSerializer):
         return 'Activo' if obj.is_active else 'Inactivo'
     
     def get_messages(self, obj):
-        # TODO: Obtener cantidad real de mensajes desde Asterisk
+        """Obtener cantidad de mensajes en el buzón"""
+        try:
+            import os
+            from django.conf import settings
+            voicemail_dir = f'/var/spool/asterisk/voicemail/default/{obj.mailbox}/INBOX'
+            if os.path.exists(voicemail_dir):
+                return len([f for f in os.listdir(voicemail_dir) if f.endswith('.wav') or f.endswith('.gsm')])
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error al contar mensajes de voicemail {obj.mailbox}: {e}")
         return 0
     
     def to_representation(self, instance):
@@ -313,7 +323,17 @@ class MusicOnHoldSerializer(serializers.ModelSerializer):
         return 'Activo' if obj.is_active else 'Inactivo'
     
     def get_files(self, obj):
-        # TODO: Contar archivos reales en el directorio
+        """Contar archivos de música en espera"""
+        try:
+            import os
+            from django.conf import settings
+            moh_dir = f'/var/lib/asterisk/moh/{obj.name}'
+            if os.path.exists(moh_dir):
+                return len([f for f in os.listdir(moh_dir) if f.endswith(('.wav', '.mp3', '.gsm', '.ulaw'))])
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Error al contar archivos MOH {obj.name}: {e}")
         return 0
 
 

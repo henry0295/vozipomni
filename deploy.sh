@@ -1461,7 +1461,9 @@ PYEOF
 
     # 8. Recargar dialplan de Asterisk (recoge cambios en extensions.conf)
     log_info "Recargando dialplan de Asterisk..."
-    $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>/dev/null || true
+    timeout 10 $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>/dev/null || {
+        log_warn "Dialplan reload timeout o falló (esperado si Asterisk no responde)"
+    }
     log_success "Dialplan recargado"
 
     # 8b. Corregir dtmf_mode de troncales: rfc2833 → rfc4733

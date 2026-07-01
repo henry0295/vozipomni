@@ -7,11 +7,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 _SECRET_KEY_DEFAULT = 'vozipomni-insecure-secret-key-change-me'
-SECRET_KEY = config('SECRET_KEY', default=_SECRET_KEY_DEFAULT)
-if not config('DEBUG', default=False, cast=bool) and SECRET_KEY == _SECRET_KEY_DEFAULT:
+SECRET_KEY = config('SECRET_KEY', default='')
+if not SECRET_KEY:
+    raise RuntimeError(
+        'SECRET_KEY is required. '
+        'Generate one with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())" '
+        'and add it to your .env file.'
+    )
+if SECRET_KEY == _SECRET_KEY_DEFAULT:
     raise RuntimeError(
         'SECRET_KEY is set to the insecure default value. '
-        'Set a strong SECRET_KEY in your .env file before running in production.'
+        'Set a strong SECRET_KEY in your .env file before running.'
     )
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -109,13 +115,13 @@ if _db_url:
     else:
         _DB_NAME = config('DB_NAME', default='vozipomni')
         _DB_USER = config('DB_USER', default='vozipomni_user')
-        _DB_PASS = config('DB_PASSWORD', default='vozipomni_db_2026')
+        _DB_PASS = config('DB_PASSWORD', default='')
         _DB_HOST = config('DB_HOST', default='postgres')
         _DB_PORT = config('DB_PORT', default='5432')
 else:
     _DB_NAME = config('DB_NAME', default='vozipomni')
     _DB_USER = config('DB_USER', default='vozipomni_user')
-    _DB_PASS = config('DB_PASSWORD', default='vozipomni_db_2026')
+    _DB_PASS = config('DB_PASSWORD', default='')
     _DB_HOST = config('DB_HOST', default='postgres')
     _DB_PORT = config('DB_PORT', default='5432')
 
@@ -172,7 +178,7 @@ REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 ASTERISK_HOST = config('ASTERISK_HOST', default='asterisk')
 ASTERISK_AMI_PORT = config('ASTERISK_AMI_PORT', default=5038, cast=int)
 ASTERISK_AMI_USER = config('ASTERISK_AMI_USER', default='admin')
-ASTERISK_AMI_PASSWORD = config('ASTERISK_AMI_PASSWORD', default='vozipomni_ami_2026')
+ASTERISK_AMI_PASSWORD = config('ASTERISK_AMI_PASSWORD', default='')
 ASTERISK_CONFIG_DIR = config('ASTERISK_CONFIG_DIR', default='/var/lib/asterisk/dynamic')
 
 # Celery Configuration
@@ -361,5 +367,18 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = False
     SECURE_HSTS_PRELOAD = False
 
-# Forzar CORS permisivo en producción si no hay HTTPS
-CORS_ORIGIN_ALLOW_ALL = True
+# CORS Configuration - Restringido por seguridad
+CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=False, cast=bool)
+# Si CORS_ALLOW_ALL=False, configurar orígenes permitidos
+if not CORS_ORIGIN_ALLOW_ALL:
+    _cors_origins = config('CORS_ORIGINS', default='').strip()
+    if _cors_origins:
+        CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if origin.strip()]
+    else:
+        # Fallback: solo localhost y la IP del servidor
+        CORS_ALLOWED_ORIGINS = [
+            'http://localhost',
+            'http://127.0.0.1',
+            f'http://{_server_ip}' if _server_ip else 'http://localhost',
+            f'https://{_server_ip}' if _server_ip else 'https://localhost',
+        ]

@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from core.validators import validate_phone_number, validate_asterisk_pattern, validate_ip_address, validate_port_number
 
 
 class Call(models.Model):
@@ -36,8 +37,8 @@ class Call(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='initiated', verbose_name='Estado')
     
     # Números
-    caller_id = models.CharField(max_length=50, verbose_name='Llamante')
-    called_number = models.CharField(max_length=50, verbose_name='Número llamado')
+    caller_id = models.CharField(max_length=50, verbose_name='Llamante', validators=[validate_phone_number])
+    called_number = models.CharField(max_length=50, verbose_name='Número llamado', validators=[validate_phone_number])
     
     # Relaciones
     agent = models.ForeignKey('agents.Agent', on_delete=models.SET_NULL, null=True, blank=True, related_name='calls')
@@ -63,7 +64,7 @@ class Call(models.Model):
     
     # Transferencia
     transferred = models.BooleanField(default=False, verbose_name='Transferida')
-    transfer_to = models.CharField(max_length=100, blank=True, verbose_name='Transferida a')
+    transfer_to = models.CharField(max_length=100, blank=True, verbose_name='Transferida a', validators=[validate_phone_number])
     
     # Datos adicionales
     notes = models.TextField(blank=True, verbose_name='Notas')
@@ -138,8 +139,8 @@ class SIPTrunk(models.Model):
     )
     
     # Conexión
-    host = models.CharField(max_length=200, verbose_name='Host/IP o FQDN')
-    port = models.IntegerField(default=5060, verbose_name='Puerto')
+    host = models.CharField(max_length=200, verbose_name='Host/IP o FQDN', validators=[validate_ip_address])
+    port = models.IntegerField(default=5060, verbose_name='Puerto', validators=[validate_port_number])
     protocol = models.CharField(max_length=10, choices=PROTOCOL_CHOICES, default='udp', verbose_name='Protocolo')
     
     # Autenticación Saliente (desde VoziPOmni hacia el proveedor)
