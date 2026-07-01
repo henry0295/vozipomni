@@ -367,10 +367,10 @@ const { apiFetch } = useApi()
 
 // Opciones para tabs del modal
 const extensionTabs = [
-  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
-  { key: 'autenticacion', label: 'Autenticación', icon: 'i-heroicons-key' },
-  { key: 'avanzado', label: 'Códecs y Avanzado', icon: 'i-heroicons-cog' },
-  { key: 'buzon', label: 'Buzón de Voz', icon: 'i-heroicons-envelope' }
+  { slot: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
+  { slot: 'autenticacion', label: 'Autenticación', icon: 'i-heroicons-key' },
+  { slot: 'avanzado', label: 'Códecs y Avanzado', icon: 'i-heroicons-cog' },
+  { slot: 'buzon', label: 'Buzón de Voz', icon: 'i-heroicons-envelope' }
 ]
 
 const extensionTypeOptions = [

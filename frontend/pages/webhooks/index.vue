@@ -111,7 +111,7 @@
 
           <UTabs v-model="activeTabWebhook" :items="tabItemsWebhook">
             <template #default="{ item }">
-              <div v-if="item.key === 'basic'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'basic'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Información Básica</h4>
                   <div class="grid grid-cols-2 gap-4">
@@ -143,7 +143,7 @@
                 </div>
               </div>
 
-              <div v-if="item.key === 'security'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'security'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Seguridad</h4>
                   <UFormGroup label="Secret (HMAC)" help="Clave secreta para firma HMAC de peticiones">
@@ -152,7 +152,7 @@
                 </div>
               </div>
 
-              <div v-if="item.key === 'config'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'config'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración Avanzada</h4>
                   <div class="grid grid-cols-2 gap-4">
@@ -228,9 +228,9 @@ const availableEvents = ref<any[]>([])
 const activeTabWebhook = ref(0)
 
 const tabItemsWebhook = [
-  { key: 'basic', label: 'Básica', icon: 'i-heroicons-identification' },
-  { key: 'security', label: 'Seguridad', icon: 'i-heroicons-lock-closed' },
-  { key: 'config', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+  { slot: 'basic', label: 'Básica', icon: 'i-heroicons-identification' },
+  { slot: 'security', label: 'Seguridad', icon: 'i-heroicons-lock-closed' },
+  { slot: 'config', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
 ]
 
 const form = ref({

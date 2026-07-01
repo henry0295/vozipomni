@@ -304,10 +304,10 @@ const tabs = [
 
 // Tabs del modal de creación
 const campaignTabs = [
-  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-information-circle' },
-  { key: 'recursos', label: 'Recursos', icon: 'i-heroicons-user-group' },
-  { key: 'programacion', label: 'Programación', icon: 'i-heroicons-calendar' },
-  { key: 'avanzado', label: 'Configuración Avanzada', icon: 'i-heroicons-cog' }
+  { slot: 'basica', label: 'Información Básica', icon: 'i-heroicons-information-circle' },
+  { slot: 'recursos', label: 'Recursos', icon: 'i-heroicons-user-group' },
+  { slot: 'programacion', label: 'Programación', icon: 'i-heroicons-calendar' },
+  { slot: 'avanzado', label: 'Configuración Avanzada', icon: 'i-heroicons-cog' }
 ]
 
 const emptyForm = () => ({

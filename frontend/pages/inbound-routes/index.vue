@@ -304,9 +304,9 @@ const { apiFetch } = useApi()
 const activeTab = ref(0)
 
 const formTabs = [
-  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
-  { key: 'identificacion', label: 'Identificación DID', icon: 'i-heroicons-phone' },
-  { key: 'destino', label: 'Destino', icon: 'i-heroicons-arrow-right-circle' }
+  { slot: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
+  { slot: 'identificacion', label: 'Identificación DID', icon: 'i-heroicons-phone' },
+  { slot: 'destino', label: 'Destino', icon: 'i-heroicons-arrow-right-circle' }
 ]
 
 const form = ref({

@@ -394,9 +394,9 @@ const { apiFetch } = useApi()
 
 // Tabs del modal
 const queueTabs = [
-  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-queue-list' },
-  { key: 'tiempos', label: 'Tiempos y Límites', icon: 'i-heroicons-clock' },
-  { key: 'anuncios', label: 'Anuncios y Música', icon: 'i-heroicons-speaker-wave' }
+  { slot: 'basica', label: 'Información Básica', icon: 'i-heroicons-queue-list' },
+  { slot: 'tiempos', label: 'Tiempos y Límites', icon: 'i-heroicons-clock' },
+  { slot: 'anuncios', label: 'Anuncios y Música', icon: 'i-heroicons-speaker-wave' }
 ]
 
 const defaultForm = () => ({

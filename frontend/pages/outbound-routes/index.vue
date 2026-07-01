@@ -125,7 +125,7 @@
 
           <UTabs v-model="activeTab" :items="tabItems">
             <template #default="{ item }">
-              <div v-if="item.key === 'basic'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'basic'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Información Básica</h4>
                   <div class="grid grid-cols-2 gap-4">
@@ -139,7 +139,7 @@
                 </div>
               </div>
 
-              <div v-if="item.key === 'pattern'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'pattern'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Patrón de Marcado</h4>
                   <UFormGroup label="Patrón de Discado" help="Patrón regex para coincidir. Ej: ^2[0-9]{9}$" required>
@@ -156,7 +156,7 @@
                 </div>
               </div>
 
-              <div v-if="item.key === 'trunk'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'trunk'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración de Troncal</h4>
                   <UFormGroup label="Troncal" required>
@@ -169,7 +169,7 @@
                 </div>
               </div>
 
-              <div v-if="item.key === 'config'" class="space-y-4 pt-4">
+              <div v-if="item.slot === 'config'" class="space-y-4 pt-4">
                 <div class="border rounded-lg p-4 space-y-4">
                   <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración Avanzada</h4>
                   <UFormGroup label="Prefijo Caller ID (Opcional)" help="Prefijo para el número que se muestra en la llamada">
@@ -223,10 +223,10 @@ const trunkOptions = ref<{ label: string; value: string }[]>([])
 const activeTab = ref(0)
 
 const tabItems = [
-  { key: 'basic', label: 'Básica', icon: 'i-heroicons-identification' },
-  { key: 'pattern', label: 'Patrones de Marcado', icon: 'i-heroicons-hashtag' },
-  { key: 'trunk', label: 'Troncales', icon: 'i-heroicons-signal' },
-  { key: 'config', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+  { slot: 'basic', label: 'Básica', icon: 'i-heroicons-identification' },
+  { slot: 'pattern', label: 'Patrones de Marcado', icon: 'i-heroicons-hashtag' },
+  { slot: 'trunk', label: 'Troncales', icon: 'i-heroicons-signal' },
+  { slot: 'config', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
 ]
 
 const { apiFetch } = useApi()

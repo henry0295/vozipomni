@@ -316,10 +316,10 @@ const { apiFetch } = useApi()
 const activeTab = ref(0)
 
 const formTabs = [
-  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
-  { key: 'mensajes', label: 'Mensajes', icon: 'i-heroicons-chat-bubble-left-right' },
-  { key: 'opciones', label: 'Opciones de Menú', icon: 'i-heroicons-list-bullet' },
-  { key: 'configuracion', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+  { slot: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
+  { slot: 'mensajes', label: 'Mensajes', icon: 'i-heroicons-chat-bubble-left-right' },
+  { slot: 'opciones', label: 'Opciones de Menú', icon: 'i-heroicons-list-bullet' },
+  { slot: 'configuracion', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
 ]
 
 const form = ref({
