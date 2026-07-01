@@ -161,9 +161,11 @@
                 <UFormGroup label="Tipo de Marcación" required>
                   <USelectMenu
                     v-model="newCampaign.dialer_type"
-                    :options="dialerTypeOptions"
+                    :options="availableDialerTypeOptions"
                     value-attribute="value"
                     option-attribute="label"
+                    :disabled="newCampaign.campaign_type === 'inbound'"
+                    :placeholder="newCampaign.campaign_type === 'inbound' ? 'No aplica para campañas entrantes' : 'Seleccionar tipo de marcación'"
                   />
                 </UFormGroup>
               </div>
@@ -185,6 +187,14 @@
                   :description="selectedDialerTypeInfo.description"
                 />
               </div>
+
+              <UAlert
+                v-if="combinationHint"
+                icon="i-heroicons-shield-check"
+                color="yellow"
+                variant="subtle"
+                :description="combinationHint"
+              />
             </div>
           </template>
 
@@ -284,6 +294,8 @@
 </template>
 
 <script setup lang="ts">
+import { watch } from 'vue'
+
 definePageMeta({ middleware: ['auth'] })
 
 const toast = useToast()
@@ -338,6 +350,13 @@ const dialerTypeOptions = [
   { label: 'Manual', value: 'manual' },
   { label: 'Preview', value: 'preview' },
 ]
+
+const campaignDialerCompatibility: Record<string, string[]> = {
+  inbound: [],
+  outbound: ['progressive', 'predictive'],
+  manual: ['manual'],
+  preview: ['preview'],
+}
 
 const campaignTypeInfoMap: Record<string, { title: string; description: string; icon: string; color: 'blue' | 'green' | 'yellow' | 'purple' | 'orange' | 'red' | 'gray' }> = {
   outbound: {
@@ -398,7 +417,38 @@ const selectedCampaignTypeInfo = computed(() => {
 })
 
 const selectedDialerTypeInfo = computed(() => {
+  if (newCampaign.value.campaign_type === 'inbound') {
+    return {
+      title: 'Sin Marcador (No aplica)',
+      description: 'Las campañas entrantes no originan llamadas, por lo tanto no usan tipo de marcación.',
+      icon: 'i-heroicons-phone-arrow-down-left',
+      color: 'gray' as const,
+    }
+  }
+
   return dialerTypeInfoMap[newCampaign.value.dialer_type] || dialerTypeInfoMap.progressive
+})
+
+const availableDialerTypeOptions = computed(() => {
+  const allowed = campaignDialerCompatibility[newCampaign.value.campaign_type] || []
+  return dialerTypeOptions.filter(option => allowed.includes(option.value))
+})
+
+const combinationHint = computed(() => {
+  const type = newCampaign.value.campaign_type
+  if (type === 'inbound') {
+    return 'Campaña Entrante: el tipo de marcación no aplica y se guardará vacío.'
+  }
+  if (type === 'manual') {
+    return 'Campaña Manual: solo admite marcación manual.'
+  }
+  if (type === 'preview') {
+    return 'Campaña Preview: solo admite marcador preview.'
+  }
+  if (type === 'outbound') {
+    return 'Campaña Saliente: admite Progresivo o Predictivo.'
+  }
+  return ''
 })
 
 const queueOptions = ref<{ label: string; value: number }[]>([])
@@ -476,7 +526,20 @@ const loadOptions = async () => {
 
 const openCreateModal = () => {
   newCampaign.value = emptyForm()
+  enforceCampaignDialerCompatibility()
   showCreateModal.value = true
+}
+
+const enforceCampaignDialerCompatibility = () => {
+  const allowed = campaignDialerCompatibility[newCampaign.value.campaign_type] || []
+  if (allowed.length === 0) {
+    newCampaign.value.dialer_type = null as any
+    return
+  }
+
+  if (!allowed.includes(newCampaign.value.dialer_type)) {
+    newCampaign.value.dialer_type = allowed[0] as any
+  }
 }
 
 const createCampaignAction = async () => {
@@ -486,11 +549,16 @@ const createCampaignAction = async () => {
   }
   saving.value = true
   try {
+    enforceCampaignDialerCompatibility()
+
     const payload: any = { ...newCampaign.value }
     if (!payload.queue) delete payload.queue
     if (!payload.contact_list) delete payload.contact_list
     if (!payload.start_date) delete payload.start_date
     if (!payload.end_date) delete payload.end_date
+    if (payload.campaign_type === 'inbound') {
+      delete payload.dialer_type
+    }
 
     await $fetch('/api/campaigns/', {
       method: 'POST',
@@ -507,6 +575,10 @@ const createCampaignAction = async () => {
     saving.value = false
   }
 }
+
+watch(() => newCampaign.value.campaign_type, () => {
+  enforceCampaignDialerCompatibility()
+})
 
 const pauseCampaign = async (campaign: any) => {
   actionLoading.value = campaign.id

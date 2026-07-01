@@ -72,6 +72,35 @@ class CampaignSerializer(serializers.ModelSerializer):
     
     def validate(self, attrs):
         """Validar datos de campaña"""
+        campaign_type = attrs.get('campaign_type', getattr(self.instance, 'campaign_type', None))
+        dialer_type = attrs.get('dialer_type', getattr(self.instance, 'dialer_type', None))
+
+        compatibility = {
+            'inbound': set(),
+            'outbound': {'progressive', 'predictive'},
+            'manual': {'manual'},
+            'preview': {'preview'},
+        }
+
+        allowed = compatibility.get(campaign_type, {'progressive', 'predictive', 'manual', 'preview'})
+
+        # Para campañas entrantes, el marcador no aplica
+        if campaign_type == 'inbound' and dialer_type:
+            raise serializers.ValidationError({
+                'dialer_type': 'Las campañas entrantes no usan tipo de marcación.'
+            })
+
+        # Para campañas salientes/manual/preview, validar combinación permitida
+        if campaign_type != 'inbound':
+            if not dialer_type:
+                raise serializers.ValidationError({
+                    'dialer_type': 'Debes seleccionar un tipo de marcación para este tipo de campaña.'
+                })
+            if dialer_type not in allowed:
+                raise serializers.ValidationError({
+                    'dialer_type': f'Combinación inválida: campaign_type={campaign_type} no permite dialer_type={dialer_type}.'
+                })
+
         # Validar fechas
         if attrs.get('end_date') and attrs.get('start_date'):
             if attrs['end_date'] <= attrs['start_date']:
