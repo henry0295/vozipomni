@@ -74,6 +74,8 @@ logs/
 *.pdf
 *.md
 !README.md
+!INSTALACION_RAPIDA.md
+!CORRECCIONES_SEGURIDAD_2026.md
 
 # Scripts raíz - ignorar (se mantienen solo los esenciales)
 /*.sh
@@ -87,6 +89,7 @@ logs/
 !update-production.sh
 !verify-production.sh
 !deploy.sh
+!deploy-simple.sh
 !voip-debug.sh
 !generate-dev-ssl.sh
 
