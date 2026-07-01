@@ -168,35 +168,72 @@ wait_container_healthy() {
     return 1
 }
 
-# Verificar credenciales PostgreSQL contra el volumen existente
-verify_postgres_credentials() {
+# Sincronizar contraseña PostgreSQL entre .env y volumen existente
+sync_postgres_password() {
     log_info "Verificando credenciales de PostgreSQL..."
-    local db_pass
+    local db_pass db_user
     db_pass=$(grep '^POSTGRES_PASSWORD=' "$INSTALL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-)
+    db_user=$(grep '^POSTGRES_USER=' "$INSTALL_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2-)
+    db_user="${db_user:-vozipomni_user}"
 
     if [ -z "$db_pass" ]; then
         log_warning "No se pudo leer POSTGRES_PASSWORD del .env — omitiendo verificación"
         return 0
     fi
 
+    # Intentar conectar con la contraseña del .env
     if $COMPOSE_CMD -f docker-compose.prod.yml exec -T \
         -e PGPASSWORD="$db_pass" \
-        postgres psql -U vozipomni_user -d vozipomni -c "SELECT 1" &>/dev/null; then
-        log_success "Credenciales de PostgreSQL verificadas"
+        postgres psql -U "$db_user" -d vozipomni -c "SELECT 1" &>/dev/null; then
+        log_success "Credenciales de PostgreSQL sincronizadas ✓"
         return 0
     fi
 
-    log_warning "Credenciales no coinciden con el volumen existente"
-    log_info "Reseteando PostgreSQL con credenciales del .env..."
+    log_warning "Contraseña del .env no coincide con PostgreSQL"
+    log_info "Intentando sincronizar contraseña sin perder datos..."
 
-    # Detener y eliminar contenedor y volumen
+    # Intentar actualizar contraseña usando conexión por socket local (no requiere password)
+    if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres \
+        psql -U "$db_user" -d vozipomni -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" &>/dev/null; then
+        log_success "Contraseña de PostgreSQL actualizada desde socket local ✓"
+        return 0
+    fi
+
+    # Si falla, intentar con superusuario postgres (algunas instalaciones lo tienen)
+    if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres \
+        psql -U postgres -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" &>/dev/null 2>&1; then
+        log_success "Contraseña actualizada usando superusuario postgres ✓"
+        return 0
+    fi
+
+    # Último recurso: resetear volumen (PIERDE DATOS)
+    log_error "No se pudo sincronizar la contraseña automáticamente"
+    log_warning "═══════════════════════════════════════════════════════════"
+    log_warning "  OPCIONES:"
+    log_warning "  1) Manual: docker compose exec postgres psql -U $db_user -d vozipomni"
+    log_warning "             Luego: ALTER USER $db_user WITH PASSWORD 'tu_password';"
+    log_warning "  2) Resetear PostgreSQL (BORRA TODOS LOS DATOS)"
+    log_warning "═══════════════════════════════════════════════════════════"
+
+    if [ -t 0 ]; then
+        read -r -p "¿Resetear PostgreSQL y BORRAR datos? [s/N]: " confirm
+        if [[ ! "$confirm" =~ ^[sS]$ ]]; then
+            log_error "Deploy cancelado. Sincronice la contraseña manualmente."
+            exit 1
+        fi
+    else
+        log_error "Modo no-interactivo: no se puede resetear PostgreSQL automáticamente"
+        log_error "Ejecute manualmente: bash fix-db-password.sh"
+        exit 1
+    fi
+
+    log_info "Reseteando PostgreSQL (borrando volumen)..."
     docker stop vozipomni_postgres 2>/dev/null || true
     docker rm -f vozipomni_postgres 2>/dev/null || true
     docker volume ls -q 2>/dev/null | grep -i vozipomni | grep -i postgres | while read -r v; do
         docker volume rm -f "$v" 2>/dev/null || true
     done || true
 
-    # Recrear postgres con las credenciales del .env
     $COMPOSE_CMD -f docker-compose.prod.yml up -d postgres 2>&1
 
     if ! wait_container_healthy "vozipomni_postgres" 120; then
@@ -204,7 +241,12 @@ verify_postgres_credentials() {
         $COMPOSE_CMD -f docker-compose.prod.yml logs --tail=30 postgres
         return 1
     fi
-    log_success "PostgreSQL reseteado con credenciales correctas"
+    log_success "PostgreSQL reseteado con credenciales del .env ✓"
+}
+
+# Alias para compatibilidad con código existente
+verify_postgres_credentials() {
+    sync_postgres_password "$@"
 }
 
 # ─── Limpiar instalación existente ───────────────────────────────────────────
@@ -1437,6 +1479,12 @@ update_production() {
     log_info "Reiniciando servicios con nuevas imágenes..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d --remove-orphans
     log_success "Servicios actualizados"
+
+    # 4b. Sincronizar contraseña de PostgreSQL si es necesario
+    sync_postgres_password || {
+        log_error "No se pudo sincronizar PostgreSQL. Ejecute: bash fix-db-password.sh"
+        exit 1
+    }
 
     # 5. Esperar que el backend esté healthy
     wait_container_healthy "vozipomni_backend" 180
