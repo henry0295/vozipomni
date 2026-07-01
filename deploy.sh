@@ -1515,31 +1515,46 @@ else:
 PYEOF
 
     # 8. Recargar dialplan de Asterisk (recoge cambios en extensions.conf)
-    log_info "Recargando dialplan de Asterisk..."
-    set +e
-    (
-        $COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>&1 | head -n 3
-    ) &
-    local ast_pid=$!
-    local elapsed=0
-    while kill -0 $ast_pid 2>/dev/null && [ $elapsed -lt 10 ]; do
-        sleep 1
-        elapsed=$((elapsed + 1))
-    done
-    if kill -0 $ast_pid 2>/dev/null; then
-        kill $ast_pid 2>/dev/null || true
-        wait $ast_pid 2>/dev/null || true
-        log_warning "Dialplan reload timeout (10s) - continuando..."
-    else
-        wait $ast_pid 2>/dev/null
-        local ast_rc=$?
-        if [ "$ast_rc" -eq 0 ]; then
-            log_success "Dialplan recargado"
-        else
-            log_warning "Dialplan reload devolvió código ${ast_rc} - continuando..."
-        fi
+    # No debe abortar el deploy: Asterisk puede estar arrancando todavía.
+    log_info "Verificando Asterisk antes de recargar dialplan..."
+    if ! wait_container_healthy "vozipomni_asterisk" 60; then
+        log_warning "Asterisk aún no reporta healthy. Se intentará reload no bloqueante..."
     fi
-    set -e
+
+    log_info "Recargando dialplan de Asterisk..."
+    local dialplan_ok=0
+    local ast_output=""
+    local attempt=1
+
+    while [ "$attempt" -le 3 ]; do
+        if ast_output=$($COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'dialplan reload' 2>&1); then
+            log_success "Dialplan recargado"
+            dialplan_ok=1
+            break
+        fi
+        log_warning "Intento ${attempt}/3 dialplan reload falló: $(echo "$ast_output" | head -n 1)"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+
+    if [ "$dialplan_ok" -ne 1 ]; then
+        log_warning "Intentando fallback con 'core reload'..."
+        attempt=1
+        while [ "$attempt" -le 2 ]; do
+            if ast_output=$($COMPOSE_CMD -f docker-compose.prod.yml exec -T asterisk asterisk -rx 'core reload' 2>&1); then
+                log_success "Core reload ejecutado"
+                dialplan_ok=1
+                break
+            fi
+            log_warning "Intento ${attempt}/2 core reload falló: $(echo "$ast_output" | head -n 1)"
+            sleep 2
+            attempt=$((attempt + 1))
+        done
+    fi
+
+    if [ "$dialplan_ok" -ne 1 ]; then
+        log_warning "No se pudo recargar Asterisk en este momento (continuando deploy)."
+    fi
 
     # 8b. Corregir dtmf_mode de troncales: rfc2833 → rfc4733
     # rfc2833 es el nombre de chan_sip; PJSIP requiere rfc4733. Si una troncal
@@ -1555,13 +1570,24 @@ else:
 PYEOF
 
     # 8c. Recargar configuración PJSIP para aplicar cambios de troncales
+    # No bloquear deploy si AMI aún no está listo.
     log_info "Recargando configuración PJSIP..."
-    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null || true
+    local pjsip_out=""
+    if pjsip_out=$($COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null
 from apps.telephony.pjsip_config_generator import PJSIPConfigGenerator
 gen = PJSIPConfigGenerator()
 ok, msg = gen.save_and_reload()
 print(f'PJSIP reload: {"OK" if ok else "ERROR"} — {msg}')
 PYEOF
+); then
+        if echo "$pjsip_out" | grep -q 'PJSIP reload: ERROR'; then
+            log_warning "$(echo "$pjsip_out" | tail -n 1)"
+        else
+            log_success "$(echo "$pjsip_out" | tail -n 1)"
+        fi
+    else
+        log_warning "No se pudo ejecutar recarga PJSIP (AMI/servicio no listo). Continuando..."
+    fi
 
     # 9. Recolectar archivos estáticos
     log_info "Recolectando archivos estáticos..."
