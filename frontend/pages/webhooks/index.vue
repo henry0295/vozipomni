@@ -94,55 +94,90 @@
     </div>
 
     <!-- Modal: Crear/Editar -->
-    <UModal v-model="showForm" :ui="{ width: 'sm:max-w-2xl' }">
+    <UModal v-model="showForm" :ui="{ width: 'sm:max-w-4xl' }">
       <UCard>
         <template #header>
-          <h3 class="font-semibold">{{ editId ? 'Editar Webhook' : 'Nuevo Webhook' }}</h3>
+          <h3 class="text-lg font-semibold">{{ editId ? 'Editar Webhook' : 'Nuevo Webhook' }}</h3>
         </template>
+
         <div class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <UFormGroup label="Nombre" required class="col-span-2">
-              <UInput v-model="form.name" placeholder="Mi webhook" />
-            </UFormGroup>
-            <UFormGroup label="URL" required class="col-span-2">
-              <UInput v-model="form.url" placeholder="https://mi-sistema.com/webhook" />
-            </UFormGroup>
-            <UFormGroup label="Secret (HMAC)">
-              <UInput v-model="form.secret" type="password" placeholder="Opcional" />
-            </UFormGroup>
-            <UFormGroup label="Timeout (segundos)">
-              <UInput v-model="form.timeout_seconds" type="number" min="1" max="30" />
-            </UFormGroup>
-          </div>
-          <UFormGroup label="Eventos a notificar">
-            <div class="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-lg p-3">
-              <label
-                v-for="evt in availableEvents"
-                :key="evt.value"
-                class="flex items-center gap-2 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  :value="evt.value"
-                  :checked="form.events.includes(evt.value)"
-                  class="rounded"
-                  @change="toggleEvent(evt.value)"
-                />
-                <span class="text-xs">{{ evt.value }}</span>
-              </label>
-            </div>
-          </UFormGroup>
-          <div class="flex items-center gap-3">
-            <UToggle v-model="form.is_active" />
-            <span class="text-sm">Activo</span>
-            <UToggle v-model="form.retry_on_failure" class="ml-4" />
-            <span class="text-sm">Reintentar en fallos</span>
-          </div>
+          <UAlert
+            icon="i-heroicons-information-circle"
+            color="blue"
+            variant="soft"
+            title="Recomendaciones"
+            description="Configure el secret HMAC para validar la autenticidad de las peticiones. Habilite reintentos para mejorar la fiabilidad."
+          />
+
+          <UTabs v-model="activeTabWebhook" :items="tabItemsWebhook">
+            <template #default="{ item }">
+              <div v-if="item.key === 'basic'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Información Básica</h4>
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormGroup label="Nombre" required class="col-span-2">
+                      <UInput v-model="form.name" placeholder="Mi webhook" />
+                    </UFormGroup>
+                    <UFormGroup label="URL" required class="col-span-2">
+                      <UInput v-model="form.url" placeholder="https://mi-sistema.com/webhook" />
+                    </UFormGroup>
+                  </div>
+                  <UFormGroup label="Eventos a notificar">
+                    <div class="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                      <label
+                        v-for="evt in availableEvents"
+                        :key="evt.value"
+                        class="flex items-center gap-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          :value="evt.value"
+                          :checked="form.events.includes(evt.value)"
+                          class="rounded"
+                          @change="toggleEvent(evt.value)"
+                        />
+                        <span class="text-xs">{{ evt.value }}</span>
+                      </label>
+                    </div>
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <div v-if="item.key === 'security'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Seguridad</h4>
+                  <UFormGroup label="Secret (HMAC)" help="Clave secreta para firma HMAC de peticiones">
+                    <UInput v-model="form.secret" type="password" placeholder="Opcional pero recomendado" />
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <div v-if="item.key === 'config'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración Avanzada</h4>
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormGroup label="Timeout (segundos)">
+                      <UInput v-model="form.timeout_seconds" type="number" min="1" max="30" />
+                    </UFormGroup>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <UToggle v-model="form.is_active" />
+                    <span class="text-sm">Webhook Activo</span>
+                  </div>
+                  <div class="flex items-center gap-3">
+                    <UToggle v-model="form.retry_on_failure" />
+                    <span class="text-sm">Reintentar en fallos</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </UTabs>
         </div>
+
         <template #footer>
           <div class="flex justify-end gap-2">
             <UButton color="gray" @click="showForm = false">Cancelar</UButton>
-            <UButton color="primary" :loading="saving" @click="saveWebhook">Guardar</UButton>
+            <UButton color="sky" :loading="saving" @click="saveWebhook">Guardar</UButton>
           </div>
         </template>
       </UCard>
@@ -190,6 +225,13 @@ const selectedWh = ref<any>(null)
 const deliveries = ref<any[]>([])
 const loadingDeliveries = ref(false)
 const availableEvents = ref<any[]>([])
+const activeTabWebhook = ref(0)
+
+const tabItemsWebhook = [
+  { key: 'basic', label: 'Básica', icon: 'i-heroicons-identification' },
+  { key: 'security', label: 'Seguridad', icon: 'i-heroicons-lock-closed' },
+  { key: 'config', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+]
 
 const form = ref({
   name: '', url: '', secret: '', events: [] as string[],

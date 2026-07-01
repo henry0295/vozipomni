@@ -70,7 +70,7 @@
     </UCard>
 
     <!-- Modal Create/Edit -->
-    <UModal v-model="isModalOpen" :prevent-close="saving">
+    <UModal v-model="isModalOpen" :prevent-close="saving" :ui="{ width: 'sm:max-w-5xl' }">
       <UCard>
         <template #header>
           <div class="flex items-center justify-between">
@@ -81,65 +81,105 @@
           </div>
         </template>
 
-        <form class="space-y-5" @submit.prevent="saveDestination">
-          <!-- Nombre y descripción -->
-          <div class="grid grid-cols-1 gap-4">
-            <UFormGroup label="Nombre *" required>
-              <UInput v-model="form.name" placeholder="ej. Cola_Ventas" />
-            </UFormGroup>
-            <UFormGroup label="Descripción">
-              <UTextarea v-model="form.description" placeholder="Descripción opcional" :rows="2" />
-            </UFormGroup>
-          </div>
+        <!-- Tabs de secciones -->
+        <UTabs :items="formTabs" v-model="activeTab">
+          <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                icon="i-heroicons-map-pin"
+                color="blue"
+                variant="subtle"
+                title="Destinos Personalizados"
+                description="Los destinos personalizados son nodos reutilizables del dialplan de Asterisk (context/extension/priority) que puedes usar en el enrutamiento de llamadas."
+              />
 
-          <!-- Dialplan principal -->
-          <div>
-            <p class="text-sm font-semibold text-gray-700 mb-2">Destino Asterisk</p>
-            <div class="grid grid-cols-3 gap-3">
-              <UFormGroup label="Context *" required>
-                <UInput v-model="form.context" placeholder="ej. from-internal" class="font-mono" />
-              </UFormGroup>
-              <UFormGroup label="Extension *" required>
-                <UInput v-model="form.extension" placeholder="ej. s" class="font-mono" />
-              </UFormGroup>
-              <UFormGroup label="Priority *" required>
-                <UInput v-model.number="form.priority" type="number" min="1" placeholder="1" class="font-mono" />
-              </UFormGroup>
-            </div>
-          </div>
+              <div class="grid grid-cols-1 gap-4">
+                <UFormGroup label="Nombre" required help="Nombre descriptivo del destino">
+                  <UInput v-model="form.name" placeholder="ej. Cola_Ventas" />
+                </UFormGroup>
+                
+                <UFormGroup label="Descripción" help="Descripción opcional">
+                  <UTextarea v-model="form.description" placeholder="Descripción opcional" :rows="2" />
+                </UFormGroup>
+              </div>
 
-          <!-- Destino de fallo -->
-          <div>
-            <div class="flex items-center gap-2 mb-2">
-              <p class="text-sm font-semibold text-gray-700">Destino de fallo</p>
-              <UBadge color="gray" variant="soft" size="xs">Opcional</UBadge>
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-arrow-right-circle" class="text-blue-500" />
+                  <h4 class="font-medium text-gray-800">Destino Principal Asterisk</h4>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <UFormGroup label="Context" required help="Contexto del dialplan">
+                    <UInput v-model="form.context" placeholder="ej. from-internal" class="font-mono" />
+                  </UFormGroup>
+                  <UFormGroup label="Extension" required help="Extensión o patrón">
+                    <UInput v-model="form.extension" placeholder="ej. s" class="font-mono" />
+                  </UFormGroup>
+                  <UFormGroup label="Priority" required help="Prioridad de ejecución">
+                    <UInput v-model.number="form.priority" type="number" min="1" placeholder="1" class="font-mono" />
+                  </UFormGroup>
+                </div>
+              </div>
             </div>
-            <div class="grid grid-cols-3 gap-3">
-              <UFormGroup label="Context (fallo)">
-                <UInput v-model="form.failover_context" placeholder="ej. default" class="font-mono" />
-              </UFormGroup>
-              <UFormGroup label="Extension (fallo)">
-                <UInput v-model="form.failover_extension" placeholder="ej. h" class="font-mono" />
-              </UFormGroup>
-              <UFormGroup label="Priority (fallo)">
-                <UInput v-model.number="form.failover_priority" type="number" min="1" placeholder="1" class="font-mono" />
-              </UFormGroup>
-            </div>
-          </div>
+          </template>
 
-          <!-- Activo -->
-          <UFormGroup label="Estado">
-            <div class="flex items-center gap-3">
-              <UToggle v-model="form.is_active" />
-              <span class="text-sm text-gray-600">{{ form.is_active ? 'Activo' : 'Inactivo' }}</span>
+          <!-- ===== TAB 2: CONFIGURACIÓN AVANZADA ===== -->
+          <template #avanzado="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                icon="i-heroicons-exclamation-triangle"
+                color="amber"
+                variant="subtle"
+                title="Destino de Fallo"
+                description="Define un destino alternativo opcional que se usará si el destino principal falla o no está disponible."
+              />
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <div class="flex items-center gap-2">
+                  <UIcon name="i-heroicons-arrow-path" class="text-amber-500" />
+                  <h4 class="font-medium text-gray-800">Destino de Fallo (Opcional)</h4>
+                  <UBadge color="gray" variant="soft" size="xs">Opcional</UBadge>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <UFormGroup label="Context (fallo)">
+                    <UInput v-model="form.failover_context" placeholder="ej. default" class="font-mono" />
+                  </UFormGroup>
+                  <UFormGroup label="Extension (fallo)">
+                    <UInput v-model="form.failover_extension" placeholder="ej. h" class="font-mono" />
+                  </UFormGroup>
+                  <UFormGroup label="Priority (fallo)">
+                    <UInput v-model.number="form.failover_priority" type="number" min="1" placeholder="1" class="font-mono" />
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Estado del Destino</h4>
+
+                <div class="flex items-start space-x-3">
+                  <UCheckbox v-model="form.is_active" />
+                  <div class="flex-1">
+                    <label class="font-medium text-sm">Destino activo</label>
+                    <p class="text-xs text-gray-500">Desactiva el destino temporalmente sin eliminarlo del sistema</p>
+                  </div>
+                </div>
+              </div>
             </div>
-          </UFormGroup>
-        </form>
+          </template>
+        </UTabs>
 
         <template #footer>
           <div class="flex justify-end gap-3">
             <UButton color="gray" variant="outline" :disabled="saving" @click="closeModal">Cancelar</UButton>
-            <UButton :loading="saving" @click="saveDestination">
+            <UButton 
+              icon="i-heroicons-check"
+              :loading="saving" 
+              color="sky"
+              @click="saveDestination"
+            >
               {{ editingDestination ? 'Guardar cambios' : 'Crear destino' }}
             </UButton>
           </div>
@@ -163,6 +203,7 @@ const filterActive = ref('')
 const isModalOpen = ref(false)
 const saving = ref(false)
 const editingDestination = ref<any>(null)
+const activeTab = ref(0)
 
 const emptyForm = () => ({
   name: '',
@@ -177,6 +218,11 @@ const emptyForm = () => ({
 })
 
 const form = ref(emptyForm())
+
+const formTabs = [
+  { label: 'Información Básica', slot: 'basica', icon: 'i-heroicons-document-text' },
+  { label: 'Configuración Avanzada', slot: 'avanzado', icon: 'i-heroicons-cog-6-tooth' }
+]
 
 // ── Opciones ────────────────────────────────────────────────────────────
 const activeOptions = [

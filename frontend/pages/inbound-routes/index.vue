@@ -112,51 +112,158 @@
     </UCard>
 
     <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" title="Ruta Entrante" @close="resetForm">
-      <div class="p-4 space-y-4">
-        <UFormGroup label="DID/Número" help="Número telefónico entrante">
-          <UInput v-model="form.did" placeholder="Ej: +573001234567" />
-        </UFormGroup>
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-4xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">
+              {{ editingId ? 'Editar Ruta Entrante' : 'Nueva Ruta Entrante (DID)' }}
+            </h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isModalOpen = false" />
+          </div>
+        </template>
 
-        <UFormGroup label="Descripción" help="Descripción de la ruta">
-          <UInput v-model="form.description" placeholder="Ej: DID principal" />
-        </UFormGroup>
+        <UTabs :items="formTabs" v-model="activeTab">
+          <!-- TAB 1: INFORMACIÓN BÁSICA -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert
+                icon="i-heroicons-information-circle"
+                color="blue"
+                variant="subtle"
+                title="Rutas Entrantes - DIDs"
+                description="Configure cómo se rutean las llamadas entrantes según el número marcado (DID). Puede asignar diferentes destinos a cada número."
+              />
 
-        <UFormGroup label="Tipo de Destino">
-          <USelect
-            v-model="form.destination_type"
-            :options="destinationTypes"
-            option-attribute="label"
-            value-attribute="value"
-          />
-        </UFormGroup>
+              <UFormGroup label="Descripción" required help="Nombre descriptivo de esta ruta">
+                <UInput v-model="form.description" placeholder="Línea Principal - Ventas" />
+              </UFormGroup>
 
-        <UFormGroup label="Destino" help="Extensión, cola, IVR, etc.">
-          <UInput v-model="form.destination" placeholder="Ej: 100" />
-        </UFormGroup>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Prioridad" help="Orden de evaluación (menor = primero)">
+                  <UInput v-model.number="form.priority" type="number" min="1" />
+                </UFormGroup>
 
-        <UFormGroup label="Prioridad">
-          <UInput v-model.number="form.priority" type="number" min="1" />
-        </UFormGroup>
+                <UFormGroup>
+                  <UCheckbox v-model="form.is_active" label="Ruta Activada" />
+                </UFormGroup>
+              </div>
+            </div>
+          </template>
 
-        <UFormGroup label="Condición Horario (Opcional)">
-          <UInput v-model="form.time_condition" placeholder="Ej: business_hours" />
-        </UFormGroup>
+          <!-- TAB 2: IDENTIFICACIÓN DID -->
+          <template #identificacion="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert
+                icon="i-heroicons-phone"
+                color="purple"
+                variant="subtle"
+                title="Número DID"
+                description="Configure el número telefónico que activará esta ruta. Puede usar patrones como _X. para comodines."
+              />
 
-        <UFormGroup>
-          <UCheckbox v-model="form.is_active" label="Activada" />
-        </UFormGroup>
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Número Telefónico</h4>
+                
+                <UFormGroup label="DID/Número" required help="Número entrante completo">
+                  <UInput v-model="form.did" placeholder="+573001234567" />
+                </UFormGroup>
+              </div>
 
-        <div class="flex gap-2 pt-4">
-          <UButton color="primary" @click="saveRoute" :loading="isSaving">
-            Guardar
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
-            Cancelar
-          </UButton>
-        </div>
-      </div>
-    </USlideover>
+              <UAlert
+                icon="i-heroicons-light-bulb"
+                color="amber"
+                variant="subtle"
+              >
+                <template #description>
+                  <ul class="text-sm space-y-1">
+                    <li><strong>Formato exacto:</strong> +573001234567 (coincide solo con ese número)</li>
+                    <li><strong>Patrón con comodín:</strong> _X. (cualquier número)</li>
+                    <li><strong>Prefijo:</strong> _57300XXXXXXX (números que inicien con 57300)</li>
+                    <li><strong>Prioridad:</strong> Las coincidencias exactas tienen mayor prioridad que los patrones</li>
+                  </ul>
+                </template>
+              </UAlert>
+            </div>
+          </template>
+
+          <!-- TAB 3: DESTINO -->
+          <template #destino="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert
+                icon="i-heroicons-arrow-right-circle"
+                color="sky"
+                variant="subtle"
+                title="Configure el Destino"
+                description="Defina dónde se enrutarán las llamadas que lleguen a este DID."
+              />
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Destino de la Llamada</h4>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Tipo de Destino" required>
+                    <USelect
+                      v-model="form.destination_type"
+                      :options="destinationTypes"
+                      option-attribute="label"
+                      value-attribute="value"
+                    />
+                  </UFormGroup>
+
+                  <UFormGroup label="Destino" required help="Nombre de cola, extensión, IVR, etc.">
+                    <UInput v-model="form.destination" placeholder="sales-queue, 100, ivr_main" />
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <div class="border border-blue-200 bg-blue-50 dark:bg-blue-950 rounded-lg p-4 space-y-4">
+                <div class="flex items-center space-x-2">
+                  <UIcon name="i-heroicons-clock" class="text-blue-600" />
+                  <h4 class="font-medium text-blue-800 dark:text-blue-200">Condición de Horario (Opcional)</h4>
+                </div>
+                
+                <UFormGroup label="Condición de Horario" help="Nombre de una condición de horario para ruteo condicional">
+                  <UInput v-model="form.time_condition" placeholder="business_hours" />
+                </UFormGroup>
+
+                <p class="text-sm text-blue-700 dark:text-blue-300">
+                  Si especifica una condición de horario, el destino configurado arriba se usará cuando se cumpla la condición.
+                  De lo contrario, se usará el destino alternativo definido en la condición de horario.
+                </p>
+              </div>
+
+              <UAlert
+                icon="i-heroicons-light-bulb"
+                color="green"
+                variant="subtle"
+              >
+                <template #description>
+                  <ul class="text-sm space-y-1">
+                    <li><strong>IVR:</strong> Menú interactivo de voz</li>
+                    <li><strong>Cola:</strong> Grupo de agentes para atender llamadas</li>
+                    <li><strong>Extensión:</strong> Teléfono directo de un usuario</li>
+                    <li><strong>Buzón:</strong> Grabación de mensaje de voz</li>
+                    <li><strong>Anuncio:</strong> Reproducción de mensaje grabado</li>
+                  </ul>
+                </template>
+              </UAlert>
+            </div>
+          </template>
+        </UTabs>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="gray" variant="ghost" @click="isModalOpen = false">
+              Cancelar
+            </UButton>
+            <UButton color="sky" @click="saveRoute" :loading="isSaving">
+              {{ editingId ? 'Guardar Cambios' : 'Crear Ruta' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -193,6 +300,14 @@ const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
 const { apiFetch } = useApi()
+
+const activeTab = ref(0)
+
+const formTabs = [
+  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
+  { key: 'identificacion', label: 'Identificación DID', icon: 'i-heroicons-phone' },
+  { key: 'destino', label: 'Destino', icon: 'i-heroicons-arrow-right-circle' }
+]
 
 const form = ref({
   did: '',

@@ -122,174 +122,240 @@
     </UCard>
 
     <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" :title="editingId ? 'Editar Agente' : 'Nuevo Agente'" @close="resetForm">
-      <div class="flex flex-col h-full">
-        <div class="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
-        
-        <!-- Alert de error dentro del modal -->
-        <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle" :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }" @close="error = null">
-          <template #title>
-            Error al guardar
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-4xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">
+              {{ editingId ? 'Editar Agente' : 'Nuevo Agente' }}
+            </h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isModalOpen = false" />
+          </div>
+        </template>
+
+        <!-- Tabs de secciones -->
+        <UTabs :items="formTabs" v-model="activeTab">
+          <!-- ===== TAB 1: USUARIO ===== -->
+          <template #usuario="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                v-if="!editingId"
+                icon="i-heroicons-user-circle"
+                color="blue"
+                variant="subtle"
+                title="Información del Usuario"
+                description="Crea las credenciales de acceso al sistema para este agente. El usuario podrá iniciar sesión con estos datos."
+              />
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Nombre" required help="Nombre completo del agente">
+                  <UInput v-model="form.first_name" placeholder="Ej: Juan" />
+                </UFormGroup>
+
+                <UFormGroup label="Apellido" required>
+                  <UInput v-model="form.last_name" placeholder="Ej: Pérez" />
+                </UFormGroup>
+              </div>
+
+              <UFormGroup label="Email" required>
+                <UInput v-model="form.email" type="email" placeholder="agente@ejemplo.com" />
+              </UFormGroup>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Usuario" required help="Nombre de usuario para inicio de sesión">
+                  <UInput v-model="form.username" placeholder="Ej: jperez" />
+                </UFormGroup>
+
+                <UFormGroup label="Contraseña" :required="!editingId" :help="editingId ? 'Dejar vacío para mantener contraseña actual' : 'Mínimo 8 caracteres'">
+                  <UInput v-model="form.password" type="password" placeholder="Mínimo 8 caracteres" />
+                </UFormGroup>
+              </div>
+            </div>
           </template>
-          <template #description>
-            {{ error }}
+
+          <!-- ===== TAB 2: AGENTE ===== -->
+          <template #agente="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                icon="i-heroicons-identification"
+                color="green"
+                variant="subtle"
+                title="Identificación del Agente"
+                :description="editingId ? 'Los IDs son únicos y no pueden modificarse una vez creados.' : 'Los IDs se generan automáticamente pero puedes personalizarlos antes de guardar.'"
+              />
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Identificadores</h4>
+                
+                <UFormGroup label="ID de Agente" required :help="!editingId ? 'Auto-generado (editable)' : 'Identificador único del agente'">
+                  <div class="flex gap-2">
+                    <div class="flex-1 relative">
+                      <UInput 
+                        v-model="form.agent_id" 
+                        placeholder="Ej: AGT001"
+                        @input="onAgentIdChange"
+                        :disabled="editingId !== null"
+                      />
+                      <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none gap-2">
+                        <span v-if="agentIdStatus === 'checking' && !editingId" class="text-xs text-gray-500">
+                          <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+                        </span>
+                        <span v-else-if="agentIdStatus === 'available' && !editingId" class="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <UIcon name="i-heroicons-check-circle" class="w-4 h-4" />
+                          <span class="hidden sm:inline">OK</span>
+                        </span>
+                        <span v-else-if="agentIdStatus === 'unavailable' && !editingId" class="text-xs text-red-600 font-medium flex items-center gap-1">
+                          <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
+                          <span class="hidden sm:inline">En uso</span>
+                        </span>
+                      </div>
+                    </div>
+                    <UButton 
+                      v-if="!editingId"
+                      icon="i-heroicons-arrow-path"
+                      size="sm"
+                      color="gray"
+                      variant="outline"
+                      @click="regenerateAgentId"
+                      title="Regenerar ID"
+                    />
+                  </div>
+                </UFormGroup>
+
+                <UFormGroup label="Extensión SIP" required :help="!editingId ? 'Auto-generada (editable)' : 'Número de extensión telefónica'">
+                  <div class="flex gap-2">
+                    <div class="flex-1 relative">
+                      <UInput 
+                        v-model="form.sip_extension" 
+                        placeholder="Ej: 100" 
+                        type="text"
+                        @input="onExtensionChange"
+                        :disabled="editingId !== null"
+                      />
+                      <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none gap-2">
+                        <span v-if="extensionStatus === 'checking' && !editingId" class="text-xs text-gray-500">
+                          <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
+                        </span>
+                        <span v-else-if="extensionStatus === 'available' && !editingId" class="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <UIcon name="i-heroicons-check-circle" class="w-4 h-4" />
+                          <span class="hidden sm:inline">OK</span>
+                        </span>
+                        <span v-else-if="extensionStatus === 'unavailable' && !editingId" class="text-xs text-red-600 font-medium flex items-center gap-1">
+                          <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
+                          <span class="hidden sm:inline">En uso</span>
+                        </span>
+                      </div>
+                    </div>
+                    <UButton 
+                      v-if="!editingId"
+                      icon="i-heroicons-arrow-path"
+                      size="sm"
+                      color="gray"
+                      variant="outline"
+                      @click="regenerateExtension"
+                      title="Regenerar extensión"
+                    />
+                  </div>
+                </UFormGroup>
+
+                <UFormGroup label="Contraseña SIP" :required="!editingId" help="Contraseña para autenticación SIP/WebRTC">
+                  <UInput v-model="form.sip_password" type="password" placeholder="Contraseña segura SIP" />
+                </UFormGroup>
+              </div>
+            </div>
           </template>
-        </UAlert>
 
-        <!-- Información del Usuario -->
-        <div class="space-y-4">
-          <h3 class="text-lg font-semibold border-b pb-2">Información del Usuario</h3>
-          
-          <UFormGroup label="Nombre" required help="Nombre completo del agente">
-            <UInput v-model="form.first_name" placeholder="Ej: Juan" />
-          </UFormGroup>
+          <!-- ===== TAB 3: CONFIGURACIÓN ===== -->
+          <template #configuracion="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                icon="i-heroicons-cog-6-tooth"
+                color="purple"
+                variant="subtle"
+                title="Configuración de Funcionalidades"
+                description="Define las capacidades y características del agente para el manejo de llamadas."
+              />
 
-          <UFormGroup label="Apellido" required>
-            <UInput v-model="form.last_name" placeholder="Ej: Pérez" />
-          </UFormGroup>
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Capacidades de Llamada</h4>
 
-          <UFormGroup label="Email" required>
-            <UInput v-model="form.email" type="email" placeholder="agente@ejemplo.com" />
-          </UFormGroup>
+                <UFormGroup label="Máx. Llamadas Simultáneas" help="Número máximo de llamadas que puede manejar">
+                  <UInput v-model.number="form.max_concurrent_calls" type="number" min="1" max="10" />
+                </UFormGroup>
 
-          <UFormGroup label="Usuario" required help="Nombre de usuario para inicio de sesión">
-            <UInput v-model="form.username" placeholder="Ej: jperez" />
-          </UFormGroup>
+                <div class="space-y-3">
+                  <div class="flex items-start space-x-3">
+                    <UCheckbox v-model="form.webrtc_enabled" />
+                    <div class="flex-1">
+                      <label class="font-medium text-sm">Habilitar WebRTC</label>
+                      <p class="text-xs text-gray-500">Permite realizar llamadas desde el navegador web sin necesidad de softphone</p>
+                    </div>
+                  </div>
 
-          <UFormGroup label="Contraseña" :required="!editingId" help="Dejar vacío para mantener contraseña actual">
-            <UInput v-model="form.password" type="password" placeholder="Mínimo 8 caracteres" />
-          </UFormGroup>
-        </div>
+                  <div class="flex items-start space-x-3">
+                    <UCheckbox v-model="form.auto_answer" />
+                    <div class="flex-1">
+                      <label class="font-medium text-sm">Auto-respuesta</label>
+                      <p class="text-xs text-gray-500">Las llamadas entrantes se contestan automáticamente</p>
+                    </div>
+                  </div>
 
-        <!-- Información del Agente -->
-        <div class="space-y-4">
-          <h3 class="text-lg font-semibold border-b pb-2">Configuración de Agente</h3>
-          
-          <UFormGroup label="ID de Agente" required :help="!editingId ? 'Auto-generado (editable)' : 'Identificador único del agente'">
-            <div class="flex gap-2">
-              <div class="flex-1 relative">
-                <UInput 
-                  v-model="form.agent_id" 
-                  placeholder="Ej: AGT001"
-                  @input="onAgentIdChange"
-                  :disabled="editingId !== null"
-                />
-                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none gap-2">
-                  <span v-if="agentIdStatus === 'checking' && !editingId" class="text-xs text-gray-500">
-                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
-                  </span>
-                  <span v-else-if="agentIdStatus === 'available' && !editingId" class="text-xs text-green-600 font-medium flex items-center gap-1">
-                    <UIcon name="i-heroicons-check-circle" class="w-4 h-4" />
-                    <span class="hidden sm:inline">OK</span>
-                  </span>
-                  <span v-else-if="agentIdStatus === 'unavailable' && !editingId" class="text-xs text-red-600 font-medium flex items-center gap-1">
-                    <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
-                    <span class="hidden sm:inline">En uso</span>
-                  </span>
+                  <div class="flex items-start space-x-3">
+                    <UCheckbox v-model="form.recording_enabled" />
+                    <div class="flex-1">
+                      <label class="font-medium text-sm">Grabación de llamadas</label>
+                      <p class="text-xs text-gray-500">Todas las llamadas del agente se grabarán automáticamente</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <UButton 
-                v-if="!editingId"
-                icon="i-heroicons-arrow-path"
-                size="sm"
-                color="gray"
-                variant="outline"
-                @click="regenerateAgentId"
-                title="Regenerar ID"
-              />
             </div>
-          </UFormGroup>
+          </template>
+        </UTabs>
 
-          <UFormGroup label="Extensión SIP" required :help="!editingId ? 'Auto-generada (editable)' : 'Número de extensión telefónica'">
-            <div class="flex gap-2">
-              <div class="flex-1 relative">
-                <UInput 
-                  v-model="form.sip_extension" 
-                  placeholder="Ej: 100" 
-                  type="text"
-                  @input="onExtensionChange"
-                  :disabled="editingId !== null"
-                />
-                <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none gap-2">
-                  <span v-if="extensionStatus === 'checking' && !editingId" class="text-xs text-gray-500">
-                    <UIcon name="i-heroicons-arrow-path" class="w-4 h-4 animate-spin" />
-                  </span>
-                  <span v-else-if="extensionStatus === 'available' && !editingId" class="text-xs text-green-600 font-medium flex items-center gap-1">
-                    <UIcon name="i-heroicons-check-circle" class="w-4 h-4" />
-                    <span class="hidden sm:inline">OK</span>
-                  </span>
-                  <span v-else-if="extensionStatus === 'unavailable' && !editingId" class="text-xs text-red-600 font-medium flex items-center gap-1">
-                    <UIcon name="i-heroicons-x-circle" class="w-4 h-4" />
-                    <span class="hidden sm:inline">En uso</span>
-                  </span>
-                </div>
-              </div>
-              <UButton 
-                v-if="!editingId"
-                icon="i-heroicons-arrow-path"
-                size="sm"
-                color="gray"
-                variant="outline"
-                @click="regenerateExtension"
-                title="Regenerar extensión"
-              />
+        <template #footer>
+          <div class="flex justify-between items-center">
+            <div class="text-sm text-gray-500">
+              <UAlert 
+                v-if="!isFormValid && !editingId" 
+                color="amber" 
+                icon="i-heroicons-exclamation-triangle"
+                variant="soft"
+                :ui="{ description: 'text-xs' }"
+              >
+                <template #description>
+                  Completa los campos requeridos: {{ missingFields }}
+                </template>
+              </UAlert>
+              <UAlert 
+                v-if="error" 
+                color="red" 
+                icon="i-heroicons-exclamation-triangle"
+                variant="soft"
+                :close-button="{ icon: 'i-heroicons-x-mark-20-solid', color: 'red', variant: 'link' }" 
+                @close="error = null"
+              >
+                <template #description>
+                  {{ error }}
+                </template>
+              </UAlert>
             </div>
-          </UFormGroup>
-
-          <UFormGroup label="Contraseña SIP" :required="!editingId" help="Contraseña para autenticación SIP/WebRTC">
-            <UInput v-model="form.sip_password" type="password" placeholder="Contraseña segura SIP" />
-          </UFormGroup>
-
-          <UFormGroup label="Máx. Llamadas Simultáneas" help="Número máximo de llamadas que puede manejar">
-            <UInput v-model.number="form.max_concurrent_calls" type="number" min="1" max="10" />
-          </UFormGroup>
-
-          <div class="space-y-2">
-            <UCheckbox v-model="form.webrtc_enabled" label="Habilitar WebRTC" />
-            <p class="text-xs text-gray-500 ml-6">Permite llamadas desde el navegador web</p>
+            <div class="flex space-x-2">
+              <UButton color="gray" @click="isModalOpen = false">Cancelar</UButton>
+              <UButton
+                icon="i-heroicons-check"
+                @click="saveAgent"
+                color="sky"
+                :loading="isSaving"
+                :disabled="!isFormValid"
+              >
+                {{ editingId ? 'Actualizar Agente' : 'Crear Agente' }}
+              </UButton>
+            </div>
           </div>
-
-          <div class="space-y-2">
-            <UCheckbox v-model="form.auto_answer" label="Auto-respuesta" />
-            <p class="text-xs text-gray-500 ml-6">Contesta llamadas automáticamente</p>
-          </div>
-
-          <div class="space-y-2">
-            <UCheckbox v-model="form.recording_enabled" label="Grabación de llamadas" />
-            <p class="text-xs text-gray-500 ml-6">Graba todas las llamadas del agente</p>
-          </div>
-        </div>
-        </div>
-
-        <div class="flex flex-col gap-2 p-4 border-t bg-white dark:bg-gray-900">
-          <UAlert 
-            v-if="!isFormValid && !editingId" 
-            color="amber" 
-            icon="i-heroicons-exclamation-triangle"
-            :ui="{ description: 'text-xs' }"
-          >
-            <template #description>
-              Completa todos los campos requeridos: {{ missingFields }}
-            </template>
-          </UAlert>
-          
-          <div class="flex gap-2">
-            <UButton 
-              color="primary" 
-              @click="saveAgent" 
-              :loading="isSaving"
-              :disabled="!isFormValid"
-              class="flex-1"
-            >
-              {{ editingId ? 'Actualizar' : 'Crear Agente' }}
-            </UButton>
-            <UButton color="gray" @click="isModalOpen = false" class="flex-1">
-              Cancelar
-            </UButton>
-          </div>
-        </div>
-      </div>
-    </USlideover>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -321,6 +387,7 @@ const statusFilter = ref('')
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const activeTab = ref(0)
 
 const form = ref({
   // Usuario
@@ -338,6 +405,12 @@ const form = ref({
   auto_answer: false,
   recording_enabled: true
 })
+
+const formTabs = [
+  { label: 'Usuario', slot: 'usuario', icon: 'i-heroicons-user' },
+  { label: 'Agente', slot: 'agente', icon: 'i-heroicons-identification' },
+  { label: 'Configuración', slot: 'configuracion', icon: 'i-heroicons-cog-6-tooth' }
+]
 
 // Validación en tiempo real
 const agentIdStatus = ref<'idle' | 'checking' | 'available' | 'unavailable'>('idle')

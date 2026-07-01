@@ -110,85 +110,173 @@
     </UCard>
 
     <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" title="Configurar IVR" @close="resetForm">
-      <div class="p-4 space-y-4">
-        <UFormGroup label="Nombre">
-          <UInput v-model="form.name" placeholder="Ej: IVR Principal" />
-        </UFormGroup>
-
-        <UFormGroup label="Extensión">
-          <UInput v-model="form.extension" placeholder="Ej: 100" />
-        </UFormGroup>
-
-        <UFormGroup label="Mensaje de Bienvenida">
-          <UTextarea 
-            v-model="form.welcome_message" 
-            placeholder="Ej: Bienvenido a nuestro centro de contacto"
-            :rows="3"
-          />
-        </UFormGroup>
-
-        <UFormGroup label="Mensaje - Opción Inválida">
-          <UInput v-model="form.invalid_message" placeholder="Opción no válida, intente nuevamente" />
-        </UFormGroup>
-
-        <UFormGroup label="Mensaje - Timeout">
-          <UInput v-model="form.timeout_message" placeholder="Se agotó el tiempo de respuesta" />
-        </UFormGroup>
-
-        <UFormGroup label="Timeout (segundos)">
-          <UInput v-model.number="form.timeout" type="number" min="1" max="30" />
-        </UFormGroup>
-
-        <UFormGroup label="Intentos Máximos">
-          <UInput v-model.number="form.max_attempts" type="number" min="1" max="5" />
-        </UFormGroup>
-
-        <div class="border-t pt-4">
-          <h3 class="font-semibold mb-3">Opciones del Menú</h3>
-          <div class="space-y-3 max-h-80 overflow-y-auto">
-            <div v-for="(key) in Object.keys(form.menu_options)" :key="key" class="border rounded p-3 bg-gray-50 dark:bg-gray-800">
-              <div class="flex justify-between items-center mb-2">
-                <span class="font-semibold">Tecla {{ key }}</span>
-                <UButton
-                  variant="ghost"
-                  icon="i-heroicons-trash"
-                  size="xs"
-                  color="red"
-                  @click="deleteMenuOption(key)"
-                />
-              </div>
-              <UInput
-                v-model="form.menu_options[key]"
-                placeholder="Destino (cola, extensión, IVR, etc.)"
-                size="sm"
-              />
-            </div>
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-5xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">
+              {{ editingId ? 'Editar IVR' : 'Nuevo IVR - Menú Interactivo' }}
+            </h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isModalOpen = false" />
           </div>
-          <UButton
-            variant="soft"
-            icon="i-heroicons-plus"
-            class="mt-3 w-full"
-            @click="addMenuOption"
-          >
-            Agregar Opción
-          </UButton>
-        </div>
+        </template>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.is_active" label="Activado" />
-        </UFormGroup>
+        <UTabs :items="formTabs" v-model="activeTab">
+          <!-- TAB 1: INFORMACIÓN BÁSICA -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert
+                icon="i-heroicons-information-circle"
+                color="blue"
+                variant="subtle"
+                title="IVR - Menú de Voz Interactivo"
+                description="Configure un menú telefónico interactivo que permite a los llamantes seleccionar opciones mediante el teclado DTMF."
+              />
 
-        <div class="flex gap-2 pt-4">
-          <UButton color="primary" @click="saveIVR" :loading="isSaving">
-            Guardar
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
-            Cancelar
-          </UButton>
-        </div>
-      </div>
-    </USlideover>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Nombre" required help="Identificador único del IVR">
+                  <UInput v-model="form.name" placeholder="IVR Principal" />
+                </UFormGroup>
+
+                <UFormGroup label="Extensión" required help="Número de extensión del IVR">
+                  <UInput v-model="form.extension" placeholder="100" />
+                </UFormGroup>
+              </div>
+            </div>
+          </template>
+
+          <!-- TAB 2: MENSAJES -->
+          <template #mensajes="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert
+                icon="i-heroicons-speaker-wave"
+                color="purple"
+                variant="subtle"
+                title="Mensajes de Audio"
+                description="Configure los mensajes que se reproducirán al llamante en diferentes situaciones."
+              />
+
+              <UFormGroup label="Mensaje de Bienvenida" required help="Se reproduce al entrar al IVR">
+                <UTextarea 
+                  v-model="form.welcome_message" 
+                  placeholder="Bienvenido a nuestro centro de contacto. Para ventas presione 1, para soporte presione 2..."
+                  :rows="3"
+                />
+              </UFormGroup>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Mensaje - Opción Inválida" help="Se reproduce cuando presionan una opción incorrecta">
+                  <UInput v-model="form.invalid_message" placeholder="Opción no válida, intente nuevamente" />
+                </UFormGroup>
+
+                <UFormGroup label="Mensaje - Timeout" help="Se reproduce cuando no presionan ninguna opción">
+                  <UInput v-model="form.timeout_message" placeholder="Se agotó el tiempo de respuesta" />
+                </UFormGroup>
+              </div>
+            </div>
+          </template>
+
+          <!-- TAB 3: OPCIONES DE MENÚ -->
+          <template #opciones="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert
+                icon="i-heroicons-list-bullet"
+                color="amber"
+                variant="subtle"
+                title="Opciones del Menú DTMF"
+                description="Configure las teclas y sus destinos. Ejemplo: 1 → Cola de Ventas, 2 → Cola de Soporte, 0 → Operadora."
+              />
+
+              <div class="border border-gray-200 rounded-lg p-4">
+                <div class="flex justify-between items-center mb-4">
+                  <h4 class="font-medium text-gray-800">Opciones Configuradas</h4>
+                  <UButton
+                    variant="soft"
+                    icon="i-heroicons-plus"
+                    size="sm"
+                    @click="addMenuOption"
+                  >
+                    Agregar Opción
+                  </UButton>
+                </div>
+                
+                <div class="space-y-3 max-h-96 overflow-y-auto">
+                  <div v-for="(key) in Object.keys(form.menu_options)" :key="key" class="border rounded p-3 bg-gray-50 dark:bg-gray-800">
+                    <div class="flex justify-between items-center mb-2">
+                      <span class="font-semibold">Tecla {{ key }}</span>
+                      <UButton
+                        variant="ghost"
+                        icon="i-heroicons-trash"
+                        size="xs"
+                        color="red"
+                        @click="deleteMenuOption(key)"
+                      />
+                    </div>
+                    <UInput
+                      v-model="form.menu_options[key]"
+                      placeholder="Destino (ej: sales-queue, extension:100, ivr:main)"
+                      size="sm"
+                    />
+                  </div>
+                  <div v-if="Object.keys(form.menu_options).length === 0" class="text-center text-gray-500 text-sm py-8">
+                    No hay opciones configuradas. Haz clic en "Agregar Opción" para crear una.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- TAB 4: CONFIGURACIÓN -->
+          <template #configuracion="{ item }">
+            <div class="space-y-5 py-4">
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Parámetros de Tiempo y Reintentos</h4>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Timeout (segundos)" help="Tiempo máximo de espera por una opción">
+                    <UInput v-model.number="form.timeout" type="number" min="1" max="30" />
+                  </UFormGroup>
+
+                  <UFormGroup label="Intentos Máximos" help="Número de intentos antes de colgar o transferir">
+                    <UInput v-model.number="form.max_attempts" type="number" min="1" max="5" />
+                  </UFormGroup>
+                </div>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Estado</h4>
+                <UCheckbox v-model="form.is_active" label="IVR Activado" />
+              </div>
+
+              <UAlert
+                icon="i-heroicons-light-bulb"
+                color="sky"
+                variant="subtle"
+              >
+                <template #description>
+                  <ul class="text-sm space-y-1">
+                    <li><strong>Timeout:</strong> Tiempo que el sistema espera antes de repetir el mensaje</li>
+                    <li><strong>Intentos:</strong> Después de alcanzar el máximo, se puede transferir a operadora o colgar</li>
+                    <li><strong>Destinos válidos:</strong> nombre_cola, extension:100, ivr:nombre, voicemail:100</li>
+                  </ul>
+                </template>
+              </UAlert>
+            </div>
+          </template>
+        </UTabs>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="gray" variant="ghost" @click="isModalOpen = false">
+              Cancelar
+            </UButton>
+            <UButton color="sky" @click="saveIVR" :loading="isSaving">
+              {{ editingId ? 'Guardar Cambios' : 'Crear IVR' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -224,6 +312,15 @@ const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 
 const { apiFetch } = useApi()
+
+const activeTab = ref(0)
+
+const formTabs = [
+  { key: 'basica', label: 'Información Básica', icon: 'i-heroicons-identification' },
+  { key: 'mensajes', label: 'Mensajes', icon: 'i-heroicons-chat-bubble-left-right' },
+  { key: 'opciones', label: 'Opciones de Menú', icon: 'i-heroicons-list-bullet' },
+  { key: 'configuracion', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+]
 
 const form = ref({
   name: '',

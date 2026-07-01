@@ -108,50 +108,91 @@
     </UCard>
 
     <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" title="Ruta Saliente" @close="resetForm">
-      <div class="p-4 space-y-4">
-        <UFormGroup label="Nombre">
-          <UInput v-model="form.name" placeholder="Ej: Colombia Nacional" />
-        </UFormGroup>
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-4xl' }" @close="resetForm">
+      <UCard>
+        <template #header>
+          <h3 class="text-lg font-semibold">{{ editingId ? 'Editar Ruta Saliente' : 'Nueva Ruta Saliente' }}</h3>
+        </template>
 
-        <UFormGroup label="Patrón de Discado" help="Patrón regex para coincidir. Ej: ^2[0-9]{9}$">
-          <UInput v-model="form.pattern" placeholder="Ej: ^[0-9]{7,}$" />
-        </UFormGroup>
-
-        <UFormGroup label="Troncal">
-          <USelect
-            v-model="form.trunk"
-            :options="trunkOptions"
-            placeholder="Seleccione una troncal"
+        <div class="space-y-4">
+          <UAlert
+            icon="i-heroicons-information-circle"
+            color="blue"
+            variant="soft"
+            title="Recomendaciones"
+            description="Configure patrones de discado precisos para evitar conflictos. Use expresiones regulares para mayor control."
           />
-        </UFormGroup>
 
-        <UFormGroup label="Prefijo a Agregar (Opcional)" help="Dígitos a agregar al inicio">
-          <UInput v-model="form.prepend" placeholder="Ej: 57" />
-        </UFormGroup>
+          <UTabs v-model="activeTab" :items="tabItems">
+            <template #default="{ item }">
+              <div v-if="item.key === 'basic'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Información Básica</h4>
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormGroup label="Nombre" class="col-span-2" required>
+                      <UInput v-model="form.name" placeholder="Ej: Colombia Nacional" />
+                    </UFormGroup>
+                    <UFormGroup class="col-span-2">
+                      <UCheckbox v-model="form.is_active" label="Ruta Activa" />
+                    </UFormGroup>
+                  </div>
+                </div>
+              </div>
 
-        <UFormGroup label="Dígitos a Eliminar (Opcional)" help="Dígitos a eliminar del inicio">
-          <UInput v-model="form.prefix" placeholder="Ej: 1" />
-        </UFormGroup>
+              <div v-if="item.key === 'pattern'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Patrón de Marcado</h4>
+                  <UFormGroup label="Patrón de Discado" help="Patrón regex para coincidir. Ej: ^2[0-9]{9}$" required>
+                    <UInput v-model="form.pattern" placeholder="Ej: ^[0-9]{7,}$" />
+                  </UFormGroup>
+                  <div class="grid grid-cols-2 gap-4">
+                    <UFormGroup label="Prefijo a Agregar" help="Dígitos a agregar al inicio">
+                      <UInput v-model="form.prepend" placeholder="Ej: 57" />
+                    </UFormGroup>
+                    <UFormGroup label="Dígitos a Eliminar" help="Dígitos a eliminar del inicio">
+                      <UInput v-model="form.prefix" placeholder="Ej: 1" />
+                    </UFormGroup>
+                  </div>
+                </div>
+              </div>
 
-        <UFormGroup label="Prefijo Caller ID (Opcional)">
-          <UInput v-model="form.callerid_prefix" placeholder="Ej: 300" />
-        </UFormGroup>
+              <div v-if="item.key === 'trunk'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración de Troncal</h4>
+                  <UFormGroup label="Troncal" required>
+                    <USelect
+                      v-model="form.trunk"
+                      :options="trunkOptions"
+                      placeholder="Seleccione una troncal"
+                    />
+                  </UFormGroup>
+                </div>
+              </div>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.is_active" label="Activada" />
-        </UFormGroup>
-
-        <div class="flex gap-2 pt-4">
-          <UButton color="primary" @click="saveRoute" :loading="isSaving">
-            Guardar
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
-            Cancelar
-          </UButton>
+              <div v-if="item.key === 'config'" class="space-y-4 pt-4">
+                <div class="border rounded-lg p-4 space-y-4">
+                  <h4 class="font-semibold text-sm text-gray-700 dark:text-gray-300">Configuración Avanzada</h4>
+                  <UFormGroup label="Prefijo Caller ID (Opcional)" help="Prefijo para el número que se muestra en la llamada">
+                    <UInput v-model="form.callerid_prefix" placeholder="Ej: 300" />
+                  </UFormGroup>
+                </div>
+              </div>
+            </template>
+          </UTabs>
         </div>
-      </div>
-    </USlideover>
+
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="gray" @click="isModalOpen = false">
+              Cancelar
+            </UButton>
+            <UButton color="sky" @click="saveRoute" :loading="isSaving">
+              Guardar
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -179,6 +220,14 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
 const trunkOptions = ref<{ label: string; value: string }[]>([])
+const activeTab = ref(0)
+
+const tabItems = [
+  { key: 'basic', label: 'Básica', icon: 'i-heroicons-identification' },
+  { key: 'pattern', label: 'Patrones de Marcado', icon: 'i-heroicons-hashtag' },
+  { key: 'trunk', label: 'Troncales', icon: 'i-heroicons-signal' },
+  { key: 'config', label: 'Configuración', icon: 'i-heroicons-cog-6-tooth' }
+]
 
 const { apiFetch } = useApi()
 

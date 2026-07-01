@@ -115,52 +115,121 @@
     </UCard>
 
     <!-- Modal crear/editar -->
-    <USlideover v-model="isModalOpen" title="Buzón de Voz" @close="resetForm">
-      <div class="p-4 space-y-4">
-        <UFormGroup label="Número de Buzón">
-          <UInput v-model="form.mailbox" placeholder="Ej: 100" />
-        </UFormGroup>
+    <UModal v-model="isModalOpen" :ui="{ width: 'sm:max-w-4xl' }">
+      <UCard>
+        <template #header>
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">
+              {{ editingId ? 'Editar Buzón de Voz' : 'Nuevo Buzón de Voz' }}
+            </h3>
+            <UButton icon="i-heroicons-x-mark" color="gray" variant="ghost" @click="isModalOpen = false" />
+          </div>
+        </template>
 
-        <UFormGroup label="Nombre del Propietario">
-          <UInput v-model="form.name" placeholder="Ej: Recepción" />
-        </UFormGroup>
+        <!-- Tabs de secciones -->
+        <UTabs :items="formTabs" v-model="activeTab">
+          <!-- ===== TAB 1: BÁSICA ===== -->
+          <template #basica="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                icon="i-heroicons-envelope"
+                color="blue"
+                variant="subtle"
+                title="Información Básica"
+                description="Define el número de buzón y los datos del propietario. El email se usará para notificaciones de mensajes."
+              />
 
-        <UFormGroup label="Email">
-          <UInput v-model="form.email" type="email" placeholder="buzón@example.com" />
-        </UFormGroup>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <UFormGroup label="Número de Buzón" required help="Número único del buzón">
+                  <UInput v-model="form.mailbox" placeholder="Ej: 100" />
+                </UFormGroup>
 
-        <UFormGroup label="Contraseña de Acceso">
-          <UInput v-model="form.password" type="password" placeholder="Contraseña" />
-        </UFormGroup>
+                <UFormGroup label="Nombre del Propietario" required help="Nombre o descripción del buzón">
+                  <UInput v-model="form.name" placeholder="Ej: Recepción" />
+                </UFormGroup>
+              </div>
 
-        <UFormGroup label="Mensajes Máximos">
-          <UInput v-model.number="form.max_messages" type="number" min="1" max="200" />
-        </UFormGroup>
+              <UFormGroup label="Email" required help="Email para notificaciones de nuevos mensajes">
+                <UInput v-model="form.email" type="email" placeholder="buzón@example.com" />
+              </UFormGroup>
 
-        <div class="space-y-3 border-t pt-4">
-          <h3 class="font-semibold">Configuración de Notificaciones</h3>
-          <UFormGroup>
-            <UCheckbox v-model="form.email_attach" label="Adjuntar audio a notificaciones de email" />
-          </UFormGroup>
-          <UFormGroup>
-            <UCheckbox v-model="form.email_delete" label="Eliminar mensaje después de enviar por email" />
-          </UFormGroup>
-        </div>
+              <UFormGroup label="Contraseña de Acceso" required help="Contraseña para acceder al buzón">
+                <UInput v-model="form.password" type="password" placeholder="Contraseña" />
+              </UFormGroup>
+            </div>
+          </template>
 
-        <UFormGroup>
-          <UCheckbox v-model="form.is_active" label="Activado" />
-        </UFormGroup>
+          <!-- ===== TAB 2: CONFIGURACIÓN ===== -->
+          <template #configuracion="{ item }">
+            <div class="space-y-5 py-4">
+              <UAlert 
+                icon="i-heroicons-cog-6-tooth"
+                color="purple"
+                variant="subtle"
+                title="Configuración de Buzón"
+                description="Personaliza el comportamiento del buzón y las notificaciones por email."
+              />
 
-        <div class="flex gap-2 pt-4">
-          <UButton color="primary" @click="saveVoicemail" :loading="isSaving">
-            Guardar
-          </UButton>
-          <UButton color="gray" @click="isModalOpen = false">
-            Cancelar
-          </UButton>
-        </div>
-      </div>
-    </USlideover>
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Capacidad y Almacenamiento</h4>
+
+                <UFormGroup label="Mensajes Máximos" required help="Número máximo de mensajes que puede almacenar">
+                  <UInput v-model.number="form.max_messages" type="number" min="1" max="200" />
+                </UFormGroup>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Notificaciones por Email</h4>
+
+                <div class="space-y-3">
+                  <div class="flex items-start space-x-3">
+                    <UCheckbox v-model="form.email_attach" />
+                    <div class="flex-1">
+                      <label class="font-medium text-sm">Adjuntar audio a notificaciones de email</label>
+                      <p class="text-xs text-gray-500">Los mensajes de voz se enviarán como archivo adjunto en el email</p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-start space-x-3">
+                    <UCheckbox v-model="form.email_delete" />
+                    <div class="flex-1">
+                      <label class="font-medium text-sm">Eliminar mensaje después de enviar por email</label>
+                      <p class="text-xs text-gray-500">El mensaje se eliminará del buzón automáticamente tras enviarse por email</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="border border-gray-200 rounded-lg p-4 space-y-4">
+                <h4 class="font-medium text-gray-800">Estado</h4>
+
+                <div class="flex items-start space-x-3">
+                  <UCheckbox v-model="form.is_active" />
+                  <div class="flex-1">
+                    <label class="font-medium text-sm">Buzón activo</label>
+                    <p class="text-xs text-gray-500">Desactiva el buzón temporalmente sin eliminarlo</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </UTabs>
+
+        <template #footer>
+          <div class="flex justify-end space-x-2">
+            <UButton color="gray" @click="isModalOpen = false">Cancelar</UButton>
+            <UButton
+              icon="i-heroicons-check"
+              @click="saveVoicemail"
+              color="sky"
+              :loading="isSaving"
+            >
+              {{ editingId ? 'Actualizar Buzón' : 'Crear Buzón' }}
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>
 
@@ -193,6 +262,7 @@ const statusFilter = ref<boolean | null>(null)
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingId = ref<number | null>(null)
+const activeTab = ref(0)
 
 const { apiFetch } = useApi()
 
@@ -206,6 +276,11 @@ const form = ref({
   email_delete: false,
   is_active: true
 })
+
+const formTabs = [
+  { label: 'Básica', slot: 'basica', icon: 'i-heroicons-identification' },
+  { label: 'Configuración', slot: 'configuracion', icon: 'i-heroicons-cog-6-tooth' }
+]
 
 const filteredVoicemails = computed(() => {
   return voicemails.value.filter(vm => {
