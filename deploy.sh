@@ -884,12 +884,30 @@ configure_fail2ban() {
         if [ -f /etc/debian_version ]; then
             apt-get update -qq && apt-get install -y fail2ban 2>/dev/null || true
         elif [ -f /etc/redhat-release ]; then
-            yum install -y fail2ban 2>/dev/null || dnf install -y fail2ban 2>/dev/null || true
+            # En RHEL-like fail2ban suele estar en EPEL
+            if command -v dnf &>/dev/null; then
+                dnf install -y epel-release 2>/dev/null || true
+                dnf makecache -q 2>/dev/null || true
+                dnf install -y fail2ban 2>/dev/null || true
+            elif command -v yum &>/dev/null; then
+                yum install -y epel-release 2>/dev/null || true
+                yum makecache -q 2>/dev/null || true
+                yum install -y fail2ban 2>/dev/null || true
+            fi
         else
             log_warning "No se pudo instalar fail2ban automáticamente"
             return 0
         fi
     fi
+
+    # Si no quedó instalado, continuar deploy sin fail2ban (no bloquear instalación)
+    if ! command -v fail2ban-client &>/dev/null; then
+        log_warning "fail2ban no disponible en repositorios del sistema. Continuando sin fail2ban (recomendado: habilitar EPEL e instalar manualmente)."
+        return 0
+    fi
+
+    # Asegurar estructura de configuración
+    mkdir -p /etc/fail2ban/filter.d /etc/fail2ban/jail.d
     
     # Crear filtro para AMI
     cat > /etc/fail2ban/filter.d/asterisk-ami.conf <<'FAIL2BAN_FILTER'
