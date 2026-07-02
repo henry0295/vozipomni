@@ -303,6 +303,7 @@ services:
     environment:
       ASTERISK_UID: "1000"
       ASTERISK_GID: "1000"
+      ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
       NAT_IPV4: ${NAT_IPV4:-}
       TZ: ${TZ:-America/Bogota}

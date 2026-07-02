@@ -170,6 +170,10 @@ if ! grep -qF "127.0.0.1 asterisk" /etc/hosts 2>/dev/null; then
     echo "  [entrypoint] /etc/hosts → '127.0.0.1 asterisk' (fix DNS host network)"
 fi
 
+if [ -n "${ASTERISK_AMI_PASSWORD}" ]; then
+    sed -i "s/^secret = .*/secret = ${ASTERISK_AMI_PASSWORD}/" "${CONFIG_DIR}/manager.conf" 2>/dev/null || true
+    echo "  [entrypoint] ✓ AMI password sincronizado en manager.conf"
+fi
 echo ""
 echo "=== Iniciando Asterisk ==="
 exec /usr/sbin/asterisk -f -vvv -U asterisk -G asterisk
