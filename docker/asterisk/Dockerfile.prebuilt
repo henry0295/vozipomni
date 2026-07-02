@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncurses5-dev \
     libnewt-dev \
     libxml2-dev \
+    libxslt1-dev \ 
     libsqlite3-dev \
     uuid-dev \
     libjansson-dev \
@@ -60,6 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncurses6 \
     libnewt0.52 \
     libxml2 \
+    libxslt1.1 \
     libsqlite3-0 \
     libuuid1 \
     libjansson4 \
