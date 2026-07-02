@@ -1132,9 +1132,21 @@ INITSQL
         wait_container_healthy "vozipomni_backend" 180 || true
     fi
 
+    # ─── Fase 2.5: Permisos del volumen Asterisk ────────────────────────
+    # El volumen asterisk_lib puede quedar con ownership root:root si fue creado
+    # por una versión anterior o en un deploy fallido. Asterisk corre como
+    # usuario 'asterisk' y necesita escribir astdb.sqlite3 en /var/lib/asterisk.
+    log_info "Verificando permisos del volumen Asterisk..."
+    ASTERISK_VOL="$(basename "${INSTALL_DIR:-/opt/vozipomni}")_asterisk_lib"
+    docker run --rm -v "${ASTERISK_VOL}:/var/lib/asterisk" alpine \
+        chmod 775 /var/lib/asterisk 2>/dev/null \
+        && log_info "Permisos de /var/lib/asterisk corregidos" \
+        || log_warning "No se pudo corregir permisos de asterisk_lib (volumen puede no existir aún)"
+
     # ─── Fase 3: Resto de servicios ──────────────────────────────────────
     log_info "Iniciando todos los servicios restantes..."
     $COMPOSE_CMD -f docker-compose.prod.yml up -d 2>&1
+    
 
     log_success "Servicios iniciados"
 }
