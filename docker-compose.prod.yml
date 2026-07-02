@@ -518,7 +518,7 @@ services:
       redis:
         condition: service_healthy
       asterisk:
-        condition: service_healthy
+        condition: service_started
     <<: *restart-policy
     logging: *default-logging
     stop_grace_period: 30s

@@ -154,12 +154,13 @@ fi
 # -------------------------------------------------------
 # 6. Permisos
 # -------------------------------------------------------
-chown -R asterisk:asterisk "${CONFIG_DIR}"    2>/dev/null || true
-chown -R asterisk:asterisk "${DYNAMIC_DIR}"   2>/dev/null || true
-chmod -R 777 "${DYNAMIC_DIR}"                 2>/dev/null || true
-chown -R asterisk:asterisk /var/log/asterisk  2>/dev/null || true
-chown -R asterisk:asterisk /var/run/asterisk  2>/dev/null || true
-chown -R asterisk:asterisk /var/spool/asterisk 2>/dev/null || true
+chown asterisk:asterisk /var/lib/asterisk          2>/dev/null || true
+chown -R asterisk:asterisk "${CONFIG_DIR}"         2>/dev/null || true
+chown -R asterisk:asterisk "${DYNAMIC_DIR}"        2>/dev/null || true
+chmod -R 777 "${DYNAMIC_DIR}"                      2>/dev/null || true
+chown -R asterisk:asterisk /var/log/asterisk       2>/dev/null || true
+chown -R asterisk:asterisk /var/run/asterisk       2>/dev/null || true
+chown -R asterisk:asterisk /var/spool/asterisk     2>/dev/null || true
 
 # -------------------------------------------------------
 # 7. Fix DNS: con network_mode:host el nombre "asterisk" no resuelve
