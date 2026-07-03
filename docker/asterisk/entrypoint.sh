@@ -20,6 +20,18 @@ mkdir -p /var/log/asterisk/cdr-custom
 echo "  [entrypoint] Directorios creados"
 
 # -------------------------------------------------------
+# 0b. Restaurar documentación XML de Asterisk si el volumen
+#     asterisk_lib la ocultó al montarse sobre /var/lib/asterisk
+# -------------------------------------------------------
+if [ ! -f /var/lib/asterisk/documentation/core-en_US.xml ]; then
+    echo "  [entrypoint] Restaurando XML docs (volumen ocultó /var/lib/asterisk)..."
+    mkdir -p /var/lib/asterisk/documentation
+    cp -r /usr/share/asterisk-xml-docs/. /var/lib/asterisk/documentation/
+    chown -R asterisk:asterisk /var/lib/asterisk/documentation
+    echo "  [entrypoint] ✓ XML docs restaurados"
+fi
+
+# -------------------------------------------------------
 # 1. Placeholders vacíos para archivos dinámicos
 #    (evita que #include/#tryinclude falle al primer arranque)
 # -------------------------------------------------------

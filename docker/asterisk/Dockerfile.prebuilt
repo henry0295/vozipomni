@@ -98,6 +98,11 @@ COPY --from=builder /var/lib/asterisk/ /var/lib/asterisk/
 COPY --from=builder /var/spool/asterisk/ /var/spool/asterisk/
 COPY --from=builder /etc/asterisk/ /etc/asterisk/
 
+# Guardar copia de los XML docs fuera del rango del volumen asterisk_lib.
+# El volumen monta /var/lib/asterisk y puede ocultar su contenido al iniciarse;
+# el entrypoint restaura los docs desde aqui si no los encuentra en el volumen.
+RUN cp -rp /var/lib/asterisk/documentation /usr/share/asterisk-xml-docs
+
 # Crear directorios necesarios
 RUN mkdir -p /var/log/asterisk \
              /var/spool/asterisk/monitor \
