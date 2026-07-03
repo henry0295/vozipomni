@@ -903,6 +903,12 @@ def _listener_loop():
             logger.error(f"[AMI Listener] Error: {e}")
         finally:
             if sock:
+                # Enviar Logoff antes de cerrar para que Asterisk limpie
+                # la conexión de su lista inmediatamente (sin esperar TCP close)
+                try:
+                    sock.sendall(b"Action: Logoff\r\n\r\n")
+                except Exception:
+                    pass
                 try:
                     sock.close()
                 except Exception:

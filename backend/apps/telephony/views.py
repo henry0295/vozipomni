@@ -85,7 +85,7 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
         
         trunks = SIPTrunk.objects.filter(is_active=True)
         result = {}
-        
+        ami = None
         try:
             ami = AsteriskAMI()
             if not ami.connect():
@@ -268,6 +268,11 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
         
         except Exception as e:
             _logger.error(f"Error general consultando estados AMI: {e}", exc_info=True)
+            if ami is not None:
+                try:
+                    ami.disconnect()
+                except Exception:
+                    pass
             for t in trunks:
                 if str(t.id) not in result:
                     result[str(t.id)] = {
