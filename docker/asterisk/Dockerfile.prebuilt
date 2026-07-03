@@ -29,9 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Compilar Asterisk 21 desde Git
+# Compilar Asterisk 21 desde Git (tag 21.12.3 - release oficial estable)
 WORKDIR /tmp
-RUN git clone --depth 1 --branch certified/21.6-cert https://github.com/asterisk/asterisk.git asterisk-src && \
+RUN git clone --depth 1 --branch 21.12.3 https://github.com/asterisk/asterisk.git asterisk-src && \
     cd asterisk-src && \
     ./configure --with-jansson-bundled --with-pjproject-bundled --with-crypto --with-ssl --with-srtp && \
     make menuselect.makeopts && \
