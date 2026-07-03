@@ -1113,6 +1113,11 @@ const testConnection = async (trunk: SipTrunk) => {
         status: d.status || (d.registered ? 'Registrado' : 'No Registrado'),
         class: d.available || d.registered ? 'success' : 'warning'
       }
+    } else if (result.error) {
+      // El backend devolvió 4xx/5xx — extraer mensaje del cuerpo de la respuesta
+      const errData = (result.error as any)?.data
+      const msg = errData?.message || errData?.detail || 'Sin conexión AMI'
+      trunkStatuses.value[String(trunk.id)] = { status: msg, class: 'error' }
     }
   } catch (e) {
     trunkStatuses.value[String(trunk.id)] = { status: 'Error', class: 'error' }

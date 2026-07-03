@@ -180,12 +180,16 @@ export default defineNuxtPlugin((nuxtApp) => {
         case 503:
         case 504:
           // Server errors
-          toast.add({
-            title: 'Error del servidor',
-            description: 'Ocurrió un error en el servidor. Por favor intenta más tarde.',
-            color: 'red',
-            timeout: 5000
-          })
+          // Para 503: el componente extrae el mensaje del cuerpo y lo muestra
+          // en su propio estado — solo mostrar toast para errores no manejados
+          if (status !== 503) {
+            toast.add({
+              title: 'Error del servidor',
+              description: 'Ocurrió un error en el servidor. Por favor intenta más tarde.',
+              color: 'red',
+              timeout: 5000
+            })
+          }
           
           // Report to error tracking service (e.g., Sentry)
           if (process.client && window.Sentry) {
