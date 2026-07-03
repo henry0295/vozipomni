@@ -51,11 +51,22 @@ class AsteriskAMI:
                 return True
             else:
                 logger.error("Error de autenticación AMI")
+                # Cerrar socket explícitamente para no filtrar file descriptors
+                try:
+                    self.sock.close()
+                except Exception:
+                    pass
                 return False
                 
         except Exception as e:
             logger.error(f"Error conectando a Asterisk AMI: {e}")
             self.connected = False
+            # Cerrar socket si fue creado antes de la excepción
+            if hasattr(self, 'sock'):
+                try:
+                    self.sock.close()
+                except Exception:
+                    pass
             return False
     
     def disconnect(self):
