@@ -49,7 +49,6 @@ RUN git clone --depth 1 --branch 21.12.3 https://github.com/asterisk/asterisk.gi
         menuselect.makeopts && \
     make -j$(nproc) && \
     make install && \
-    make install-docs && \
     make samples && \
     cd / && rm -rf /tmp/asterisk-src
 
