@@ -143,7 +143,7 @@
         <!-- Tabs de secciones -->
         <UTabs :items="queueTabs" v-model="activeQueueTab">
           <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <UFormGroup label="Nombre de la Cola" required help="Nombre descriptivo para la cola">
@@ -208,7 +208,7 @@
           </template>
 
           <!-- ===== TAB 2: TIEMPOS Y LÍMITES ===== -->
-          <template #tiempos="{ item }">
+          <template #tiempos>
             <div class="space-y-5 py-4">
               <!-- Tiempos de timbre -->
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
@@ -274,7 +274,7 @@
           </template>
 
           <!-- ===== TAB 3: ANUNCIOS Y MÚSICA ===== -->
-          <template #anuncios="{ item }">
+          <template #anuncios>
             <div class="space-y-5 py-4">
               <!-- Anuncios -->
               <div class="border border-blue-200 bg-blue-50 rounded-lg p-4 space-y-4">

@@ -11,7 +11,13 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
     """
     
     async def connect(self):
+        if not self.scope['user'].is_authenticated:
+            await self.close(code=4401)
+            return
         self.agent_id = self.scope['url_route']['kwargs']['agent_id']
+        if not await self.can_access_agent():
+            await self.close(code=4403)
+            return
         self.room_group_name = f'agent_{self.agent_id}'
         
         # Join room group
@@ -22,8 +28,18 @@ class AgentConsumer(AsyncJsonWebsocketConsumer):
         
         await self.accept()
         logger.info(f"Agent {self.agent_id} connected")
+
+    @database_sync_to_async
+    def can_access_agent(self):
+        from apps.agents.models import Agent
+        user = self.scope['user']
+        if getattr(user, 'role', None) in ('admin', 'supervisor') or user.is_superuser:
+            return True
+        return Agent.objects.filter(id=self.agent_id, user=user).exists()
     
     async def disconnect(self, close_code):
+        if not hasattr(self, 'room_group_name'):
+            return
         # Leave room group
         await self.channel_layer.group_discard(
             self.room_group_name,
@@ -89,7 +105,13 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
     """
     
     async def connect(self):
+        if not self.scope['user'].is_authenticated:
+            await self.close(code=4401)
+            return
         self.campaign_id = self.scope['url_route']['kwargs']['campaign_id']
+        if not await self.can_access_campaign():
+            await self.close(code=4403)
+            return
         self.room_group_name = f'campaign_{self.campaign_id}'
         
         await self.channel_layer.group_add(
@@ -98,8 +120,18 @@ class CampaignConsumer(AsyncJsonWebsocketConsumer):
         )
         
         await self.accept()
+
+    @database_sync_to_async
+    def can_access_campaign(self):
+        from apps.campaigns.models import Campaign
+        user = self.scope['user']
+        if getattr(user, 'role', None) in ('admin', 'supervisor', 'analyst') or user.is_superuser:
+            return True
+        return Campaign.objects.filter(id=self.campaign_id, agents__user=user).exists()
     
     async def disconnect(self, close_code):
+        if not hasattr(self, 'room_group_name'):
+            return
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
@@ -121,6 +153,13 @@ class DashboardConsumer(AsyncJsonWebsocketConsumer):
     """
     
     async def connect(self):
+        user = self.scope['user']
+        if not user.is_authenticated:
+            await self.close(code=4401)
+            return
+        if getattr(user, 'role', None) not in ('admin', 'supervisor', 'analyst') and not user.is_superuser:
+            await self.close(code=4403)
+            return
         self.room_group_name = 'dashboard'
         
         await self.channel_layer.group_add(
@@ -131,6 +170,8 @@ class DashboardConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
     
     async def disconnect(self, close_code):
+        if not hasattr(self, 'room_group_name'):
+            return
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name

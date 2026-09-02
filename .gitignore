@@ -91,6 +91,7 @@ logs/
 !deploy.sh
 !deploy-simple.sh
 !fix-db-password.sh
+!backup-production.sh
 !voip-debug.sh
 !generate-dev-ssl.sh
 

@@ -136,7 +136,7 @@
         <!-- Tabs de secciones -->
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- ===== TAB 1: USUARIO ===== -->
-          <template #usuario="{ item }">
+          <template #usuario>
             <div class="space-y-5 py-4">
               <UAlert 
                 v-if="!editingId"
@@ -174,7 +174,7 @@
           </template>
 
           <!-- ===== TAB 2: AGENTE ===== -->
-          <template #agente="{ item }">
+          <template #agente>
             <div class="space-y-5 py-4">
               <UAlert 
                 icon="i-heroicons-identification"
@@ -266,7 +266,7 @@
           </template>
 
           <!-- ===== TAB 3: CONFIGURACIÓN ===== -->
-          <template #configuracion="{ item }">
+          <template #configuracion>
             <div class="space-y-5 py-4">
               <UAlert 
                 icon="i-heroicons-cog-6-tooth"

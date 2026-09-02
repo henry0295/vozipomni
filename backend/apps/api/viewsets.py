@@ -157,6 +157,11 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def next_contact(self, request, pk=None):
         """Obtener siguiente contacto para marcación (dialer)"""
         campaign = self.get_object()
+        if getattr(request.user, 'role', None) == 'agent' and not campaign.agents.filter(user=request.user).exists():
+            return Response(
+                {'error': 'El agente no está asignado a esta campaña'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         agent_id = request.query_params.get('agent_id')
         
         if not agent_id:
@@ -256,6 +261,13 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 {'error': 'Se requiere agent_id y decision (accept/reject)'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if getattr(request.user, 'role', None) == 'agent':
+            if not Agent.objects.filter(id=agent_id, user=request.user).exists():
+                return Response(
+                    {'error': 'No puede decidir por otro agente'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         try:
             redis_url = getattr(_settings, 'REDIS_URL', 'redis://localhost:6379/0')

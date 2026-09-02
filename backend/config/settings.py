@@ -20,7 +20,7 @@ if not DEBUG and SECRET_KEY == _SECRET_KEY_DEFAULT:
         'Generate one with: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"'
     )
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = [host.strip() for host in config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',') if host.strip()]
 # Agregar automáticamente la IP del servidor (inyectada por deploy.sh como VOZIPOMNI_IPV4)
 _server_ip = config('VOZIPOMNI_IPV4', default='')
 if _server_ip and _server_ip not in ALLOWED_HOSTS:
@@ -338,6 +338,11 @@ FIELD_ENCRYPTION_KEY = config('FIELD_ENCRYPTION_KEY', default=None)
 
 # Si no hay clave configurada, generar una temporal para desarrollo/migraciones
 # NOTA: En producción, SIEMPRE configure FIELD_ENCRYPTION_KEY en .env
+if not FIELD_ENCRYPTION_KEY and not DEBUG:
+    raise RuntimeError(
+        'FIELD_ENCRYPTION_KEY is required when DEBUG=False. '
+        'Generate one with cryptography.fernet.Fernet.generate_key().'
+    )
 if not FIELD_ENCRYPTION_KEY:
     import sys
     # Solo mostrar advertencia si es el servidor principal (no migraciones/comandos)
@@ -359,16 +364,16 @@ if not FIELD_ENCRYPTION_KEY:
 
 # Security Settings for Production
 if not DEBUG:
-    # Solo activar SSL redirect si hay HTTPS configurado
-    SECURE_SSL_REDIRECT = False  # Desactivado para entorno sin HTTPS
-    SESSION_COOKIE_SECURE = False
-    CSRF_COOKIE_SECURE = False
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=True, cast=bool)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
-    SECURE_HSTS_SECONDS = 0
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
-    SECURE_HSTS_PRELOAD = False
+    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 # CORS Configuration - Restringido por seguridad
 CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=False, cast=bool)

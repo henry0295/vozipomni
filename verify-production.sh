@@ -74,8 +74,8 @@ echo ""
 
 check_file ".env" "Archivo .env principal"
 check_file "docker-compose.prod.yml" "Docker Compose de producción"
-check_file "ssl/fullchain.pem" "Certificado SSL" false
-check_file "ssl/privkey.pem" "Clave privada SSL" false
+check_file "docker/nginx/ssl/vozipomni.crt" "Certificado SSL" false
+check_file "docker/nginx/ssl/vozipomni.key" "Clave privada SSL" false
 
 echo ""
 echo -e "${YELLOW}2. Verificando configuración de seguridad...${NC}"
@@ -123,10 +123,10 @@ if [ -f ".env" ]; then
     fi
     
     # Verificar contraseñas por defecto
-    if grep -q "CHANGE_THIS" .env; then
+    if grep -Eq "CHANGE_(THIS|ME_IN_PRODUCTION)|^$" .env; then
         echo -e "${RED}[ERROR]${NC} Hay contraseñas sin cambiar (contienen 'CHANGE_THIS')"
         ((errors_found++))
-    else
+    elif grep -Eq '^(POSTGRES_PASSWORD|REDIS_PASSWORD|ASTERISK_AMI_PASSWORD|SECRET_KEY|FIELD_ENCRYPTION_KEY)=' .env; then
         echo -e "${GREEN}[OK]${NC} Las contraseñas parecen haber sido cambiadas"
     fi
 fi

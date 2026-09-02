@@ -39,21 +39,23 @@ x-healthcheck-tcp: &healthcheck-tcp
 x-django-env: &django-env
   DEBUG: "False"
   SECRET_KEY: ${SECRET_KEY:?SECRET_KEY requerido en .env}
-  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
-  CORS_ORIGINS: ${CORS_ORIGINS:-https://${VOZIPOMNI_IPV4:-localhost}}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS requerido en .env}
+  CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS requerido en .env}
+  VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
   DB_NAME: ${POSTGRES_DB:-vozipomni}
   DB_USER: ${POSTGRES_USER:-vozipomni_user}
-  DB_PASSWORD: ${POSTGRES_PASSWORD:-vozipomni_db_2026}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env}
   DB_HOST: postgres  # Nombre del servicio Docker, no IP
   DB_PORT: "5432"
-  DATABASE_URL: postgresql://${POSTGRES_USER:-vozipomni_user}:${POSTGRES_PASSWORD:-vozipomni_db_2026}@postgres:5432/${POSTGRES_DB:-vozipomni}
-  REDIS_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
-  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/0
-  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@redis:6379/1
+  DATABASE_URL: postgresql://${POSTGRES_USER:-vozipomni_user}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env}@postgres:5432/${POSTGRES_DB:-vozipomni}
+  REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/0
+  CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/0
+  CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/1
   ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}  # Asterisk en host mode, acceso via IP
   ASTERISK_AMI_PORT: "5038"
-  ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:-admin}
-  ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
+  ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:?ASTERISK_AMI_USER requerido en .env}
+  ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:?ASTERISK_AMI_PASSWORD requerido en .env}
+  FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:?FIELD_ENCRYPTION_KEY requerido en .env}
   ASTERISK_CONFIG_DIR: /var/lib/asterisk/dynamic
   ASTERISK_PUBLIC_IP: ${VOZIPOMNI_IPV4:-127.0.0.1}
   # Host SIP de Kamailio para contact= en pjsip_agents.conf (network_mode: host → 127.0.0.1)
@@ -94,7 +96,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-vozipomni}
       POSTGRES_USER: ${POSTGRES_USER:-vozipomni_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vozipomni_db_2026}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env}
       TZ: ${TZ:-America/Bogota}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -124,13 +126,13 @@ services:
       - backend
     ports:
       - "127.0.0.1:6379:6379"  # Solo accesible desde localhost
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-vozipomni_redis_2026} --bind 0.0.0.0 --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env} --bind 0.0.0.0 --maxmemory 512mb --maxmemory-policy allkeys-lru
     environment:
       TZ: ${TZ:-America/Bogota}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-vozipomni_redis_2026}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}", "ping"]
       <<: *healthcheck-tcp
     <<: *restart-policy
     logging: *default-logging
@@ -172,7 +174,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost:8000/api/health/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:8000/api/health/ | grep -q '\"status\":\"healthy\"'"]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -212,7 +214,7 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsSL -o /dev/null http://localhost:8001/api/health/ || exit 1"]
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:8001/api/health/ | grep -q '\"status\":\"healthy\"'"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -249,6 +251,12 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     stop_grace_period: 30s
     deploy:
       resources:
@@ -275,6 +283,12 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /proc/1/cmdline && grep -aq 'celery' /proc/1/cmdline"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     stop_grace_period: 30s
     deploy:
       resources:
@@ -303,7 +317,7 @@ services:
     environment:
       ASTERISK_UID: "1000"
       ASTERISK_GID: "1000"
-      ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
+      ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:?ASTERISK_AMI_PASSWORD requerido en .env}
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
       NAT_IPV4: ${NAT_IPV4:-}
       TZ: ${TZ:-America/Bogota}
@@ -343,7 +357,7 @@ services:
     environment:
       REDIS_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
       REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-vozipomni_redis_2026}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}
       ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
       RTPENGINE_HOST: 127.0.0.1
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-}
@@ -381,7 +395,7 @@ services:
       NAT_IPV4: ${NAT_IPV4:-}
       REDIS_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
       REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-vozipomni_redis_2026}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:
@@ -485,8 +499,8 @@ services:
     environment:
       WS_HOST: "0.0.0.0"
       WS_PORT: "${WS_PORT:-8765}"
-      REDIS_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@${VOZIPOMNI_IPV4:-127.0.0.1}:6379/0
-      SECRET_KEY: ${SECRET_KEY:-}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}:6379/0
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY requerido en .env}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:
@@ -513,17 +527,23 @@ services:
     dns: 8.8.8.8
     network_mode: host
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD:-vozipomni_redis_2026}@${VOZIPOMNI_IPV4:-127.0.0.1}:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}:6379/0
       ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
       ASTERISK_AMI_PORT: "5038"
       ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:-admin}
-      ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
+      ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:?ASTERISK_AMI_PASSWORD requerido en .env}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:
         condition: service_healthy
       asterisk:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import asyncio, os, redis.asyncio as r; asyncio.run(r.from_url(os.environ[\"REDIS_URL\"]).ping())'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     <<: *restart-policy
     logging: *default-logging
     stop_grace_period: 30s
@@ -544,11 +564,16 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=30d'
-      - '--web.listen-address=0.0.0.0:9090'
+      - '--web.listen-address=127.0.0.1:9090'
     volumes:
       - prometheus_data:/prometheus
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     logging: *default-logging
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     deploy:
       resources:
         limits:
@@ -563,7 +588,8 @@ services:
     environment:
       GF_SERVER_HTTP_PORT: "3001"
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-vozipomni_grafana_2026}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?GRAFANA_PASSWORD requerido en .env}
+      GF_SERVER_HTTP_ADDR: 127.0.0.1
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_INSTALL_PLUGINS: "grafana-clock-panel,grafana-simple-json-datasource"
     volumes:
@@ -571,6 +597,11 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     logging: *default-logging
     deploy:
       resources:

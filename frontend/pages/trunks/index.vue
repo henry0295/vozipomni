@@ -207,7 +207,7 @@
         <!-- Tabs de secciones -->
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <!-- Tipo de Troncal -->
               <UFormGroup label="Tipo de Troncal" required help="Selecciona el escenario que mejor describe tu conexión SIP">
@@ -276,7 +276,7 @@
           </template>
 
           <!-- ===== TAB 2: AUTENTICACIÓN ===== -->
-          <template #autenticacion="{ item }">
+          <template #autenticacion>
             <div class="space-y-5 py-4">
               <!-- Autenticación Saliente -->
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
@@ -360,7 +360,7 @@
           </template>
 
           <!-- ===== TAB 3: MEDIA Y CÓDECS ===== -->
-          <template #media="{ item }">
+          <template #media>
             <div class="space-y-5 py-4">
               <!-- Códecs -->
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
@@ -428,7 +428,7 @@
           </template>
 
           <!-- ===== TAB 4: DIALPLAN Y AVANZADOS ===== -->
-          <template #avanzado="{ item }">
+          <template #avanzado>
             <div class="space-y-5 py-4">
               <!-- Contexto de Dialplan -->
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">

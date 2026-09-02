@@ -84,7 +84,7 @@
         <!-- Tabs de secciones -->
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- ===== TAB 1: INFORMACIÓN BÁSICA ===== -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <UAlert 
                 icon="i-heroicons-map-pin"
@@ -126,7 +126,7 @@
           </template>
 
           <!-- ===== TAB 2: CONFIGURACIÓN AVANZADA ===== -->
-          <template #avanzado="{ item }">
+          <template #avanzado>
             <div class="space-y-5 py-4">
               <UAlert 
                 icon="i-heroicons-exclamation-triangle"

@@ -129,7 +129,7 @@
         <!-- Tabs de secciones -->
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- ===== TAB 1: BÁSICA ===== -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <UAlert 
                 icon="i-heroicons-envelope"
@@ -160,7 +160,7 @@
           </template>
 
           <!-- ===== TAB 2: CONFIGURACIÓN ===== -->
-          <template #configuracion="{ item }">
+          <template #configuracion>
             <div class="space-y-5 py-4">
               <UAlert 
                 icon="i-heroicons-cog-6-tooth"

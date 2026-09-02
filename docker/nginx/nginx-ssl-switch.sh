@@ -12,8 +12,13 @@ ACTIVE_CONF="/etc/nginx/conf.d/default.conf"
 # Obtener IP del servidor para el CN del certificado
 SERVER_IP="${VOZIPOMNI_IPV4:-127.0.0.1}"
 
-# Generar certificados autofirmados si no existen
+# En producción no se aceptan certificados autofirmados por defecto.
 if [ ! -f "$SSL_CERT" ] || [ ! -f "$SSL_KEY" ]; then
+    if [ "${ALLOW_SELF_SIGNED_SSL:-false}" != "true" ]; then
+        echo "[SSL-switch] ERROR: faltan certificados confiables en ${SSL_DIR}"
+        echo "[SSL-switch] Instale un certificado ACME/Let's Encrypt o defina ALLOW_SELF_SIGNED_SSL=true solo para pruebas."
+        exit 1
+    fi
     echo "[SSL-switch] Certificados no encontrados — generando autofirmados..."
     mkdir -p "$SSL_DIR"
 

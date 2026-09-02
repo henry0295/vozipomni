@@ -133,7 +133,7 @@
 
         <UTabs :items="formTabs" v-model="activeTab">
           <!-- TAB 1: INFORMACIÓN BÁSICA -->
-          <template #basica="{ item }">
+          <template #basica>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-information-circle"
@@ -154,7 +154,7 @@
           </template>
 
           <!-- TAB 2: GRUPOS DE HORARIOS -->
-          <template #horarios="{ item }">
+          <template #horarios>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-clock"
@@ -221,7 +221,7 @@
           </template>
 
           <!-- TAB 3: DESTINOS -->
-          <template #destinos="{ item }">
+          <template #destinos>
             <div class="space-y-5 py-4">
               <UAlert
                 icon="i-heroicons-arrow-right-circle"

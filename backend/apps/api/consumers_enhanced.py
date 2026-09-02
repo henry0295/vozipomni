@@ -333,11 +333,10 @@ class RealtimeDashboardConsumer(AsyncWebsocketConsumer):
         from apps.campaigns.models import Campaign
         from django.utils import timezone
         
-        today = timezone.now().date()
+        now = timezone.now()
         campaigns = Campaign.objects.filter(
-            is_active=True,
-            start_date__lte=today,
-            end_date__gte=today
+            status='active',
+            start_date__lte=now,
         )
         
         return [
@@ -345,9 +344,9 @@ class RealtimeDashboardConsumer(AsyncWebsocketConsumer):
                 'id': campaign.id,
                 'name': campaign.name,
                 'type': campaign.campaign_type,
-                'contacts_total': campaign.contactlist.contact_set.count() if campaign.contactlist else 0,
-                'contacts_called': campaign.call_set.count(),
-', 'success_rate': campaign.get_success_rate()
+                'contacts_total': campaign.total_contacts,
+                'contacts_called': campaign.contacted,
+                'success_rate': campaign.success_rate,
             }
             for campaign in campaigns
         ]
