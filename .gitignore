@@ -76,6 +76,9 @@ logs/
 !README.md
 !INSTALACION_RAPIDA.md
 !CORRECCIONES_SEGURIDAD_2026.md
+/docs/
+!/docs/CHANGELOG.md
+
 
 # Scripts raíz - ignorar (se mantienen solo los esenciales)
 /*.sh
