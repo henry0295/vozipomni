@@ -186,6 +186,17 @@ if [ -n "${ASTERISK_AMI_PASSWORD}" ]; then
     sed -i "s/^secret = .*/secret = ${ASTERISK_AMI_PASSWORD}/" "${CONFIG_DIR}/manager.conf" 2>/dev/null || true
     echo "  [entrypoint] ✓ AMI password sincronizado en manager.conf"
 fi
+
+# AMI recibe conexiones desde el backend en la red bridge de Docker.
+# Mantener localhost y añadir solo la subred configurada, nunca toda Internet.
+AMI_PERMIT_NETWORK="${ASTERISK_AMI_PERMIT_NETWORK:-172.20.0.0/255.255.255.0}"
+if [ -f "${CONFIG_DIR}/manager.conf" ]; then
+    sed -i '/^permit=AMI_NETWORK_RUNTIME$/d' "${CONFIG_DIR}/manager.conf"
+    if ! grep -qF "permit=${AMI_PERMIT_NETWORK}" "${CONFIG_DIR}/manager.conf"; then
+        sed -i "/^permit=127\.0\.0\.1\/255\.255\.255\.255$/a permit=${AMI_PERMIT_NETWORK}" "${CONFIG_DIR}/manager.conf"
+    fi
+    echo "  [entrypoint] ✓ AMI permite localhost y ${AMI_PERMIT_NETWORK}"
+fi
 echo ""
 echo "=== Iniciando Asterisk ==="
 exec /usr/sbin/asterisk -f -vvv -U asterisk -G asterisk

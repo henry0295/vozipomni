@@ -1630,7 +1630,7 @@ else:
 PYEOF
 
     # 8c. Recargar configuración PJSIP para aplicar cambios de troncales
-    # No bloquear deploy si AMI aún no está listo.
+    # La configuración PJSIP no está aplicada si AMI falla; el deploy debe fallar.
     log_info "Recargando configuración PJSIP..."
     local pjsip_out=""
     if pjsip_out=$($COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null
@@ -1641,12 +1641,15 @@ print(f'PJSIP reload: {"OK" if ok else "ERROR"} — {msg}')
 PYEOF
 ); then
         if echo "$pjsip_out" | grep -q 'PJSIP reload: ERROR'; then
-            log_warning "$(echo "$pjsip_out" | tail -n 1)"
+            log_error "$(echo "$pjsip_out" | tail -n 1)"
+            log_error "AMI no está disponible: revise manager.conf, ASTERISK_AMI_PASSWORD y ASTERISK_AMI_PERMIT_NETWORK."
+            exit 1
         else
             log_success "$(echo "$pjsip_out" | tail -n 1)"
         fi
     else
-        log_warning "No se pudo ejecutar recarga PJSIP (AMI/servicio no listo). Continuando..."
+        log_error "No se pudo ejecutar recarga PJSIP (AMI/servicio no listo)."
+        exit 1
     fi
 
     # 9. Recolectar archivos estáticos
