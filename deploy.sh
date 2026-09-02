@@ -1472,6 +1472,31 @@ update_production() {
     fi
     log_success "Usando: $COMPOSE_CMD"
 
+    # Migrar variables introducidas por versiones nuevas sin regenerar secretos
+    # existentes ni alterar el estado de PostgreSQL, Redis o Asterisk.
+    ensure_update_secrets() {
+        local env_file="$INSTALL_DIR/.env"
+        local generated_password
+        [ -f "$env_file" ] || { log_error "No existe $env_file"; exit 1; }
+
+        if ! grep -q '^GRAFANA_PASSWORD=' "$env_file" || [ -z "$(grep '^GRAFANA_PASSWORD=' "$env_file" | head -1 | cut -d= -f2-)" ]; then
+            generated_password=$(openssl rand -base64 24 | tr -d '=+/' | cut -c1-20)
+            printf '\nGRAFANA_PASSWORD=%s\n' "$generated_password" >> "$env_file"
+            chmod 600 "$env_file"
+            log_success "GRAFANA_PASSWORD generado para instalación existente"
+        fi
+
+        for variable in SECRET_KEY POSTGRES_PASSWORD REDIS_PASSWORD ASTERISK_AMI_PASSWORD FIELD_ENCRYPTION_KEY; do
+            if ! grep -q "^${variable}=" "$env_file" || [ -z "$(grep "^${variable}=" "$env_file" | head -1 | cut -d= -f2-)" ]; then
+                log_error "Falta $variable en $env_file"
+                log_error "Defínala manualmente antes de continuar; no se generará automáticamente durante un update."
+                exit 1
+            fi
+        done
+    }
+
+    ensure_update_secrets
+
     # 1b. Persistir IPs en .env para futuros reinicios (no depender de env vars de shell)
     if [ -f "$INSTALL_DIR/.env" ]; then
         # VOZIPOMNI_IPV4 siempre se actualiza si se pasó como argumento
