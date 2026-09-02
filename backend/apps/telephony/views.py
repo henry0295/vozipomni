@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.core.cache import cache
 from core.permissions import IsAdminUser as IsAdminUserCustom
 from .models import (
     Call, SIPTrunk, IVR, Extension, InboundRoute,
@@ -83,6 +84,13 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
         import logging
         _logger = logging.getLogger(__name__)
         
+        lock_key = 'telephony:trunks:statuses:lock'
+        if not cache.add(lock_key, '1', timeout=20):
+            return Response(
+                {'error': 'La consulta de estados AMI ya está en progreso'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         trunks = SIPTrunk.objects.filter(is_active=True)
         result = {}
         ami = None
@@ -240,8 +248,6 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                             result[str(t.id)] = {'status': 'No Encontrado', 'class': 'gray',
                                                  'detail': 'Endpoint no encontrado en Asterisk. Regenere la configuración.'}
             
-            ami.disconnect()
-
             # Auto-regenerar config si hay troncales sin endpoint (con cooldown de 120s)
             not_found_ids = [tid for tid, info in result.items() if info.get('status') in ('No Encontrado', 'No Configurado')]
             if not_found_ids:
@@ -281,6 +287,14 @@ class SIPTrunkViewSet(viewsets.ModelViewSet):
                         'detail': str(e)
                     }
         
+        finally:
+            if ami is not None:
+                try:
+                    ami.disconnect()
+                except Exception:
+                    pass
+            cache.delete(lock_key)
+
         return Response(result)
     
     @action(detail=False, methods=['post'])

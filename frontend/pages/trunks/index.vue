@@ -1149,7 +1149,8 @@ const loadTrunks = async () => {
 }
 
 const refreshStatuses = async () => {
-  if (trunks.value.length === 0) return
+  if (trunks.value.length === 0 || statusRequestInFlight) return
+  statusRequestInFlight = true
   loadingStatuses.value = true
   try {
     const result = await getTrunkStatuses()
@@ -1160,6 +1161,7 @@ const refreshStatuses = async () => {
     console.error('Error cargando estados:', e)
   } finally {
     loadingStatuses.value = false
+    statusRequestInFlight = false
   }
 }
 
@@ -1179,6 +1181,7 @@ const regenerateAndRefresh = async () => {
 
 // Auto-refresh cada 30 segundos
 let statusInterval: ReturnType<typeof setInterval> | null = null
+let statusRequestInFlight = false
 
 onMounted(() => {
   loadTrunks()
