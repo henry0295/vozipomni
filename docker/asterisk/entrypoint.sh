@@ -192,10 +192,15 @@ fi
 AMI_PERMIT_NETWORK="${ASTERISK_AMI_PERMIT_NETWORK:-172.20.0.0/255.255.255.0}"
 if [ -f "${CONFIG_DIR}/manager.conf" ]; then
     sed -i '/^permit=AMI_NETWORK_RUNTIME$/d' "${CONFIG_DIR}/manager.conf"
+    sed -i '/^permit=AMI_HOST_IP_RUNTIME$/d' "${CONFIG_DIR}/manager.conf"
     if ! grep -qF "permit=${AMI_PERMIT_NETWORK}" "${CONFIG_DIR}/manager.conf"; then
         sed -i "/^permit=127\.0\.0\.1\/255\.255\.255\.255$/a permit=${AMI_PERMIT_NETWORK}" "${CONFIG_DIR}/manager.conf"
     fi
-    echo "  [entrypoint] ✓ AMI permite localhost y ${AMI_PERMIT_NETWORK}"
+    AMI_PERMIT_IP="${ASTERISK_AMI_PERMIT_IP:-${VOZIPOMNI_IPV4}}"
+    if [ -n "${AMI_PERMIT_IP}" ] && ! grep -qF "permit=${AMI_PERMIT_IP}/255.255.255.255" "${CONFIG_DIR}/manager.conf"; then
+        printf '\npermit=%s/255.255.255.255\n' "${AMI_PERMIT_IP}" >> "${CONFIG_DIR}/manager.conf"
+    fi
+    echo "  [entrypoint] ✓ AMI permite localhost, ${AMI_PERMIT_NETWORK} y la IP local configurada"
 fi
 echo ""
 echo "=== Iniciando Asterisk ==="
