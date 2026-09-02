@@ -324,8 +324,9 @@ services:
       ASTERISK_PUBLIC_IP: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido}
       ASTERISK_LOCAL_NET: ${ASTERISK_LOCAL_NET:-192.168.0.0/16}
       TZ: ${TZ:-America/Bogota}
-      AMI_USER: ${ASTERISK_AMI_USER:-admin}
-      AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:-vozipomni_ami_2026}
+      AMI_USER: ${ASTERISK_AMI_USER:?ASTERISK_AMI_USER requerido}
+      AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:?ASTERISK_AMI_PASSWORD requerido}
+      ASTERISK_AMI_PERMIT_NETWORK: ${ASTERISK_AMI_PERMIT_NETWORK:-172.20.0.0/255.255.255.0}
     volumes:
       - ./docker/asterisk/configs:/etc/asterisk:rw
       - asterisk_sounds:/var/lib/asterisk/sounds:rw
