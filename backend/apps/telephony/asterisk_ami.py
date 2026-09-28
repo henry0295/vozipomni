@@ -37,20 +37,28 @@ class AsteriskAMI:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(5)
             self.sock.connect((self.ami_host, self.ami_port))
-            
-            # Leer banner
-            self._read_response()
-            
+
+            # Leer banner: es UNA línea ("Asterisk Call Manager/X.Y.Z\r\n").
+            # Usar _read_response() aquí esperaba \r\n\r\n hasta el timeout (5 s)
+            # y Asterisk (authtimeout en manager.conf) cerraba la conexión antes
+            # de recibir el Login → "No se pudo conectar a Asterisk AMI".
+            banner = self._read_banner()
+            if 'Asterisk Call Manager' not in banner:
+                logger.warning(f"Banner AMI inesperado de {self.ami_host}:{self.ami_port}: {banner!r}")
+
             # Autenticarse
             self._send_command(f"Action: Login\r\nUsername: {self.ami_user}\r\nSecret: {self.ami_password}\r\n\r\n")
             response = self._read_response()
-            
+
             if 'Success' in response:
                 self.connected = True
                 logger.info(f"✓ Conectado a Asterisk AMI en {self.ami_host}:{self.ami_port}")
                 return True
             else:
-                logger.error("Error de autenticación AMI")
+                detail = next((ln.split(':', 1)[1].strip() for ln in response.splitlines()
+                               if ln.lower().startswith('message:')), '') or 'sin respuesta'
+                logger.error(f"Error de autenticación AMI en {self.ami_host}:{self.ami_port} "
+                             f"(usuario {self.ami_user}): {detail}")
                 # Cerrar socket explícitamente para no filtrar file descriptors
                 try:
                     self.sock.close()
@@ -85,6 +93,23 @@ class AsteriskAMI:
         if hasattr(self, 'sock'):
             self.sock.sendall(command.encode('utf-8'))
     
+    def _read_banner(self, timeout: float = 2.0) -> str:
+        """Leer el banner de AMI: una sola línea terminada en CRLF."""
+        old = self.sock.gettimeout()
+        self.sock.settimeout(timeout)
+        buf = b''
+        try:
+            while b'\n' not in buf:
+                chunk = self.sock.recv(256)
+                if not chunk:
+                    break
+                buf += chunk
+        except socket.timeout:
+            pass
+        finally:
+            self.sock.settimeout(old)
+        return buf.decode('utf-8', errors='ignore')
+
     def _read_response(self):
         """Leer UNA respuesta AMI (hasta el primer doble CRLF)"""
         response = b''

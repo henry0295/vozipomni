@@ -95,9 +95,35 @@ def _parse_ami_event(raw: str) -> dict:
     return data
 
 
+def _read_banner(sock: socket.socket, timeout: float = 2.0) -> str:
+    """
+    Lee el banner de AMI ("Asterisk Call Manager/X.Y.Z\\r\\n").
+
+    El banner es UNA sola línea (termina en un único CRLF). Leerlo esperando
+    \\r\\n\\r\\n bloquea hasta el timeout, y como manager.conf usa authtimeout
+    Asterisk cierra la conexión antes de que llegue el Login.
+    """
+    old = sock.gettimeout()
+    sock.settimeout(timeout)
+    buf = b''
+    try:
+        while b'\n' not in buf:
+            chunk = sock.recv(256)
+            if not chunk:
+                break
+            buf += chunk
+    except socket.timeout:
+        pass
+    finally:
+        sock.settimeout(old)
+    return buf.decode('utf-8', errors='ignore')
+
+
 def _ami_login(sock: socket.socket) -> bool:
     """Autenticación AMI con suscripción a TODOS los eventos necesarios."""
-    _read_until_blank(sock)
+    banner = _read_banner(sock)
+    if 'Asterisk Call Manager' not in banner:
+        logger.warning(f"[AMI Listener] Banner AMI inesperado: {banner!r}")
     # Events: system,call,agent,cdr,dialplan,user — cubrir todo lo relevante
     # 'user' es necesario para VoicemailUserEntry
     cmd = (
