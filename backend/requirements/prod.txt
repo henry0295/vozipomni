@@ -1,9 +1,19 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # VozipOmni — Dependencias de PRODUCCIÓN
-# Incluye base + Whisper para transcripción de grabaciones
 # ──────────────────────────────────────────────────────────────────────────────
 -r base.txt
 
-# Transcripción de grabaciones (Whisper local, sin dependencia de APIs externas)
-openai-whisper==20231117
-ffmpeg-python==0.2.0
+# NOTA: openai-whisper NO se instala aquí porque:
+#   1. Requiere setuptools (ausente en python:3.11-slim)
+#   2. Instala torch (~2GB) — impracticable en la imagen del backend
+#
+# La tarea `transcribe_recording` detecta si Whisper está instalado:
+#   - Si NO está → loguea advertencia y marca transcription_status='failed' (graceful)
+#   - Si SÍ está → transcribe normalmente
+#
+# Para habilitar transcripción local, instalar en el servidor después del deploy:
+#   docker exec vozipomni_celery_worker pip install openai-whisper
+#   (el modelo se descarga en /root/.cache/whisper al primer uso)
+#
+# Alternativa recomendada: usar un servicio cloud (Google STT, AWS Transcribe)
+# configurando WHISPER_BACKEND=cloud en el .env
