@@ -250,6 +250,15 @@ def _update_agent_status(agent, new_status: str, save_history: bool = True):
 
     logger.info(f"[AMI] Agente {agent.sip_extension}: {old_status} → {new_status}")
 
+    # Push en tiempo real al dashboard y al grupo del agente
+    _push_ws_event('agent.status_changed', {
+        'agent_id': agent.id,
+        'agent_code': agent.agent_id,
+        'sip_extension': agent.sip_extension,
+        'old_status': old_status,
+        'new_status': new_status,
+    })
+
 
 def _update_queue_stats(queue, **kwargs):
     """Actualiza las estadísticas en tiempo real de una cola."""
@@ -264,6 +273,44 @@ def _update_queue_stats(queue, **kwargs):
             else:
                 setattr(stats, field, value)
     stats.save()
+
+
+# ─────────────────────────────────────────────────────────────────
+# WebSocket push helper
+# ─────────────────────────────────────────────────────────────────
+
+def _push_ws_event(event_type: str, data: dict):
+    """
+    Publica un evento en los grupos Django Channels 'asterisk_events' y 'dashboard'
+    para que los consumers en tiempo real lo reenvíen a los clientes conectados.
+    Se ejecuta en un thread separado para no bloquear el listener AMI.
+    """
+    def _send():
+        try:
+            from asgiref.sync import async_to_sync
+            from channels.layers import get_channel_layer
+            channel_layer = get_channel_layer()
+            if channel_layer is None:
+                return
+            payload = {
+                'type': 'asterisk_event',
+                'event_type': event_type,
+                'data': data,
+            }
+            send = async_to_sync(channel_layer.group_send)
+            # Broadcast a ambos grupos
+            send('asterisk_events', payload)
+            send('dashboard', {
+                'type': 'dashboard_update',
+                'event_type': event_type,
+                'data': data,
+            })
+        except Exception as e:
+            logger.debug(f"[WS Push] Error enviando {event_type}: {e}")
+
+    # Hilo daemon para no bloquear el event loop del listener
+    t = threading.Thread(target=_send, daemon=True)
+    t.start()
 
 
 # ─────────────────────────────────────────────────────────────────
@@ -390,6 +437,16 @@ def _process_cdr_event(event: dict):
     # Buscar grabación asociada
     _link_recording(call, event)
 
+    # Push en tiempo real al dashboard
+    _push_ws_event('call.completed' if call_status == 'completed' else 'call.ended', {
+        'call_id': call.call_id,
+        'direction': call.direction,
+        'status': call_status,
+        'duration': billsec,
+        'agent_id': agent.id if agent else None,
+        'queue_name': state.get('queue_name', ''),
+    })
+
     return call
 
 
@@ -417,6 +474,14 @@ def _process_queue_caller_join(event: dict):
     queue = state.get('queue')
     if queue:
         _update_queue_stats(queue, calls_waiting=1)
+
+    # Push en tiempo real
+    _push_ws_event('queue.caller_join', {
+        'queue_name': queue_name,
+        'caller': caller,
+        'position': event.get('Position'),
+        'count': event.get('Count'),
+    })
 
 
 def _process_queue_caller_abandon(event: dict):
@@ -447,6 +512,13 @@ def _process_queue_caller_abandon(event: dict):
         stats.calls_abandoned += 1
         stats.calls_waiting = max(0, stats.calls_waiting - 1)
         stats.save(update_fields=['calls_abandoned', 'calls_waiting'])
+
+    # Push en tiempo real
+    _push_ws_event('queue.caller_abandon', {
+        'queue_name': queue_name,
+        'uniqueid': uniqueid,
+        'hold_time': hold_time,
+    })
 
 
 def _process_queue_caller_leave(event: dict):

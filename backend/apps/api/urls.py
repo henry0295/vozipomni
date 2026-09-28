@@ -50,6 +50,9 @@ urlpatterns = [
     # Telephony
     path('telephony/', include('apps.telephony.urls')),
 
+    # Mensajería multicanal (WhatsApp, SMS, Email, Chat Web)
+    path('messaging/', include('apps.messaging.urls')),
+
     # Contact Center - features avanzados
     path('cc/screen-pop/', ScreenPopView.as_view(), name='screen-pop'),
     path('cc/available-agents/', ConsultiveTransferView.as_view(), name='available-agents'),

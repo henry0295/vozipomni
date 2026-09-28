@@ -146,93 +146,160 @@ def scan_unlinked_recordings():
     return linked
 
 
+@shared_task(
+    name='recordings.cleanup_old_recordings',
+)
+def cleanup_old_recordings():
     """
-    Limpiar grabaciones antiguas según política de retención configurada
+    Política de retención de grabaciones (ejecutar diariamente a las 02:00 via Celery Beat):
+      - ARCHIVE_DAYS: archivar grabaciones más antiguas que N días (marcarlas como 'archived')
+      - DELETE_DAYS:  eliminar físicamente los archivos archivados más antiguos que N días
+
+    Configurable con variables en RECORDING_RETENTION:
+      ARCHIVE_DAYS = 90   → archivar después de 90 días
+      DELETE_DAYS  = 180  → eliminar archivo físico después de 180 días
     """
     from apps.recordings.models import Recording
-    from django.conf import settings
-    
-    # Obtener configuración
-    archive_days = RECORDING_RETENTION['ARCHIVE_DAYS']
-    delete_days = RECORDING_RETENTION['DELETE_DAYS']
-    
-    # Archivar grabaciones antiguas
-    archive_date = timezone.now() - timedelta(days=archive_days)
-    old_recordings = Recording.objects.filter(
-        created_at__lt=archive_date,
-        status='completed'
-    ).exclude(status='archived')
-    
+
+    archive_days = RECORDING_RETENTION.get('ARCHIVE_DAYS', 90)
+    delete_days  = RECORDING_RETENTION.get('DELETE_DAYS', 180)
+
+    # ── 1. Archivar grabaciones completadas antiguas ─────────────────────────
+    archive_cutoff = timezone.now() - timedelta(days=archive_days)
+    to_archive = Recording.objects.filter(
+        created_at__lt=archive_cutoff,
+        status='completed',
+    )
     archived_count = 0
-    for recording in old_recordings:
+    for recording in to_archive:
         recording.status = 'archived'
         recording.archived_at = timezone.now()
-        recording.save()
+        recording.save(update_fields=['status', 'archived_at'])
         archived_count += 1
-    
-    logger.info(f"Archived {archived_count} recordings older than {archive_days} days")
-    
-    # Eliminar archivos de grabaciones muy antiguas
-    delete_date = timezone.now() - timedelta(days=delete_days)
-    very_old_recordings = Recording.objects.filter(
-        created_at__lt=delete_date,
-        status='archived'
-    )
-    
+
+    if archived_count:
+        logger.info(f"[Retention] Archivadas {archived_count} grabaciones (>{archive_days} días)")
+
+    # ── 2. Eliminar archivos físicos de grabaciones muy antiguas ─────────────
+    delete_cutoff = timezone.now() - timedelta(days=delete_days)
+    to_delete = Recording.objects.filter(
+        created_at__lt=delete_cutoff,
+        status='archived',
+    ).exclude(file_path='')
+
     deleted_count = 0
-    deleted_size = 0
-    
-    for recording in very_old_recordings:
+    deleted_bytes = 0
+    for recording in to_delete:
         try:
-            # Eliminar archivo físico
             if recording.file_path and os.path.exists(recording.file_path):
-                file_size = os.path.getsize(recording.file_path)
+                size = os.path.getsize(recording.file_path)
                 os.remove(recording.file_path)
-                deleted_size += file_size
-                logger.debug(f"Deleted recording file: {recording.file_path}")
-            
-            # Marcar como eliminado en DB (no borrar registro)
-            recording.status = 'deleted'
+                deleted_bytes += size
+                logger.debug(f"[Retention] Eliminado archivo: {recording.file_path}")
+
+            # Conservar el registro en BD, solo limpiar la ruta
             recording.file_path = ''
-            recording.save()
+            recording.status = 'archived'
+            recording.save(update_fields=['file_path'])
             deleted_count += 1
-            
         except Exception as e:
-            logger.error(f"Error deleting recording file {recording.file_path}: {str(e)}")
-    
-    deleted_size_mb = deleted_size / (1024 * 1024)
-    logger.info(
-        f"Deleted {deleted_count} recording files older than {delete_days} days "
-        f"({deleted_size_mb:.2f} MB freed)"
-    )
-    
+            logger.error(f"[Retention] Error eliminando {recording.file_path}: {e}")
+
+    deleted_mb = deleted_bytes / (1024 * 1024)
+    if deleted_count:
+        logger.info(
+            f"[Retention] Eliminados {deleted_count} archivos ({deleted_mb:.1f} MB liberados)"
+        )
+
     return {
         'archived': archived_count,
         'deleted': deleted_count,
-        'freed_mb': round(deleted_size_mb, 2)
+        'freed_mb': round(deleted_mb, 2),
     }
 
 
-@shared_task
-def transcribe_recording(recording_id):
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_kwargs={'max_retries': 2, 'countdown': 60},
+    name='recordings.transcribe_recording',
+)
+def transcribe_recording(self, recording_id: int):
     """
-    Transcribir una grabación usando servicios de speech-to-text
+    Transcribir una grabación usando Whisper (modelo local, sin dependencia de APIs externas).
+
+    Modelos disponibles (orden de velocidad/calidad):
+      tiny, base, small, medium, large, large-v2, large-v3
+    Se configura con la variable de entorno WHISPER_MODEL (default: 'base').
+
+    El archivo debe estar en formato WAV, MP3, GSM o cualquier formato soportado por ffmpeg.
     """
     from apps.recordings.models import Recording
-    
+
     try:
         recording = Recording.objects.get(id=recording_id)
-        recording.transcription_status = 'processing'
-        recording.save()
-        
-        # Aquí se integraría con servicios de transcripción
-        # Por ejemplo: Google Speech-to-Text, AWS Transcribe, etc.
-        
-        # Simulación
-        recording.transcription = "Transcripción pendiente de implementación"
-        recording.transcription_status = 'completed'
-        recording.save()
-        
-        return f"Transcribed recording {recording_id}"
     except Recording.DoesNotExist:
+        logger.warning(f"[Whisper] Recording {recording_id} no encontrado")
         return f"Recording {recording_id} not found"
+
+    if not recording.file_path or not os.path.exists(recording.file_path):
+        logger.warning(f"[Whisper] Archivo no encontrado: {recording.file_path}")
+        recording.transcription_status = 'failed'
+        recording.save(update_fields=['transcription_status'])
+        return "File not found"
+
+    recording.transcription_status = 'processing'
+    recording.save(update_fields=['transcription_status'])
+
+    try:
+        import whisper
+
+        model_name = os.getenv('WHISPER_MODEL', 'base')
+        language = os.getenv('WHISPER_LANGUAGE', None)  # None = auto-detect
+
+        logger.info(f"[Whisper] Cargando modelo '{model_name}' para recording {recording_id}")
+        model = whisper.load_model(model_name)
+
+        # Opciones de transcripción
+        options = {
+            'fp16': False,   # Usar FP32 para compatibilidad con CPU
+            'verbose': False,
+        }
+        if language:
+            options['language'] = language
+
+        logger.info(f"[Whisper] Transcribiendo {recording.file_path}")
+        result = model.transcribe(recording.file_path, **options)
+
+        transcription_text = result.get('text', '').strip()
+        detected_language = result.get('language', '')
+
+        recording.transcription = transcription_text
+        recording.transcription_status = 'completed'
+        recording.save(update_fields=['transcription', 'transcription_status'])
+
+        logger.info(
+            f"[Whisper] ✓ Transcripción completada para recording {recording_id} "
+            f"({len(transcription_text)} chars, idioma={detected_language})"
+        )
+        return {
+            'recording_id': recording_id,
+            'chars': len(transcription_text),
+            'language': detected_language,
+        }
+
+    except ImportError:
+        logger.error(
+            "[Whisper] openai-whisper no está instalado. "
+            "Instalar con: pip install openai-whisper"
+        )
+        recording.transcription = ''
+        recording.transcription_status = 'failed'
+        recording.save(update_fields=['transcription', 'transcription_status'])
+        return "Whisper not installed"
+
+    except Exception as e:
+        logger.error(f"[Whisper] Error transcribiendo recording {recording_id}: {e}")
+        recording.transcription_status = 'failed'
+        recording.save(update_fields=['transcription_status'])
+        raise  # allow retry

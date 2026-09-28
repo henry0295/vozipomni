@@ -51,18 +51,21 @@ export const useAuth = () => {
 
   const logout = async () => {
     try {
-      // Llamar al endpoint de logout si existe
-      await apiFetch('/auth/logout/', {
-        method: 'POST'
-      })
+      // Blacklist del refresh token en el backend
+      const refresh = authStore.refreshToken
+      if (refresh) {
+        await apiFetch('/auth/logout/', {
+          method: 'POST',
+          body: { refresh },
+        }).catch(() => {/* ignorar errores de red al hacer logout */})
+      }
     } catch (err) {
       console.error('Error al cerrar sesión:', err)
     } finally {
       authStore.clearAuth()
-      
-      // Redirigir al login después de limpiar la sesión
+      // Redirigir al login — ruta correcta (no '/auth/login')
       if (process.client) {
-        window.location.href = '/auth/login'
+        window.location.href = '/login'
       }
     }
   }

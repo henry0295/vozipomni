@@ -143,6 +143,8 @@ class DialerEngine:
             asyncio.create_task(self.preview_dialer_loop(campaign_id))
         elif campaign_type == CampaignType.CALL_BLASTING.value:
             asyncio.create_task(self.call_blasting_loop(campaign_id))
+        elif campaign_type == CampaignType.MANUAL.value:
+            asyncio.create_task(self.manual_dialer_loop(campaign_id))
             
     async def stop_campaign(self, campaign_id: int):
         """Detener una campaña"""
@@ -164,6 +166,106 @@ class DialerEngine:
             except Exception as e:
                 logger.debug(f"AMI close error during cleanup: {e}")
             self.ami_client = None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Control channel — escucha comandos del backend Django via Redis pub/sub
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def listen_control_channel(self):
+        """
+        Suscribe al canal Redis 'dialer:control' para recibir comandos
+        del backend Django (start_campaign, stop_campaign).
+        Este loop corre en paralelo con los loops de discado.
+        """
+        pubsub = self.redis_client.pubsub()
+        await pubsub.subscribe('dialer:control')
+        logger.info("[Control] Escuchando canal dialer:control")
+
+        async for message in pubsub.listen():
+            if message.get('type') != 'message':
+                continue
+            try:
+                data = json.loads(message['data'])
+                action = data.get('action')
+                campaign_id = data.get('campaign_id')
+
+                if action == 'start_campaign' and campaign_id:
+                    campaign_type = data.get('campaign_type', 'progressive')
+                    logger.info(f"[Control] start_campaign {campaign_id} type={campaign_type}")
+                    if campaign_id not in self.active_campaigns:
+                        await self.start_campaign(campaign_id, campaign_type)
+                    else:
+                        logger.info(f"[Control] Campaña {campaign_id} ya activa, ignorando")
+
+                elif action == 'stop_campaign' and campaign_id:
+                    logger.info(f"[Control] stop_campaign {campaign_id}")
+                    await self.stop_campaign(campaign_id)
+
+                else:
+                    logger.warning(f"[Control] Acción desconocida: {action}")
+
+            except Exception as e:
+                logger.error(f"[Control] Error procesando mensaje: {e}")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Manual dialer loop
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def manual_dialer_loop(self, campaign_id: int):
+        """
+        Campaña MANUAL: el sistema no marca automáticamente.
+        Publica el próximo contacto disponible en Redis para cada agente disponible
+        y espera a que el agente inicie la llamada manualmente via WebRTC.
+
+        Flujo:
+          1. Por cada agente disponible sin contacto asignado:
+             → Obtener siguiente contacto de la cola Redis
+             → Publicar evento 'manual_contact_assigned' para que el frontend lo muestre
+          2. El agente hace clic en "Llamar" en la UI
+          3. El frontend origina la llamada via JsSIP/WebRTC directamente
+        """
+        logger.info(f"Iniciando manual dialer para campaña {campaign_id}")
+
+        while campaign_id in self.active_campaigns:
+            campaign = self.active_campaigns[campaign_id]
+            if campaign.get('stopped'):
+                break
+
+            available_agents = await self.get_available_agents(campaign_id)
+            if not available_agents:
+                await asyncio.sleep(3)
+                continue
+
+            for agent in available_agents:
+                agent_id = str(agent['id'])
+                assigned_key = f'campaign:{campaign_id}:manual:agent:{agent_id}'
+
+                # Si ya tiene contacto asignado, no asignar otro
+                if await self.redis_client.exists(assigned_key):
+                    continue
+
+                contact = await self.get_next_contact(campaign_id)
+                if not contact:
+                    continue
+
+                # Publicar contacto para el agente (TTL: 5 minutos)
+                await self.redis_client.setex(
+                    assigned_key,
+                    300,
+                    json.dumps(contact)
+                )
+                # Notificar al frontend via Redis pub/sub
+                await self.redis_client.publish('calls:events', json.dumps({
+                    'type': 'manual_contact_assigned',
+                    'campaign_id': campaign_id,
+                    'agent_id': agent_id,
+                    'contact': contact,
+                }))
+                logger.info(f"Manual: contacto asignado a agente {agent_id}")
+
+            await asyncio.sleep(2)
+
+        logger.info(f"Manual dialer detenido para campaña {campaign_id}")
             
     async def progressive_dialer_loop(self, campaign_id: int):
         """
@@ -759,9 +861,33 @@ class DialerEngine:
         logger.info(f"Call {call_id} processed and removed from active calls")
         
     async def on_agent_connect(self, manager, event):
-        """Agente conectado a llamada"""
-        agent = event.get('Agent')
-        logger.info(f"Agente conectado: {agent}")
+        """Agente conectado a llamada — actualizar estado a ANSWERED y acumular contador."""
+        agent = event.get('Agent') or event.get('MemberName', '')
+        uniqueid = event.get('Uniqueid') or event.get('BridgedUniqueid', '')
+        logger.info(f"Agente conectado: {agent} (uniqueid={uniqueid})")
+
+        if not uniqueid:
+            return
+
+        # Buscar el call_id correspondiente a este uniqueid
+        call_id = await self.redis_client.get(f'uniqueid:{uniqueid}:call_id')
+        if not call_id or call_id not in self.active_calls:
+            return
+
+        call_data = self.active_calls[call_id]
+        campaign_id = call_data.get('campaign_id')
+
+        # Marcar la llamada como contestada
+        self.active_calls[call_id]['status'] = CallStatus.ANSWERED.value
+
+        # Incrementar contador de llamadas contestadas en la campaña
+        if campaign_id in self.active_campaigns:
+            self.active_campaigns[campaign_id]['calls_answered'] += 1
+            logger.debug(
+                f"Llamada {call_id} marcada como ANSWERED. "
+                f"Contestadas campaña {campaign_id}: "
+                f"{self.active_campaigns[campaign_id]['calls_answered']}"
+            )
         
     async def on_agent_complete(self, manager, event):
         """Agente completó llamada"""
@@ -783,6 +909,9 @@ async def main():
             attempt = 0  # reiniciar contador de intentos al conectar exitosamente
             retry_delay = 5
 
+            # Lanzar el listener del canal de control en paralelo
+            control_task = asyncio.create_task(dialer.listen_control_channel())
+
             # Mantener el proceso corriendo, reiniciar si se cae la conexión
             while True:
                 await asyncio.sleep(5)
@@ -791,6 +920,7 @@ async def main():
                     await dialer.redis_client.ping()
                 except Exception:
                     logger.error("Redis ping falló — reconectando...")
+                    control_task.cancel()
                     break
 
         except KeyboardInterrupt:

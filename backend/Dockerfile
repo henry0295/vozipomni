@@ -21,12 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gettext \
     curl \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements e instalar dependencias Python
-COPY requirements.txt .
+# En producción se usa requirements/prod.txt (excluye herramientas de dev/test)
+COPY requirements.txt requirements.txt
+COPY requirements/ requirements/
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements/prod.txt
 
 # Copiar código de la aplicación
 COPY . .

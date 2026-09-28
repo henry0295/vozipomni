@@ -199,9 +199,60 @@ CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutos
 # Tareas periódicas predeterminadas
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
+    # ── Callbacks ────────────────────────────────────────────────────────────
     'process-pending-callbacks': {
         'task': 'apps.telephony.tasks.process_pending_callbacks',
-        'schedule': 60.0,  # cada 60 segundos
+        'schedule': 60.0,   # cada 60 segundos
+    },
+    # ── Dialer ───────────────────────────────────────────────────────────────
+    'process-pending-calls': {
+        'task': 'campaigns.process_pending_calls',
+        'schedule': 60.0,   # verifica campañas activas cada minuto
+    },
+    # ── Métricas Prometheus ───────────────────────────────────────────────────
+    'update-prometheus-metrics': {
+        'task': 'apps.agents.tasks.update_prometheus_metrics',
+        'schedule': 60.0,   # cada minuto
+    },
+    # ── Estadísticas de agentes ───────────────────────────────────────────────
+    'update-agent-statistics': {
+        'task': 'apps.agents.tasks.update_agent_statistics',
+        'schedule': 60.0,   # cada minuto
+    },
+    # ── Reset diario de métricas (medianoche) ─────────────────────────────────
+    'reset-daily-agent-metrics': {
+        'task': 'apps.agents.tasks.reset_daily_agent_metrics',
+        'schedule': crontab(hour=0, minute=1),  # 00:01 cada día
+    },
+    # ── Limpieza de historial huérfano ────────────────────────────────────────
+    'close-agent-status-history': {
+        'task': 'apps.agents.tasks.close_agent_status_history',
+        'schedule': crontab(hour='*/6', minute=0),  # cada 6 horas
+    },
+    # ── Detección de llamadas colgadas sin heartbeat ──────────────────────────
+    'detect-orphan-calls': {
+        'task': 'apps.telephony.tasks.detect_orphan_calls',
+        'schedule': 300.0,  # cada 5 minutos
+    },
+    # ── Salud de Asterisk ─────────────────────────────────────────────────────
+    'check-asterisk-health': {
+        'task': 'apps.telephony.tasks.check_asterisk_health',
+        'schedule': 120.0,  # cada 2 minutos
+    },
+    # ── Sincronización de config Asterisk ────────────────────────────────────
+    'sync-telephony-config': {
+        'task': 'apps.telephony.tasks.sync_all_telephony_config_to_redis',
+        'schedule': crontab(minute='*/5'),  # cada 5 minutos
+    },
+    # ── Grabaciones sin vincular ─────────────────────────────────────────────
+    'scan-unlinked-recordings': {
+        'task': 'recordings.scan_unlinked_recordings',
+        'schedule': crontab(minute='*/15'),  # cada 15 minutos
+    },
+    # ── Retención de grabaciones ─────────────────────────────────────────────
+    'cleanup-old-recordings': {
+        'task': 'recordings.cleanup_old_recordings',
+        'schedule': crontab(hour=2, minute=0),  # 02:00 cada día
     },
 }
 

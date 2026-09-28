@@ -35,12 +35,30 @@ export const useAuthStore = defineStore('auth', {
         this.refreshToken = refreshToken
       }
 
-      // Guardar en localStorage
+      // Guardar en localStorage (compatibilidad) Y en cookies (más seguro)
       if (process.client) {
         localStorage.setItem('auth_token', token)
         localStorage.setItem('auth_user', JSON.stringify(user))
         if (refreshToken) {
           localStorage.setItem('auth_refresh_token', refreshToken)
+        }
+        // Cookies — el backend las set como httpOnly en producción;
+        // aquí las seteamos como fallback para el cliente
+        try {
+          const accessCookie = useCookie<string>('access_token', {
+            maxAge: 8 * 3600,   // 8 horas (igual que ACCESS_TOKEN_LIFETIME)
+            sameSite: 'strict',
+          })
+          accessCookie.value = token
+          if (refreshToken) {
+            const refreshCookie = useCookie<string>('refresh_token', {
+              maxAge: 7 * 24 * 3600,  // 7 días (igual que REFRESH_TOKEN_LIFETIME)
+              sameSite: 'strict',
+            })
+            refreshCookie.value = refreshToken
+          }
+        } catch {
+          // useCookie puede no estar disponible fuera de setup(); ignorar
         }
       }
     },
@@ -64,14 +82,18 @@ export const useAuthStore = defineStore('auth', {
       this.token = null
       this.refreshToken = null
 
-      // Limpiar localStorage
+      // Limpiar localStorage y cookies
       if (process.client) {
         localStorage.removeItem('auth_token')
         localStorage.removeItem('auth_user')
         localStorage.removeItem('auth_refresh_token')
 
+        try {
+          useCookie('access_token').value = null
+          useCookie('refresh_token').value = null
+        } catch { /* fuera de setup */ }
+
         // Limpiar toasts pendientes para evitar notificaciones "fantasma"
-        // en la pantalla de login después de cerrar sesión
         try {
           const toast = useToast()
           toast.toasts.value.forEach(t => toast.remove(t.id))

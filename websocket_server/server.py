@@ -122,38 +122,47 @@ class WebSocketServer:
     async def _validate_jwt_token(self, token: str) -> dict | None:
         """
         Valida un JWT token de Django REST framework SimpleJWT.
-        Retorna los claims del payload si es válido, None si no lo es.
+        Verifica FIRMA HMAC-SHA256 + expiración antes de aceptar el payload.
+        Retorna los claims del payload si el token es válido, None en caso contrario.
         """
+        import time
+
+        SECRET_KEY = os.getenv('SECRET_KEY', '')
+        if not SECRET_KEY:
+            logger.error("SECRET_KEY no configurado — rechazando conexión WebSocket")
+            return None
+
         try:
-            import base64, json as _json, hmac, hashlib
-            
-            SECRET_KEY = os.getenv('SECRET_KEY', '')
-            if not SECRET_KEY:
-                # Sin clave secreta configurada, RECHAZAR por seguridad
-                logger.error("SECRET_KEY no configurado — rechazando conexión WebSocket")
-                return None
-            
-            # Decodificar JWT (formato: header.payload.signature)
-            parts = token.split('.')
-            if len(parts) != 3:
-                return None
-            
-            # Decodificar payload (base64url)
-            padding = 4 - len(parts[1]) % 4
-            payload_bytes = base64.urlsafe_b64decode(parts[1] + '=' * padding)
-            payload = _json.loads(payload_bytes)
-            
-            # Verificar expiración
-            import time
-            if payload.get('exp', 0) < time.time():
-                logger.debug("JWT expirado")
-                return None
-            
+            import jwt as pyjwt
+
+            # SimpleJWT usa HS256 por defecto. Verificamos firma + exp en un solo paso.
+            payload = pyjwt.decode(
+                token,
+                SECRET_KEY,
+                algorithms=['HS256'],
+                options={
+                    'verify_exp': True,       # verificar expiración
+                    'verify_iat': False,      # no requerir issued-at
+                    'verify_aud': False,      # SimpleJWT no incluye audience
+                    'require': ['exp'],       # exp es obligatorio
+                },
+            )
+
             return {
                 'user_id': payload.get('user_id'),
                 'role': payload.get('role', 'agent'),
                 'username': payload.get('username', ''),
             }
+
+        except pyjwt.ExpiredSignatureError:
+            logger.debug("JWT rechazado: expirado")
+            return None
+        except pyjwt.InvalidSignatureError:
+            logger.warning("JWT rechazado: firma inválida — posible intento de falsificación")
+            return None
+        except pyjwt.DecodeError as e:
+            logger.debug(f"JWT rechazado: formato incorrecto — {e}")
+            return None
         except Exception as e:
             logger.debug(f"JWT validation failed: {e}")
             return None

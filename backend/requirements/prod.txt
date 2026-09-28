@@ -1,0 +1,9 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# VozipOmni — Dependencias de PRODUCCIÓN
+# Incluye base + Whisper para transcripción de grabaciones
+# ──────────────────────────────────────────────────────────────────────────────
+-r base.txt
+
+# Transcripción de grabaciones (Whisper local, sin dependencia de APIs externas)
+openai-whisper==20231117
+ffmpeg-python==0.2.0

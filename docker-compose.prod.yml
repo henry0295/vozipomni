@@ -244,6 +244,7 @@ services:
       - ./logs:/app/logs
       - ./docker/asterisk/configs:/etc/asterisk
       - asterisk_configs:/var/lib/asterisk/dynamic
+      - whisper_cache:/root/.cache/whisper
     depends_on:
       postgres:
         condition: service_healthy
@@ -632,6 +633,8 @@ volumes:
   prometheus_data:
     driver: local
   grafana_data:
+    driver: local
+  whisper_cache:
     driver: local
 
 # =============================================================================

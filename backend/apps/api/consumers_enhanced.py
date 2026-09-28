@@ -212,57 +212,59 @@ class RealtimeDashboardConsumer(AsyncWebsocketConsumer):
         from apps.telephony.models import Call
         from apps.agents.models import Agent
         from django.utils import timezone
-        from datetime import timedelta
-        
+        from django.db.models import Avg, Count
+
         now = timezone.now()
         today = now.date()
-        
+
         # Llamadas de hoy
         calls_today = Call.objects.filter(start_time__date=today)
-        
+
         # Agentes por estado
-        agents_ready = Agent.objects.filter(status='ready').count()
-        agents_in_call = Agent.objects.filter(status='in_call').count()
-        agents_acw = Agent.objects.filter(status='acw').count()
-        agents_paused = Agent.objects.filter(status='paused').count()
-        
+        agents_available = Agent.objects.filter(status='available').count()
+        agents_oncall   = Agent.objects.filter(status__in=['oncall', 'busy']).count()
+        agents_wrapup   = Agent.objects.filter(status='wrapup').count()
+        agents_break    = Agent.objects.filter(status='break').count()
+
         # Promedios
-        avg_talk_time = calls_today.aggregate(
-            avg=models.Avg('duration')
+        avg_talk = calls_today.filter(status='completed').aggregate(
+            avg=Avg('talk_time')
         )['avg'] or 0
-        
+
         return {
             'calls_today': calls_today.count(),
             'calls_answered': calls_today.filter(status='completed').count(),
             'calls_abandoned': calls_today.filter(status='abandoned').count(),
-            'calls_active': calls_today.filter(status='active').count(),
-            'agents_ready': agents_ready,
-            'agents_in_call': agents_in_call,
-            'agents_acw': agents_acw,
-            'agents_paused': agents_paused,
-            'avg_talk_time': round(avg_talk_time, 2),
+            'calls_active': Call.objects.filter(
+                status__in=['initiated', 'ringing', 'answered']
+            ).count(),
+            'agents_available': agents_available,
+            'agents_oncall': agents_oncall,
+            'agents_wrapup': agents_wrapup,
+            'agents_break': agents_break,
+            'avg_talk_time': round(avg_talk, 2),
             'service_level': self._calculate_service_level(calls_today),
             'timestamp': now.isoformat()
         }
-    
+
     def _calculate_service_level(self, calls):
-        """Calcular nivel de servicio (% respondidas en < 20s)"""
+        """Calcular nivel de servicio (% respondidas en ≤ 20s)"""
         total = calls.filter(status='completed').count()
         if total == 0:
             return 100
-        
+
         answered_in_time = calls.filter(
             status='completed',
             wait_time__lte=20
         ).count()
-        
+
         return round((answered_in_time / total) * 100, 2)
     
     @database_sync_to_async
     def get_agents(self):
         """Obtener lista de agentes con su estado"""
         from apps.agents.models import Agent
-        
+
         agents = Agent.objects.select_related('user').all()
         return [
             {
@@ -271,8 +273,9 @@ class RealtimeDashboardConsumer(AsyncWebsocketConsumer):
                 'extension': agent.sip_extension,
                 'status': agent.status,
                 'calls_today': agent.calls_today,
-                'avg_talk_time': agent.avg_talk_time or 0,
-                'last_call': agent.last_call_time.isoformat() if agent.last_call_time else None
+                'talk_time_today': agent.talk_time_today,
+                'last_call': agent.last_call_time.isoformat() if agent.last_call_time else None,
+                'logged_in_at': agent.logged_in_at.isoformat() if agent.logged_in_at else None,
             }
             for agent in agents
         ]
@@ -281,48 +284,43 @@ class RealtimeDashboardConsumer(AsyncWebsocketConsumer):
     def get_queues(self):
         """Obtener estado de colas"""
         from apps.queues.models import Queue, QueueStats
-        from django.utils import timezone
-        
+
         queues = Queue.objects.all()
         queue_data = []
-        
+
         for queue in queues:
-            # Obtener stats del día
-            stats = QueueStats.objects.filter(
-                queue=queue,
-                timestamp__date=timezone.now().date()
-            ).first()
-            
+            stats = QueueStats.objects.filter(queue=queue).first()
+
             queue_data.append({
                 'id': queue.id,
                 'name': queue.name,
                 'strategy': queue.strategy,
-                'members_count': queue.queuemember_set.count(),
+                'members_count': queue.queuemember_set.filter(paused=False).count(),
                 'calls_waiting': stats.calls_waiting if stats else 0,
-                'calls_answered': stats.calls_answered if stats else 0,
+                'calls_completed': stats.calls_completed if stats else 0,
                 'calls_abandoned': stats.calls_abandoned if stats else 0,
-                'avg_hold_time': stats.avg_hold_time if stats else 0
+                'service_level_percentage': stats.service_level_percentage if stats else 0,
             })
-        
+
         return queue_data
     
     @database_sync_to_async
     def get_active_calls(self):
         """Obtener llamadas activas"""
         from apps.telephony.models import Call
-        
-        active_calls = Call.objects.filter(status='active').select_related(
-            'agent__user'
-        )
-        
+
+        active_calls = Call.objects.filter(
+            status__in=['initiated', 'ringing', 'answered']
+        ).select_related('agent__user')
+
         return [
             {
                 'id': call.id,
                 'channel': call.channel,
-                'caller_id': call.caller_id_number,
+                'caller_id': call.caller_id,
                 'agent': call.agent.user.get_full_name() if call.agent else None,
-                'duration': call.get_duration(),
-                'start_time': call.start_time.isoformat()
+                'duration': call.duration,
+                'start_time': call.start_time.isoformat(),
             }
             for call in active_calls
         ]
