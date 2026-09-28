@@ -17,6 +17,7 @@ from django.utils import timezone
 from typing import Dict, Optional
 from datetime import timedelta
 
+from django.db.models import F
 from core.exceptions import (
     AgentNotFoundError,
     AgentNotAvailableError,
@@ -317,11 +318,8 @@ class AgentService:
         answered_calls = calls.filter(status='answered').count()
         completed_calls = calls.filter(status='completed').count()
         
-        # Calculate times
-        total_talk_time = sum(
-            (call.talk_time or 0 for call in calls),
-            timedelta()
-        )
+        # Calculate times — talk_time is stored in seconds (int); sum directly
+        total_talk_time_secs: int = sum(call.talk_time or 0 for call in calls)
         
         # Get status history for the date
         status_history = AgentStatusHistory.objects.filter(
@@ -355,7 +353,7 @@ class AgentService:
                 'answer_rate': (answered_calls / total_calls * 100) if total_calls > 0 else 0
             },
             'times': {
-                'talk_time': total_talk_time.total_seconds(),
+                'talk_time': total_talk_time_secs,
                 'available_time': status_times.get('available', 0),
                 'break_time': status_times.get('break', 0),
                 'oncall_time': status_times.get('oncall', 0),
@@ -363,7 +361,7 @@ class AgentService:
             },
             'performance': {
                 'occupancy': agent.occupancy,
-                'avg_talk_time': (total_talk_time.total_seconds() / total_calls) if total_calls > 0 else 0
+                'avg_talk_time': (total_talk_time_secs / total_calls) if total_calls > 0 else 0
             }
         }
         
@@ -427,7 +425,7 @@ class AgentService:
         """
         queryset = Agent.objects.filter(
             status='available',
-            is_available=True
+            current_calls__lt=F('max_concurrent_calls')
         ).select_related('user')
         
         if campaign_id:

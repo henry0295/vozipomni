@@ -260,16 +260,8 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
 
-# CORS Configuration
-# Limpiar espacios en blanco de cada origen
-CORS_ALLOWED_ORIGINS = [
-    origin.strip() 
-    for origin in config('CORS_ORIGINS', default='http://localhost:3000,http://localhost,http://127.0.0.1').split(',')
-]
-
-# Configuración de CORS para producción
-CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=False, cast=bool)
-
+# CORS Configuration — comportamiento y cabeceras permitidas
+# Los orígenes permitidos se definen al final del archivo (sección única autoritativa)
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     'DELETE',
@@ -375,15 +367,24 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
-# CORS Configuration - Restringido por seguridad
+# CORS Configuration — fuente única autoritativa de orígenes permitidos
 CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=False, cast=bool)
 # Si CORS_ALLOW_ALL=False, configurar orígenes permitidos
 if not CORS_ORIGIN_ALLOW_ALL:
     _cors_origins = config('CORS_ORIGINS', default='').strip()
     if _cors_origins:
         CORS_ALLOWED_ORIGINS = [origin.strip() for origin in _cors_origins.split(',') if origin.strip()]
+    elif DEBUG:
+        # Desarrollo: incluir puertos típicos de Nuxt/Vite
+        CORS_ALLOWED_ORIGINS = [
+            'http://localhost',
+            'http://localhost:3000',
+            'http://localhost:8080',
+            'http://127.0.0.1',
+            'http://127.0.0.1:3000',
+        ]
     else:
-        # Fallback: solo localhost y la IP del servidor
+        # Producción sin CORS_ORIGINS configurado: solo la IP del servidor
         CORS_ALLOWED_ORIGINS = [
             'http://localhost',
             'http://127.0.0.1',

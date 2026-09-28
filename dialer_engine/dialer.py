@@ -6,7 +6,7 @@ Utiliza Asterisk AMI para originar llamadas
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from enum import Enum
 from typing import List, Dict, Optional
 import redis.asyncio as aioredis
@@ -128,7 +128,7 @@ class DialerEngine:
         self.active_campaigns[campaign_id] = {
             'type': campaign_type,
             'config': campaign_config,
-            'started_at': datetime.now(),
+            'started_at': datetime.now(dt_timezone.utc),
             'calls_made': 0,
             'calls_answered': 0,
             'calls_abandoned': 0
@@ -149,6 +149,21 @@ class DialerEngine:
         if campaign_id in self.active_campaigns:
             self.active_campaigns[campaign_id]['stopped'] = True
             logger.info(f"Campaña {campaign_id} marcada para detener")
+
+    async def cleanup(self):
+        """Cerrar conexiones de Redis y AMI para liberar recursos."""
+        if self.redis_client:
+            try:
+                await self.redis_client.aclose()
+            except Exception as e:
+                logger.debug(f"Redis close error during cleanup: {e}")
+            self.redis_client = None
+        if self.ami_client:
+            try:
+                self.ami_client.close()
+            except Exception as e:
+                logger.debug(f"AMI close error during cleanup: {e}")
+            self.ami_client = None
             
     async def progressive_dialer_loop(self, campaign_id: int):
         """
@@ -268,7 +283,7 @@ class DialerEngine:
                     else:
                         # Verificar timeout del preview
                         assigned_ts = float(await self.redis_client.get(f'{assigned_key}:ts') or 0)
-                        if assigned_ts and (datetime.now().timestamp() - assigned_ts) > timeout_secs:
+                        if assigned_ts and (datetime.now(dt_timezone.utc).timestamp() - assigned_ts) > timeout_secs:
                             logger.info(f"Preview timeout para agente {agent_id}")
                             await self.redis_client.delete(assigned_key, f'{assigned_key}:ts')
                     continue
@@ -280,7 +295,7 @@ class DialerEngine:
 
                 await self.redis_client.setex(assigned_key, timeout_secs + 60, json.dumps(contact))
                 await self.redis_client.setex(f'{assigned_key}:ts', timeout_secs + 60,
-                                               str(datetime.now().timestamp()))
+                                               str(datetime.now(dt_timezone.utc).timestamp()))
                 # Publicar evento para que el frontend muestre los datos
                 await self.redis_client.publish('calls:events', json.dumps({
                     'type': 'preview_contact_assigned',
@@ -393,7 +408,7 @@ class DialerEngine:
             # panoramisk Message: el header de respuesta es 'Response' (capitalizado)
             ami_response = getattr(response, 'Response', '') or ''
             if str(ami_response).lower() == 'success':
-                call_id = getattr(response, 'ActionID', None) or str(datetime.now().timestamp())
+                call_id = getattr(response, 'ActionID', None) or str(datetime.now(dt_timezone.utc).timestamp())
                 uniqueid = getattr(response, 'Uniqueid', call_id) or call_id
                 
                 self.active_calls[call_id] = {
@@ -401,7 +416,7 @@ class DialerEngine:
                     'contact': contact,
                     'agent': agent,
                     'status': CallStatus.DIALING.value,
-                    'started_at': datetime.now(),
+                    'started_at': datetime.now(dt_timezone.utc),
                     'uniqueid': uniqueid
                 }
                 
@@ -711,7 +726,7 @@ class DialerEngine:
             'agent': call_data.get('agent'),
             'status': call_data.get('status'),
             'started_at': str(call_data.get('started_at')),
-            'ended_at': str(datetime.now()),
+            'ended_at': str(datetime.now(dt_timezone.utc)),
             'hangup_cause': cause,
             'hangup_cause_txt': cause_txt,
             'channel': channel,
@@ -780,13 +795,18 @@ async def main():
 
         except KeyboardInterrupt:
             logger.info("Deteniendo Dialer Engine...")
+            await dialer.cleanup()
             return
         except Exception as e:
             attempt += 1
             logger.error(f"Error en Dialer Engine (intento {attempt}): {e}")
             retry_delay = min(retry_delay * 2, max_retry_delay)
             logger.info(f"Reintentando en {retry_delay}s...")
-            await asyncio.sleep(retry_delay)
+        finally:
+            # Liberar siempre los recursos del engine de este ciclo antes de reconectar
+            await dialer.cleanup()
+
+        await asyncio.sleep(retry_delay)
 
 if __name__ == '__main__':
     asyncio.run(main())

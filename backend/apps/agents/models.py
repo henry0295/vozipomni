@@ -106,6 +106,7 @@ class AgentStatusHistory(models.Model):
     """
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='status_history')
     status = models.CharField(max_length=20)
+    reason = models.CharField(max_length=200, blank=True, default='', verbose_name='Razón')
     started_at = models.DateTimeField(auto_now_add=True)
     ended_at = models.DateTimeField(null=True, blank=True)
     duration = models.IntegerField(default=0, help_text="Segundos")

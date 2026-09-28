@@ -54,15 +54,16 @@ class PJSIPConfigGenerator:
         """
         Aplica configuración de Caller ID al endpoint:
         - Formatea callerid correctamente
-        - Auto-configura from_user si está vacío
+        - Auto-configura from_user si está vacío Y no hay username de auth
+          (para evitar duplicar la directiva cuando el generador ya la añadió)
         - Habilita send_pai/send_rpid para transmitir la identidad
         """
         callerid = self._format_callerid(trunk)
         if callerid:
             config_lines.append(f"endpoint/callerid={callerid}")
-            # Si from_user no está configurado, usar caller_id como from_user
-            # para que aparezca en el header SIP From:
-            if not trunk.from_user:
+            # Derivar from_user del caller_id SOLO si no hay otro origen ya fijado
+            # por los generadores (from_user explícito ni auth username).
+            if not trunk.from_user and not trunk.outbound_auth_username:
                 config_lines.append(f"endpoint/from_user={trunk.caller_id}")
         
         # Identidad avanzada
@@ -261,19 +262,19 @@ class PJSIPConfigGenerator:
         if trunk.outbound_auth_username:
             config_lines.append(f"outbound_auth/username={trunk.outbound_auth_username}")
             config_lines.append(f"outbound_auth/password={trunk.outbound_auth_password}")
-            # CRÍTICO: endpoint/from_user es necesario para que el wizard cree el endpoint.
-            # Sin esto, Asterisk PJSIP Wizard omite la creación del endpoint cuando
-            # la troncal solo envía registros (sends_registrations=yes) pero no los acepta.
-            # from_user define el usuario del header SIP From en llamadas salientes.
-            if not trunk.from_user:
-                config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
-        
+
         if trunk.accepts_auth and trunk.inbound_auth_username:
             config_lines.append(f"inbound_auth/username={trunk.inbound_auth_username}")
             config_lines.append(f"inbound_auth/password={trunk.inbound_auth_password}")
-        
+
+        # CRÍTICO: endpoint/from_user es necesario para que el wizard cree el endpoint.
+        # Sin esto, Asterisk PJSIP Wizard omite la creación del endpoint cuando
+        # la troncal solo envía registros (sends_registrations=yes) pero no los acepta.
+        # Prioridad: campo from_user explícito > username de auth.
         if trunk.from_user:
             config_lines.append(f"endpoint/from_user={trunk.from_user}")
+        elif trunk.outbound_auth_username:
+            config_lines.append(f"endpoint/from_user={trunk.outbound_auth_username}")
         if trunk.from_domain:
             config_lines.append(f"endpoint/from_domain={trunk.from_domain}")
         

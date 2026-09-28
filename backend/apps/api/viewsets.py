@@ -7,6 +7,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample, OpenApiResponse
 from django.utils import timezone
+from datetime import timedelta
 import bleach
 
 from apps.users.models import User
@@ -180,7 +181,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status__in=['pending', 'callback']
             ).exclude(
                 # Excluir contactos llamados en las últimas 24h
-                calls__start_time__gte=timezone.now() - timezone.timedelta(hours=24)
+                calls__start_time__gte=timezone.now() - timedelta(hours=24)
             ).order_by('priority', 'id').first()
             
             if not contact:
@@ -220,12 +221,16 @@ class CampaignViewSet(viewsets.ModelViewSet):
         """
         Clonar campaña (o plantilla) como una nueva campaña.
         Se puede especificar 'name' en el body para el nombre de la nueva campaña.
+        Las relaciones M2M (agents, required_skills) se copian a la nueva campaña.
         """
         source = self.get_object()
         new_name = request.data.get('name', f'{source.name} (copia)')
 
-        import copy as _copy
-        # Duplicar el objeto sin PK para crear uno nuevo
+        # Guardar relaciones M2M antes de mutar el objeto
+        original_agents = list(source.agents.all())
+        original_skills = list(source.required_skills.all())
+
+        # Duplicar sin PK — Django hace INSERT cuando pk es None
         source.pk = None
         source.id = None
         source.name = new_name
@@ -237,6 +242,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
         source.successful = 0
         source.created_by = request.user
         source.save()
+
+        # Copiar relaciones M2M a la nueva campaña
+        if original_agents:
+            source.agents.set(original_agents)
+        if original_skills:
+            source.required_skills.set(original_skills)
 
         return Response(
             serializers.CampaignSerializer(source, context={'request': request}).data,

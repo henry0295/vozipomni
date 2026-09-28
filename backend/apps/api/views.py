@@ -2,6 +2,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework.decorators import api_view, permission_classes
 from apps.api.serializers import UserSerializer
 from apps.api.auth_serializers import CustomTokenObtainPairSerializer
@@ -46,8 +48,21 @@ class CurrentUserView(generics.RetrieveAPIView):
 @permission_classes([permissions.IsAuthenticated])
 def LogoutView(request):
     """
-    Vista para logout. Con JWT, solo se necesita limpiar el token en el cliente.
+    Vista para logout.
+    Invalida (blacklist) el refresh token recibido en el body para que
+    no pueda usarse para obtener nuevos access tokens.
+    El access token vigente expira por sí solo según ACCESS_TOKEN_LIFETIME.
+    Body: { "refresh": "<refresh_token>" }
     """
+    refresh_token = request.data.get('refresh')
+    if refresh_token:
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except TokenError:
+            # Token ya expirado, inválido o ya en la blacklist — no es un error
+            pass
+
     return Response(
         {'message': 'Logout exitoso'},
         status=status.HTTP_200_OK

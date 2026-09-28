@@ -32,6 +32,7 @@ class Contact(models.Model):
     STATUS_CHOICES = [
         ('new', 'Nuevo'),
         ('pending', 'Pendiente'),
+        ('callback', 'Rellamada'),
         ('contacted', 'Contactado'),
         ('success', 'Exitoso'),
         ('failed', 'Fallido'),

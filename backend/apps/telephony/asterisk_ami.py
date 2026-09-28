@@ -791,20 +791,26 @@ class AsteriskAMI:
     async def _save_call_stats(self, event):
         """Guardar estadísticas de llamada en base de datos"""
         from apps.telephony.models import Call
-        from datetime import datetime
-        
+        from datetime import datetime, timezone as dt_tz
+
         try:
-            # Extraer información del evento
             call = await Call.objects.filter(
                 channel=event.Channel
             ).afirst()
-            
+
             if call:
-                call.end_time = datetime.now()
-                call.duration = int(event.get('Duration', 0))
-                call.hangup_cause = event.Cause
+                now = datetime.now(dt_tz.utc)
+                call.end_time = now
+                # Calcular talk_time desde answer_time si está disponible
+                if call.answer_time:
+                    call.talk_time = int((now - call.answer_time).total_seconds())
+                # Almacenar causa de cuelgue en metadata (campo JSON libre)
+                meta = call.metadata or {}
+                meta['hangup_cause'] = event.Cause
+                meta['hangup_cause_txt'] = event.get('Cause-txt', '')
+                call.metadata = meta
                 call.status = 'completed'
-                await call.asave()
+                await call.asave(update_fields=['end_time', 'talk_time', 'metadata', 'status'])
         except Exception as e:
             logger.error(f"Error saving call stats: {e}")
     

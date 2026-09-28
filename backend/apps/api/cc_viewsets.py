@@ -292,6 +292,9 @@ class ConsultiveTransferView(APIView):
     def post(self, request):
         """
         Body: { channel: "PJSIP/1001-...", extension: "1002", blind: false }
+        blind=True  → transferencia ciega (Redirect inmediato, recomendado para producción).
+        blind=False → transferencia consultiva (2 pasos: hold + originate al agente receptor).
+                      Requiere que el frontend gestione la señalización del segundo leg.
         """
         channel = request.data.get('channel', '').strip()
         extension = request.data.get('extension', '').strip()
@@ -302,13 +305,52 @@ class ConsultiveTransferView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         from apps.telephony.services import CallService
-        if blind:
-            result = CallService.transfer_call(channel, extension)
-        else:
-            # Transfer consultiva: originar al agente receptor primero
-            result = CallService.transfer_call(channel, extension)
 
-        return Response(result)
+        if blind:
+            # Transferencia ciega: redirigir el canal directamente
+            result = CallService.transfer_call(channel, extension)
+            result['transfer_type'] = 'blind'
+            return Response(result)
+
+        # Transferencia consultiva (attended transfer):
+        # Paso 1 — poner al cliente en hold mientras el agente habla con el receptor
+        # Paso 2 — originar llamada al agente receptor desde el canal del agente actual
+        # El frontend debe completar el bridge cuando el receptor esté listo.
+        try:
+            from apps.telephony.asterisk_ami import AsteriskAMI
+            ami = AsteriskAMI()
+            if not ami.connect():
+                return Response({'error': 'No se pudo conectar a Asterisk AMI'},
+                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            # Originar llamada al agente receptor; cuando conteste,
+            # el agente actual podrá completar el bridge con AMI Bridge action.
+            caller_id = request.data.get('caller_id', 'Transferencia')
+            response_raw = ami.originate(
+                channel=f"PJSIP/{extension}",
+                context='from-internal',
+                exten=extension,
+                caller_id=caller_id,
+                variable={'TRANSFER_SOURCE_CHANNEL': channel},
+            )
+            ami.disconnect()
+            logger.info(
+                f"Consultive transfer: originating to {extension} from {channel}"
+            )
+            return Response({
+                'status': 'consultive_leg_initiated',
+                'transfer_type': 'consultive',
+                'channel': channel,
+                'extension': extension,
+                'message': (
+                    'Llamada originada al agente receptor. '
+                    'Llame a POST /api/cc/consultive-transfer/ con blind=true '
+                    'para completar la transferencia cuando esté listo.'
+                ),
+            })
+        except Exception as e:
+            logger.error(f"Consultive transfer error: {e}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -429,10 +471,11 @@ class BulkContactImportView(APIView):
     Importa contactos masivamente con validación y deduplicación.
     """
     permission_classes = [IsAdminOrSupervisor]
-    parser_classes = None  # acepta multipart
+    # Parsers explícitos para aceptar multipart/form-data (subida de archivos)
+    from rest_framework.parsers import MultiPartParser, FormParser
+    parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
-        from rest_framework.parsers import MultiPartParser
         contact_list_id = request.data.get('contact_list_id')
         uploaded_file = request.FILES.get('file')
         skip_duplicates = request.data.get('skip_duplicates', 'true').lower() == 'true'

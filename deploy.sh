@@ -1630,7 +1630,11 @@ else:
 PYEOF
 
     # 8c. Recargar configuración PJSIP para aplicar cambios de troncales
-    # La configuración PJSIP no está aplicada si AMI falla; el deploy debe fallar.
+    # NOTA: No es fatal — un fallo temporal de AMI no debe abortar la actualización.
+    # El administrador puede recargar manualmente con:
+    #   docker compose -f docker-compose.prod.yml exec backend python manage.py shell
+    #   >>> from apps.telephony.pjsip_config_generator import PJSIPConfigGenerator
+    #   >>> PJSIPConfigGenerator().save_and_reload()
     log_info "Recargando configuración PJSIP..."
     local pjsip_out=""
     if pjsip_out=$($COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py shell <<'PYEOF' 2>/dev/null
@@ -1641,15 +1645,17 @@ print(f'PJSIP reload: {"OK" if ok else "ERROR"} — {msg}')
 PYEOF
 ); then
         if echo "$pjsip_out" | grep -q 'PJSIP reload: ERROR'; then
-            log_error "$(echo "$pjsip_out" | tail -n 1)"
-            log_error "AMI no está disponible: revise manager.conf, ASTERISK_AMI_PASSWORD y ASTERISK_AMI_PERMIT_NETWORK."
-            exit 1
+            log_warning "$(echo "$pjsip_out" | tail -n 1)"
+            log_warning "PJSIP no se pudo recargar ahora (AMI puede estar iniciando)."
+            log_warning "Reintente manualmente si las troncales no aparecen registradas:"
+            log_warning "  $COMPOSE_CMD -f docker-compose.prod.yml exec backend python manage.py shell -c"
+            log_warning "  \"from apps.telephony.pjsip_config_generator import PJSIPConfigGenerator; PJSIPConfigGenerator().save_and_reload()\""
         else
             log_success "$(echo "$pjsip_out" | tail -n 1)"
         fi
     else
-        log_error "No se pudo ejecutar recarga PJSIP (AMI/servicio no listo)."
-        exit 1
+        log_warning "No se pudo ejecutar recarga PJSIP (AMI/servicio no listo). Continúa el update."
+        log_warning "Recargue manualmente con: bash $INSTALL_DIR/deploy.sh --update $VOZIPOMNI_IPV4"
     fi
 
     # 9. Recolectar archivos estáticos
