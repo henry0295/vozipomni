@@ -77,7 +77,7 @@
             <template v-for="item in navigation" :key="item.label">
               <!-- Item sin submenu -->
               <NuxtLink
-                v-if="!item.children"
+                v-if="!('children' in item)"
                 :to="item.to"
                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
                 :class="{ 'bg-sky-50 text-sky-700 font-medium': isActive(item.to) }"
@@ -156,48 +156,11 @@ const { user, logout } = useAuth()
 // Estados para submenús - usar localStorage con useLocalStorage de @vueuse (SSR-safe)
 const expandedMenus = process.client ? useLocalStorage<string[]>('sidebar-expanded-menus', []) : ref<string[]>([])
 
-// Navegación completa por rol
-const allNavigation = [
-  { label: 'Dashboard', icon: 'i-heroicons-home', to: '/dashboard', roles: null },
-  { label: 'Supervisor', icon: 'i-heroicons-presentation-chart-line', to: '/supervisor', roles: ['admin', 'supervisor'] },
-  { label: 'Auditoría', icon: 'i-heroicons-clipboard-document-check', to: '/audit', roles: ['admin', 'supervisor'] },
-  { label: 'Agentes', icon: 'i-heroicons-user-group', to: '/agents', roles: null },
-  { label: 'Campañas', icon: 'i-heroicons-megaphone', to: '/campaigns', roles: null },
-  { label: 'Contactos', icon: 'i-heroicons-users', to: '/contacts', roles: null },
-  { label: 'Callbacks', icon: 'i-heroicons-phone-arrow-down-left', to: '/callbacks', roles: null },
-  { label: 'Llamadas', icon: 'i-heroicons-phone-arrow-up-right', to: '/calls', roles: null },
-  { label: 'Calidad', icon: 'i-heroicons-star', to: '/quality', roles: ['admin', 'supervisor'] },
-  { label: 'Reportes', icon: 'i-heroicons-chart-bar', to: '/reports', roles: null },
-  
-  // Menú desplegable de Telefonía - Contact Center
-  {
-    label: 'Telefonía',
-    icon: 'i-heroicons-phone',
-    id: 'telephony',
-    roles: null,
-    children: [
-      { label: 'Colas', icon: 'i-heroicons-queue-list', to: '/queues' },
-      { label: 'Troncales SIP', icon: 'i-heroicons-server', to: '/trunks' },
-      { label: 'Rutas Entrantes (DIDs)', icon: 'i-heroicons-arrow-down-left', to: '/inbound-routes' },
-      { label: 'Rutas Salientes', icon: 'i-heroicons-arrow-up-right', to: '/outbound-routes' },
-      { label: 'IVR Menus', icon: 'i-heroicons-microphone', to: '/ivr' },
-      { label: 'Extensiones', icon: 'i-heroicons-hashtag', to: '/extensions' },
-      { label: 'Buzones de Voz', icon: 'i-heroicons-inbox', to: '/voicemail' },
-      { label: 'Condiciones Horario', icon: 'i-heroicons-clock', to: '/time-conditions' },
-      { label: 'Destinos Personalizados', icon: 'i-heroicons-map-pin', to: '/custom-destinations' },
-      { label: 'Grabaciones', icon: 'i-heroicons-video-camera', to: '/recordings' },
-      { label: 'Webhooks', icon: 'i-heroicons-link', to: '/webhooks' },
-      { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings' },
-      { label: 'Config. Avanzada', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced' }
-    ]
-  }
-]
+// Menú y permisos centralizados en utils/navigation.ts
+import { navigationForRole, ruleForPath } from '~/utils/navigation'
 
-// Filtrar navegación según el rol del usuario
-const navigation = computed(() => {
-  const role = user.value?.role
-  return allNavigation.filter(item => !item.roles || (role && item.roles.includes(role)))
-})
+// Filtrar navegación según el rol del usuario (grupos vacíos se ocultan)
+const navigation = computed<any[]>(() => navigationForRole(user.value?.role))
 
 // Funciones para manejar el menú desplegable
 const toggleMenu = (menuId: string) => {
@@ -219,11 +182,6 @@ const userMenuItems = [
     label: 'Perfil',
     icon: 'i-heroicons-user',
     to: '/profile'
-  }],
-  [{
-    label: 'Configuración',
-    icon: 'i-heroicons-cog-6-tooth',
-    to: '/settings'
   }],
   [{
     label: 'Cerrar sesión',
@@ -256,10 +214,10 @@ const breadcrumbs = computed(() => {
   return crumbs
 })
 
-// Verificar si una ruta está activa
-const isActive = (path: string) => {
-  return route.path.startsWith(path)
-}
+// Ruta activa = regla más específica que coincide (evita marcar /settings
+// y /settings/whatsapp a la vez)
+const activeTo = computed(() => ruleForPath(route.path)?.to)
+const isActive = (path: string) => activeTo.value === path
 
 // Verificar si algún hijo del menú está activo
 const isChildActive = (children: any[]) => {

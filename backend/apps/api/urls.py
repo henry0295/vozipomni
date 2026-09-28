@@ -6,6 +6,11 @@ from apps.api import viewsets
 from apps.api import views
 from apps.api.supervisor_viewsets import SupervisorViewSet
 from apps.api.extra_viewsets import AgentBreakReasonViewSet, AgentGroupViewSet, AuditViewSet
+from apps.api.admin_viewsets import (
+    UserAdminViewSet, BlacklistViewSet,
+    EvaluationTemplateViewSet, RecordingEvaluationViewSet,
+    PasswordResetRequestView, PasswordResetConfirmView, ChangePasswordView,
+)
 from apps.api.cc_viewsets import (
     CallbackViewSet, WebhookViewSet,
     ScreenPopView, ConsultiveTransferView, ConferenceView,
@@ -15,7 +20,13 @@ from apps.telephony.views import SIPTrunkViewSet
 from apps.reports.views import ReportViewSet as ReportViewSetFull
 
 router = DefaultRouter()
-router.register(r'users', viewsets.UserViewSet, basename='user')
+# Usuarios: gestión completa con contraseña y roles (solo admin)
+router.register(r'users', UserAdminViewSet, basename='user')
+# Lista negra DNC
+router.register(r'blacklist', BlacklistViewSet, basename='blacklist')
+# Calidad: plantillas y evaluaciones
+router.register(r'evaluation-templates', EvaluationTemplateViewSet, basename='evaluationtemplate')
+router.register(r'evaluations', RecordingEvaluationViewSet, basename='evaluation')
 router.register(r'campaigns', viewsets.CampaignViewSet, basename='campaign')
 router.register(r'campaign-forms', viewsets.CampaignFormViewSet, basename='campaignform')
 router.register(r'agents', viewsets.AgentViewSet, basename='agent')
@@ -43,6 +54,9 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/me/', views.CurrentUserView.as_view(), name='current_user'),
     path('auth/logout/', views.LogoutView, name='logout'),
+    path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password_reset'),
+    path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
+    path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
 
     # ViewSets
     path('', include(router.urls)),

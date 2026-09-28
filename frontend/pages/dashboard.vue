@@ -239,53 +239,20 @@ onMounted(() => {
   const interval = setInterval(loadDashboard, 30000)
   onUnmounted(() => clearInterval(interval))
 
-  // WebSocket para actualizaciones en tiempo real desde Django Channels
-  const config = useRuntimeConfig()
-  const apiBase = config.public.apiBase as string
-  // Si apiBase es relativa ("/api"), usar window.location.origin para construir la URL WSS
-  let pageOrigin: string
-  if (apiBase.startsWith('http')) {
-    pageOrigin = new URL(apiBase).origin
-  } else {
-    pageOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://localhost'
-  }
-  const wsBase = pageOrigin.replace(/^https:\/\//, 'wss://').replace(/^http:\/\//, 'ws://')
-
-  const token = localStorage.getItem('auth_token')
-  const wsUrl = `${wsBase}/ws/dashboard/${token ? '?token=' + token : ''}`
-
-  let ws: WebSocket | null = null
-  let wsReconnect: ReturnType<typeof setTimeout> | null = null
-
-  const connectWS = () => {
-    ws = new WebSocket(wsUrl)
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data)
-        if (msg.type === 'dashboard_update' && msg.data) {
-          Object.assign(stats, msg.data)
-        }
-      } catch {
-        // ignorar mensajes malformados
-      }
-    }
-
-    ws.onclose = () => {
-      // Reconectar en 5 s si la página sigue abierta
-      wsReconnect = setTimeout(connectWS, 5000)
-    }
-
-    ws.onerror = () => {
-      ws?.close()
-    }
-  }
-
-  connectWS()
-
-  onUnmounted(() => {
-    if (wsReconnect) clearTimeout(wsReconnect)
-    ws?.close()
-  })
 })
+
+// WebSocket en tiempo real: cualquier evento (llamada, agente, cola) dispara
+// una recarga agrupada de las métricas (máx. 1 cada 2 s)
+const dashboardWs = useWebSocket()
+let reloadTimer: ReturnType<typeof setTimeout> | null = null
+dashboardWs.onMessage((msg) => {
+  if (!['dashboard_update', 'stats_update', 'asterisk_event'].includes(msg?.type)) return
+  if (reloadTimer) return
+  reloadTimer = setTimeout(() => {
+    reloadTimer = null
+    loadDashboard()
+  }, 2000)
+})
+onMounted(() => dashboardWs.connect('/ws/dashboard/'))
+onUnmounted(() => { if (reloadTimer) clearTimeout(reloadTimer) })
 </script>

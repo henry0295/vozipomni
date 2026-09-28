@@ -67,3 +67,6 @@ python-json-logger==2.0.7
 
 # HTTP async (para Dialer DNC check)
 aiohttp==3.9.1
+
+# HTTP síncrono (WhatsApp Cloud API / Graph API de Meta, webhooks salientes)
+requests==2.31.0

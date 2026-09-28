@@ -304,6 +304,49 @@ class CampaignViewSet(viewsets.ModelViewSet):
             serializers.CampaignSerializer(qs, many=True, context={'request': request}).data
         )
 
+    @action(detail=True, methods=['get', 'post'], url_path='dispositions')
+    def dispositions(self, request, pk=None):
+        """
+        GET  → calificaciones de la campaña (usado por Auditoría y consola del agente)
+        POST → crear calificación {code, name, is_success, requires_callback, order, form_id}
+        """
+        from apps.campaigns.models import CampaignDisposition
+        campaign = self.get_object()
+
+        if request.method == 'GET':
+            qs = CampaignDisposition.objects.filter(campaign=campaign).select_related('form')
+            return Response(serializers.CampaignDispositionSerializer(qs, many=True).data)
+
+        if getattr(request.user, 'role', None) not in ('admin', 'supervisor') and not request.user.is_superuser:
+            return Response({'error': 'Solo admin/supervisor pueden crear calificaciones'},
+                            status=status.HTTP_403_FORBIDDEN)
+        ser = serializers.CampaignDispositionSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        if CampaignDisposition.objects.filter(campaign=campaign, code=ser.validated_data['code']).exists():
+            return Response({'code': ['Ya existe una calificación con ese código en la campaña.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+        ser.save(campaign=campaign)
+        return Response(ser.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['patch', 'delete'], url_path=r'dispositions/(?P<disposition_id>[0-9]+)')
+    def disposition_detail(self, request, pk=None, disposition_id=None):
+        """PATCH/DELETE de una calificación específica."""
+        from apps.campaigns.models import CampaignDisposition
+        if getattr(request.user, 'role', None) not in ('admin', 'supervisor') and not request.user.is_superuser:
+            return Response({'error': 'Sin permisos'}, status=status.HTTP_403_FORBIDDEN)
+        campaign = self.get_object()
+        try:
+            disp = CampaignDisposition.objects.get(pk=disposition_id, campaign=campaign)
+        except CampaignDisposition.DoesNotExist:
+            return Response({'error': 'Calificación no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == 'DELETE':
+            disp.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        ser = serializers.CampaignDispositionSerializer(disp, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
 
 class CampaignFormViewSet(viewsets.ModelViewSet):
     """CRUD para formularios de campaña."""

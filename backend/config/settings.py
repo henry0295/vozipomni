@@ -249,6 +249,16 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'recordings.scan_unlinked_recordings',
         'schedule': crontab(minute='*/15'),  # cada 15 minutos
     },
+    # ── Reportes programados (diario/semanal/mensual) ────────────────────────
+    'run-scheduled-reports': {
+        'task': 'apps.reports.tasks.run_scheduled_reports',
+        'schedule': crontab(hour=1, minute=30),  # 01:30 cada día
+    },
+    # ── Plantillas de WhatsApp (estado de aprobación en Meta) ────────────────
+    'sync-whatsapp-templates': {
+        'task': 'apps.messaging.tasks.sync_all_whatsapp_templates',
+        'schedule': crontab(minute=0, hour='*/2'),  # cada 2 horas
+    },
     # ── Retención de grabaciones ─────────────────────────────────────────────
     'cleanup-old-recordings': {
         'task': 'recordings.cleanup_old_recordings',
@@ -296,8 +306,37 @@ REST_FRAMEWORK = {
         'anon': '20/minute',   # IPs sin autenticar
         'user': '200/minute',  # usuarios autenticados
         'login': '5/minute',   # solo para el endpoint de login
+        'password_reset': '5/hour',  # recuperación de contraseña
     }
 }
+
+# ── Email (recuperación de contraseña, reportes programados) ────────────────
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default=EMAIL_HOST_USER or 'no-reply@vozipomni.local')
+# Sin servidor SMTP configurado, los correos se escriben en el log (no se pierden en silencio)
+EMAIL_BACKEND = (
+    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_TIMEOUT = 15
+
+# URL pública del frontend (enlaces en correos). Por defecto la IP del servidor.
+FRONTEND_URL = config(
+    'FRONTEND_URL',
+    default=f"https://{config('VOZIPOMNI_IPV4', default='localhost')}",
+)
+
+# URL pública base para webhooks de terceros (Meta/WhatsApp). Debe ser HTTPS con
+# certificado válido y dominio accesible desde internet.
+PUBLIC_BASE_URL = config('PUBLIC_BASE_URL', default='')
+
+# WhatsApp Cloud API
+WHATSAPP_GRAPH_API_VERSION = config('WHATSAPP_GRAPH_API_VERSION', default='v21.0')
 
 # JWT Configuration
 from datetime import timedelta

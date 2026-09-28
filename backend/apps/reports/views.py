@@ -28,11 +28,25 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
+from rest_framework.permissions import BasePermission
+
 from apps.telephony.models import Call
 from apps.agents.models import Agent, AgentStatusHistory
 from apps.queues.models import Queue, QueueStats
 from apps.reports.models import Report
 from apps.api.serializers import ReportSerializer
+from core.permissions import IsAdminSupervisorOrAnalyst
+
+
+class _ReportRolePermission(BasePermission):
+    """Reportes y KPIs: admin, supervisor y analista (no agentes)."""
+    message = 'Los reportes están disponibles para admin, supervisor y analista.'
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and (
+            user.is_superuser or getattr(user, 'role', None) in ('admin', 'supervisor', 'analyst')
+        ))
 
 
 def _parse_date_range(request):
@@ -76,18 +90,92 @@ def _parse_date_range(request):
 
 
 class ReportViewSet(viewsets.ModelViewSet):
-    """ViewSet básico para CRUD de reportes guardados."""
-    queryset = Report.objects.all()
+    """
+    CRUD de reportes guardados + KPIs + exportación.
+
+    Reportes guardados:
+      POST   /api/reports/                 → crea y genera (o programa si is_scheduled)
+      POST   /api/reports/{id}/generate/   → regenerar
+      GET    /api/reports/{id}/download/   → descargar archivo
+    Exportación directa:
+      GET    /api/reports/export/?dataset=calls|agents|daily|queues&format=csv|xlsx&period=...
+      GET    /api/reports/datasets/
+    """
+    queryset = Report.objects.select_related('created_by').all()
     serializer_class = ReportSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminSupervisorOrAnalyst]
+
+    def get_permissions(self):
+        # Analistas pueden crear/exportar reportes (no es una operación destructiva)
+        if self.action in ('create', 'generate', 'download', 'export', 'datasets') or \
+                self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAuthenticated(), _ReportRolePermission()]
+        return super().get_permissions()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        scheduled = self.request.query_params.get('is_scheduled')
+        if scheduled in ('true', 'false'):
+            qs = qs.filter(is_scheduled=(scheduled == 'true'))
+        return qs
+
+    def perform_create(self, serializer):
+        report = serializer.save(created_by=self.request.user, status='pending')
+        if not report.is_scheduled:
+            from apps.reports.tasks import generate_report
+            generate_report.delay(report.id)
 
     @action(detail=True, methods=['post'])
     def generate(self, request, pk=None):
-        """Generar un reporte específico."""
+        """Generar (o regenerar) un reporte específico."""
         report = self.get_object()
         from apps.reports.tasks import generate_report
         generate_report.delay(report.id)
         return Response({'status': 'generating report'})
+
+    @action(detail=True, methods=['get'])
+    def download(self, request, pk=None):
+        """Descargar el archivo generado del reporte."""
+        import os
+        from django.http import FileResponse
+        report = self.get_object()
+        if report.status != 'completed' or not report.file_path or not os.path.exists(report.file_path):
+            return Response({'error': 'El reporte no tiene archivo disponible'},
+                            status=status.HTTP_404_NOT_FOUND)
+        return FileResponse(open(report.file_path, 'rb'), as_attachment=True,
+                            filename=os.path.basename(report.file_path))
+
+    @action(detail=False, methods=['get'])
+    def datasets(self, request):
+        from apps.reports.exporters import DATASETS
+        return Response([{'value': k, 'label': v} for k, v in DATASETS.items()])
+
+    @action(detail=False, methods=['get'])
+    def export(self, request):
+        """
+        Exportación inmediata (sin guardar) de un dataset.
+        Filtros opcionales: campaign, agent, queue, direction, status.
+        """
+        from django.http import HttpResponse
+        from apps.reports.exporters import DATASETS, build_dataset, export_filename, render_table
+
+        dataset = request.query_params.get('dataset', 'calls')
+        fmt = request.query_params.get('format', 'xlsx')
+        if dataset not in DATASETS:
+            return Response({'error': f'Dataset inválido. Opciones: {", ".join(DATASETS)}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if fmt not in ('csv', 'xlsx'):
+            return Response({'error': 'Formato inválido (csv|xlsx)'}, status=status.HTTP_400_BAD_REQUEST)
+
+        start, end = _parse_date_range(request)
+        filters = {k: request.query_params.get(k) for k in ('campaign', 'agent', 'queue', 'direction', 'status')
+                   if request.query_params.get(k)}
+        headers, rows = build_dataset(dataset, start, end, filters)
+        content, ctype, ext = render_table(headers, rows, fmt, DATASETS[dataset])
+        response = HttpResponse(content, content_type=ctype)
+        response['Content-Disposition'] = f'attachment; filename="{export_filename(dataset, start, end, ext)}"'
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition'
+        return response
 
     # ─────────────────────────────────────────────────────────────
     # KPIs en Tiempo Real

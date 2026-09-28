@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Agent } from '~/types'
+import { buildWsUrl } from '~/composables/useWebSocket'
 
 export type AgentStatus = 'offline' | 'available' | 'busy' | 'oncall' | 'break' | 'wrapup'
 
@@ -191,9 +192,9 @@ export const useAgentStore = defineStore('agent', {
     connectWebSocket() {
       if (!this.agent || this.webSocket) return
 
-      const config = useRuntimeConfig()
-      const wsUrl = `${config.public.wsBase}/agent/${this.agent.id}/`
-      
+      // El backend (JwtAuthMiddleware) exige ?token=<JWT>; sin él cierra con 4401
+      const wsUrl = buildWsUrl(`/ws/agent/${this.agent.id}/`)
+
       this.webSocket = new WebSocket(wsUrl)
       
       this.webSocket.onopen = () => {
@@ -216,7 +217,10 @@ export const useAgentStore = defineStore('agent', {
       this.webSocket.onclose = (event) => {
         console.log('Agent WebSocket disconnected', event.code, event.reason)
         this.webSocket = null
-        
+
+        // 4403 = sin permiso sobre este agente: no reintentar
+        if (event.code === 4403) return
+
         // Reconexión automática si el agente sigue logueado
         if (this.isLoggedIn && this.agent) {
           console.log('Attempting to reconnect WebSocket in 3 seconds...')

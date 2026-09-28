@@ -386,27 +386,35 @@ const saveProfile = async () => {
   // Mostrar notificación de éxito
 }
 
+const http = useHttp()
+const toast = useToast()
+
 const changePassword = async () => {
-  if (passwordForm.new !== passwordForm.confirm) {
-    // Mostrar error de contraseñas no coinciden
+  if (!passwordForm.current || !passwordForm.new) {
+    toast.add({ title: 'Completa todos los campos', color: 'amber' })
     return
   }
-  
+  if (passwordForm.new !== passwordForm.confirm) {
+    toast.add({ title: 'Las contraseñas nuevas no coinciden', color: 'red' })
+    return
+  }
+
   changingPassword.value = true
-  
-  // Simular cambio
-  await new Promise(resolve => setTimeout(resolve, 1000))
-  
-  // Aquí iría la llamada a la API
-  console.log('Cambiando contraseña')
-  
-  changingPassword.value = false
-  showPasswordModal.value = false
-  
-  // Limpiar formulario
-  Object.keys(passwordForm).forEach(key => {
-    passwordForm[key] = ''
-  })
+  try {
+    await http.post('/auth/change-password/', {
+      current_password: passwordForm.current,
+      new_password: passwordForm.new,
+    })
+    toast.add({ title: 'Contraseña actualizada', color: 'green' })
+    showPasswordModal.value = false
+    passwordForm.current = ''
+    passwordForm.new = ''
+    passwordForm.confirm = ''
+  } catch (e: any) {
+    toast.add({ title: 'No se pudo cambiar la contraseña', description: http.errorMessage(e), color: 'red' })
+  } finally {
+    changingPassword.value = false
+  }
 }
 
 const changeAvatar = () => {

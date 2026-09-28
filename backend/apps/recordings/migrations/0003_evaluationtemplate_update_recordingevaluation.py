@@ -87,9 +87,12 @@ class Migration(migrations.Migration):
             sql="""
                 UPDATE recording_evaluations
                 SET total_score = ROUND(
-                    ((greeting + clarity + professionalism + resolution + closing)::float / 25.0) * 100.0,
+                    (
+                        (COALESCE(greeting, 0) + COALESCE(clarity, 0) + COALESCE(professionalism, 0)
+                         + COALESCE(resolution, 0) + COALESCE(closing, 0))::numeric / 25.0
+                    ) * 100.0,
                     2
-                )
+                )::double precision
                 WHERE total_score = 0 OR total_score <= 25;
             """,
             reverse_sql="""

@@ -521,7 +521,8 @@ class ReportSerializer(serializers.ModelSerializer):
     class Meta:
         model = Report
         fields = '__all__'
-        read_only_fields = ['created_at', 'completed_at', 'file_size', 'error_message']
+        read_only_fields = ['created_at', 'completed_at', 'file_size', 'file_path',
+                            'error_message', 'status', 'created_by']
 
 
 class SIPTrunkSerializer(serializers.ModelSerializer):

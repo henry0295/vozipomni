@@ -185,3 +185,43 @@ class DashboardConsumer(AsyncJsonWebsocketConsumer):
             'type': 'dashboard_update',
             'data': event['data']
         })
+
+
+class MessagingConsumer(AsyncJsonWebsocketConsumer):
+    """
+    Eventos en tiempo real de mensajería (WhatsApp/omnicanal).
+    - admin/supervisor → grupo messaging_all (toda la bandeja)
+    - agente           → messaging_agent_<id> + messaging_unassigned
+    Eventos: message.new, message.status, message.media, conversation.assigned/closed/reopened
+    """
+
+    async def connect(self):
+        user = self.scope['user']
+        if not user.is_authenticated:
+            await self.close(code=4401)
+            return
+        self.groups_joined = await self._resolve_groups()
+        if not self.groups_joined:
+            await self.close(code=4403)
+            return
+        for group in self.groups_joined:
+            await self.channel_layer.group_add(group, self.channel_name)
+        await self.accept()
+
+    @database_sync_to_async
+    def _resolve_groups(self):
+        from apps.agents.models import Agent
+        user = self.scope['user']
+        if user.is_superuser or getattr(user, 'role', None) in ('admin', 'supervisor'):
+            return ['messaging_all']
+        agent = Agent.objects.filter(user=user).first()
+        if agent:
+            return [f'messaging_agent_{agent.id}', 'messaging_unassigned']
+        return []
+
+    async def disconnect(self, close_code):
+        for group in getattr(self, 'groups_joined', []) or []:
+            await self.channel_layer.group_discard(group, self.channel_name)
+
+    async def messaging_event(self, event):
+        await self.send_json({'type': 'messaging', **event.get('payload', {})})

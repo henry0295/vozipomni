@@ -4,7 +4,9 @@
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-3xl font-bold text-gray-900">Panel de Supervisión</h1>
-        <p class="text-sm text-gray-500 mt-1">Actualización automática cada 10 s · {{ formatTime(lastUpdate) }}</p>
+        <p class="text-sm text-gray-500 mt-1">
+          {{ wsConnected ? 'Tiempo real (eventos de Asterisk)' : 'Actualización cada 10 s' }} · {{ formatTime(lastUpdate) }}
+        </p>
       </div>
       <div class="flex gap-2">
         <UBadge :color="wsConnected ? 'green' : 'red'" variant="soft">
@@ -310,11 +312,38 @@ function useAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-// Auto-refresh cada 10 segundos
+// ── Tiempo real ────────────────────────────────────────────────────────────
+// /ws/dashboard/ recibe eventos del listener AMI (cambios de estado de agente,
+// llamadas finalizadas, colas). Cada evento dispara una recarga agrupada.
+// El polling queda como respaldo (30 s) por si el WebSocket se cae.
+const ws = useWebSocket()
+const wsLive = ws.isConnected
+watchEffect(() => { wsConnected.value = wsLive.value })
+
+let debounce: ReturnType<typeof setTimeout> | null = null
+ws.onMessage((msg) => {
+  // Cambio de estado de agente: actualizar la fila al instante sin esperar la recarga
+  const data = msg?.data
+  if (msg?.event_type === 'agent.status_changed' && data?.agent_id) {
+    const row = agents.value.find(a => a.id === data.agent_id)
+    if (row) row.status = data.new_status
+  }
+  if (debounce) return
+  debounce = setTimeout(() => { debounce = null; loadDashboard() }, 1500)
+})
+
 let interval: ReturnType<typeof setInterval>
+let slowInterval: ReturnType<typeof setInterval>
 onMounted(() => {
   loadDashboard()
-  interval = setInterval(loadDashboard, 10000)
+  ws.connect('/ws/dashboard/')
+  interval = setInterval(() => { if (!wsLive.value) loadDashboard() }, 10000)
+  // Aunque el WS esté activo, refrescar métricas acumuladas cada 30 s
+  slowInterval = setInterval(loadDashboard, 30000)
 })
-onUnmounted(() => clearInterval(interval))
+onUnmounted(() => {
+  clearInterval(interval)
+  clearInterval(slowInterval)
+  if (debounce) clearTimeout(debounce)
+})
 </script>

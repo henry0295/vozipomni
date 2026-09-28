@@ -524,56 +524,99 @@ class QualityStatsView(APIView):
     """
     permission_classes = [IsAdminOrSupervisor]
 
+    PASS_THRESHOLD = 80  # puntaje (0-100) a partir del cual una evaluación "aprueba"
+
     def get(self, request):
+        from datetime import timedelta
         from apps.recordings.models import RecordingEvaluation
         from django.db.models import Avg, Count, Min, Max
         from django.db.models.functions import TruncDate
 
         qs = RecordingEvaluation.objects.all()
 
+        # Filtros: ?days=N  ó  ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
+        days = request.query_params.get('days')
         agent_id = request.query_params.get('agent_id')
+        template_id = request.query_params.get('template')
 
+        if days and not date_from:
+            try:
+                qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=int(days)))
+            except ValueError:
+                pass
         if date_from:
             qs = qs.filter(created_at__date__gte=date_from)
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
         if agent_id:
             qs = qs.filter(recording__agent_id=agent_id)
+        if template_id:
+            qs = qs.filter(template_id=template_id)
 
-        # Estadísticas globales
+        # total_score está normalizado a 0-100 (migración recordings 0003)
         totals = qs.aggregate(
             count=Count('id'),
             avg_total=Avg('total_score'),
+            min_score=Min('total_score'),
+            max_score=Max('total_score'),
             avg_greeting=Avg('greeting'),
             avg_clarity=Avg('clarity'),
             avg_professionalism=Avg('professionalism'),
             avg_resolution=Avg('resolution'),
             avg_closing=Avg('closing'),
-            min_score=Min('total_score'),
-            max_score=Max('total_score'),
         )
+        count = totals['count'] or 0
+        passed = qs.filter(total_score__gte=self.PASS_THRESHOLD).count()
 
-        # Trending diario
-        daily = list(
-            qs.annotate(date=TruncDate('created_at'))
-            .values('date')
-            .annotate(avg_score=Avg('total_score'), evaluations=Count('id'))
-            .order_by('date')
-        )
+        daily = [
+            {'date': d['date'], 'avg_score': round(d['avg_score'] or 0, 1), 'count': d['count']}
+            for d in qs.annotate(date=TruncDate('created_at'))
+                       .values('date')
+                       .annotate(avg_score=Avg('total_score'), count=Count('id'))
+                       .order_by('date')
+        ]
 
-        # Top 5 agentes por score
-        top_agents = list(
-            qs.values('recording__agent__user__first_name',
-                      'recording__agent__user__last_name',
-                      'recording__agent_id')
-            .annotate(avg_score=Avg('total_score'), count=Count('id'))
-            .order_by('-avg_score')[:5]
-        )
+        top_agents = []
+        for row in (qs.exclude(recording__agent__isnull=True)
+                      .values('recording__agent_id',
+                              'recording__agent__user__first_name',
+                              'recording__agent__user__last_name',
+                              'recording__agent__user__username')
+                      .annotate(avg_score=Avg('total_score'), count=Count('id'))
+                      .order_by('-avg_score')[:10]):
+            name = f"{row['recording__agent__user__first_name'] or ''} {row['recording__agent__user__last_name'] or ''}".strip()
+            top_agents.append({
+                'agent_id': row['recording__agent_id'],
+                'name': name or row['recording__agent__user__username'],
+                'avg_score': round(row['avg_score'] or 0, 1),
+                'count': row['count'],
+            })
+
+        # Desglose por criterio (criterios legacy, escala 0-5 → 0-100)
+        labels = {
+            'greeting': 'Saludo', 'clarity': 'Claridad', 'professionalism': 'Profesionalismo',
+            'resolution': 'Resolución', 'closing': 'Cierre',
+        }
+        category_breakdown = [
+            {'category': key, 'label': label, 'avg_score': round((totals[f'avg_{key}'] or 0) * 20, 1)}
+            for key, label in labels.items()
+        ] if count else []
 
         return Response({
+            'total_evaluations': count,
+            'average_score': round(totals['avg_total'] or 0, 1) if count else None,
+            'min_score': totals['min_score'],
+            'max_score': totals['max_score'],
+            'agents_evaluated': qs.exclude(recording__agent__isnull=True)
+                                  .values('recording__agent_id').distinct().count(),
+            'pass_rate': round(passed / count * 100, 1) if count else None,
+            'pass_threshold': self.PASS_THRESHOLD,
+            'top_agents': top_agents,
+            'daily_trend': daily,
+            'category_breakdown': category_breakdown,
+            # Compatibilidad con clientes anteriores
             'totals': totals,
             'daily_trending': daily,
-            'top_agents': top_agents,
         })

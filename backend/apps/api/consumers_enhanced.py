@@ -160,8 +160,8 @@ class RealtimeDashboardConsumer(AsyncWebsocketConsumer):
     
     @database_sync_to_async
     def is_supervisor(self):
-        """Verificar si el usuario es supervisor"""
-        return self.user.role in ['supervisor', 'admin']
+        """Admin, supervisor y analista pueden ver el dashboard en tiempo real."""
+        return self.user.is_superuser or getattr(self.user, 'role', None) in ['supervisor', 'admin', 'analyst']
     
     async def send_initial_data(self):
         """Enviar datos iniciales del dashboard"""

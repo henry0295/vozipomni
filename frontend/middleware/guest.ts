@@ -1,8 +1,10 @@
-export default defineNuxtRouteMiddleware((to) => {
-  const { isAuthenticated } = useAuth()
+import { homeForRole } from '~/utils/navigation'
 
-  // Si está autenticado y va a login, redirigir a dashboard
-  if (isAuthenticated.value && to.path === '/login') {
-    return navigateTo('/dashboard')
+export default defineNuxtRouteMiddleware((to) => {
+  const { isAuthenticated, user } = useAuth()
+
+  // Si ya hay sesión, las páginas de invitado (login, recuperar contraseña) no aplican
+  if (isAuthenticated.value && ['/login', '/forgot-password', '/reset-password'].includes(to.path)) {
+    return navigateTo(homeForRole(user.value?.role))
   }
 })

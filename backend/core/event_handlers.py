@@ -97,10 +97,10 @@ def on_campaign_stopped(sender, campaign, user, reason=None, **kwargs):
     except Exception as e:
         logger.error(f"[Dialer] Error enviando parada de campaña {campaign.id}: {e}")
 
-    # Reporte final asíncrono
+    # Reporte final asíncrono (crea el Report de cierre y genera el Excel)
     try:
-        from apps.reports.tasks import generate_report
-        generate_report.delay(campaign.id)
+        from apps.reports.tasks import generate_campaign_report
+        generate_campaign_report.delay(campaign.id)
     except Exception as e:
         logger.error(f"[Reports] Error generando reporte final de campaña {campaign.id}: {e}")
 

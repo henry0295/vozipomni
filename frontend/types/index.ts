@@ -8,7 +8,7 @@ export interface User {
   last_name: string
   name?: string
   avatar?: string
-  role: 'admin' | 'supervisor' | 'agent'
+  role: 'admin' | 'supervisor' | 'agent' | 'analyst'
   phone?: string
   department?: string
   is_active_agent: boolean
@@ -221,7 +221,8 @@ export interface Trunk {
   callsTotal: number
 }
 
-export interface Recording {
+/** Vista simplificada de una grabación (listas/tarjetas). El modelo completo es `Recording`. */
+export interface RecordingSummary {
   id: number
   callId: number
   filename: string
@@ -269,4 +270,4 @@ export interface AuthResponse {
 export type AgentStatus = 'available' | 'busy' | 'break' | 'offline'
 export type CallType = 'inbound' | 'outbound' | 'internal'
 export type CampaignType = 'preview' | 'progressive' | 'predictive' | 'manual'
-export type UserRole = 'admin' | 'supervisor' | 'agent'
+export type UserRole = 'admin' | 'supervisor' | 'agent' | 'analyst'

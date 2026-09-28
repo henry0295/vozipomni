@@ -14,4 +14,7 @@ websocket_urlpatterns = [
 
     # ── Eventos Asterisk (agentes y admin) ────────────────────────────────────
     re_path(r'ws/asterisk/$', consumers_enhanced.AsteriskEventConsumer.as_asgi()),
+
+    # ── Mensajería omnicanal / WhatsApp ───────────────────────────────────────
+    re_path(r'ws/messaging/$', consumers.MessagingConsumer.as_asgi()),
 ]
