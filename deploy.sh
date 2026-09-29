@@ -85,6 +85,8 @@ NC='\033[0m'
 CLEAN_INSTALL=false
 UPDATE_ONLY=false
 NEXT_IS_NAT=false
+# Argumentos originales: permiten relanzar el deploy.sh nuevo tras el git pull del update
+ORIG_ARGS=("$@")
 for arg in "$@"; do
     case "$arg" in
         --clean|-c)
@@ -1573,8 +1575,19 @@ update_production() {
     git checkout "${BRANCH:-main}" 2>/dev/null || true
     # Descartar cambios locales para que git pull no falle
     git stash 2>/dev/null || true
+    local deploy_hash_before
+    deploy_hash_before=$(git hash-object "$INSTALL_DIR/deploy.sh" 2>/dev/null || echo "")
     git pull origin "${BRANCH:-main}"
     log_success "Código actualizado al último commit: $(git log --oneline -1)"
+
+    # Bash ya tiene en memoria la versión anterior de este script: si el pull trajo un
+    # deploy.sh distinto, relanzarlo para aplicar sus pasos nuevos (secretos, puertos, etc.).
+    if [ -z "${VOZIPOMNI_DEPLOY_REEXEC:-}" ] && \
+       [ "$(git hash-object "$INSTALL_DIR/deploy.sh" 2>/dev/null || echo "")" != "$deploy_hash_before" ]; then
+        log_info "deploy.sh cambió con la actualización; relanzando la versión nueva..."
+        trap - ERR
+        exec env VOZIPOMNI_DEPLOY_REEXEC=1 bash "$INSTALL_DIR/deploy.sh" "${ORIG_ARGS[@]}"
+    fi
 
     # 3. Reconstruir imágenes con el nuevo código
     log_info "Reconstruyendo imágenes Docker (sin cache de código)..."
