@@ -286,6 +286,8 @@ class AsteriskConfigGenerator:
         # Rutas salientes - RE-ABRIR contexto [from-internal]
         # Es necesario porque si hay rutas entrantes, el contexto activo es [from-pstn]
         outbound_routes = OutboundRoute.objects.filter(is_active=True).select_related('trunk').order_by('priority', 'name')
+        from .security import _policy as _load_security_policy, outbound_policy_dialplan, route_policy_gosub
+        security_policy = _load_security_policy()
         if outbound_routes.exists():
             config.extend([
                 "",
@@ -318,6 +320,9 @@ class AsteriskConfigGenerator:
                     config.append(f" same => n,Set(dial_number=${{EXTEN:{prefix_len}}})")
                 else:
                     config.append(" same => n,Set(dial_number=${EXTEN})")
+
+                # Antifraude: prefijos, internacionales, canales por troncal, límites (ver security.py)
+                config.append(route_policy_gosub(route, security_policy))
                 
                 config.extend([
                     f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_${{CALLERID(num)}}_${{dial_number}}.wav,ab)",
@@ -423,6 +428,9 @@ class AsteriskConfigGenerator:
             if timeout_destination_type and timeout_destination:
                 append_ivr_route(timeout_destination_type, timeout_destination, " same => n")
             config.append(" same => n,Hangup()")
+
+        # Contexto antifraude al final (las rutas salientes lo llaman con GoSub)
+        config.extend(outbound_policy_dialplan(security_policy))
         
         return '\n'.join(config)
     

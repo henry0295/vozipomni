@@ -645,6 +645,19 @@ clone_repo() {
 }
 
 # ─── 5. Generar credenciales y .env ─────────────────────────────────────────
+# Agrega al .env un secreto aleatorio si falta o está vacío (no toca valores existentes)
+ensure_env_secret() {
+    local name="$1" length="${2:-32}" env_file="$INSTALL_DIR/.env" value
+    [ -f "$env_file" ] || return 0
+    if ! grep -q "^${name}=" "$env_file" || [ -z "$(grep "^${name}=" "$env_file" | head -1 | cut -d= -f2-)" ]; then
+        value=$(openssl rand -base64 64 | tr -d '=+/\n' | cut -c1-"$length")
+        sed -i "/^${name}=/d" "$env_file"
+        printf '\n%s=%s\n' "$name" "$value" >> "$env_file"
+        chmod 600 "$env_file"
+        log_success "$name generado en .env"
+    fi
+}
+
 generate_env() {
     # Si es instalación limpia, SIEMPRE generar credenciales nuevas
     if [ "$CLEAN_INSTALL" = true ]; then
@@ -658,6 +671,9 @@ generate_env() {
         DB_PASSWORD="${POSTGRES_PASSWORD:-}"
         REDIS_PASSWORD="${REDIS_PASSWORD:-}"
         SECRET_KEY="${SECRET_KEY:-}"
+        # El .env guarda ASTERISK_AMI_PASSWORD; antes backend/.env quedaba con la clave AMI vacía
+        AMI_PASSWORD="${ASTERISK_AMI_PASSWORD:-}"
+        ensure_env_secret TURN_SECRET 32
 
         # Si faltan credenciales críticas, regenerar
         if [ -z "$DB_PASSWORD" ] || [ -z "$SECRET_KEY" ]; then
@@ -697,7 +713,8 @@ EOF
             if [ -f "$INSTALL_DIR/credentials.txt" ]; then
                 SAVED_ADMIN_PW=$(grep '^Password:' "$INSTALL_DIR/credentials.txt" 2>/dev/null | head -1 | awk '{print $2}') || true
             fi
-            ADMIN_PASSWORD="${SAVED_ADMIN_PW:-${ADMIN_PASSWORD:-admin}}"
+            # Nunca usar "admin" como contraseña por defecto
+            ADMIN_PASSWORD="${SAVED_ADMIN_PW:-${ADMIN_PASSWORD:-$(openssl rand -base64 16 | tr -d '=+/' | cut -c1-12)}}"
 
             log_success "Credenciales existentes reutilizadas (IP actualizada: $VOZIPOMNI_IPV4)"
             return 0
@@ -714,6 +731,7 @@ EOF
     ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-12)
     FIELD_ENCRYPTION_KEY=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n')
     GRAFANA_PASSWORD=$(openssl rand -base64 24 | tr -d "=+/" | cut -c1-20)
+    TURN_SECRET=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-32)
 
     cat > "$INSTALL_DIR/.env" <<EOF
 # VoziPOmni — Producción (Generado: $(date))
@@ -743,6 +761,11 @@ ASTERISK_AMI_USER=admin
 ASTERISK_AMI_PASSWORD=$AMI_PASSWORD
 FIELD_ENCRYPTION_KEY=$FIELD_ENCRYPTION_KEY
 GRAFANA_PASSWORD=$GRAFANA_PASSWORD
+
+# TURN (coturn): secreto para credenciales temporales del softphone
+TURN_SECRET=$TURN_SECRET
+# 1 = aceptar teléfonos SIP de la red local en Kamailio (por defecto solo WebRTC)
+KAMAILIO_TRUST_LAN=0
 
 NUXT_PUBLIC_API_BASE=/api
 NUXT_PUBLIC_WS_BASE=/ws
@@ -810,7 +833,11 @@ configure_firewall() {
     log_info "Configurando firewall y restricciones de seguridad..."
 
     # Puertos públicos (accesibles desde internet)
-    local PUBLIC_PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 5061/tcp 8080/tcp"
+    # 8080 (WebSocket de Kamailio) ya no se publica: solo escucha en 127.0.0.1 detrás de nginx.
+    # 5060: Kamailio rechaza y banea orígenes no autorizados. 3478: TURN (coturn).
+    local PUBLIC_PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 3478/tcp 3478/udp"
+    # Relay TURN
+    local TURN_RELAY_PORTS="49152:49200/udp"
     
     # Puertos RTP (solo para VoIP providers - se puede restringir por IP más adelante)
     local RTP_PORTS="10000:23100/udp"
@@ -821,6 +848,9 @@ configure_firewall() {
             ufw allow "$port" 2>/dev/null || true
         done
         ufw allow $RTP_PORTS 2>/dev/null || true
+        ufw allow $TURN_RELAY_PORTS 2>/dev/null || true
+        ufw delete allow 8080/tcp 2>/dev/null || true
+        ufw delete allow 5061/tcp 2>/dev/null || true
         
         # Denegar acceso externo a servicios internos
         ufw deny 5432/tcp comment 'PostgreSQL - solo localhost' 2>/dev/null || true
@@ -835,7 +865,11 @@ configure_firewall() {
         for port in $PUBLIC_PORTS; do
             firewall-cmd --permanent --add-port="$port" 2>/dev/null || true
         done
-        firewall-cmd --permanent --add-port=$RTP_PORTS 2>/dev/null || true
+        # firewalld usa "inicio-fin" para rangos (no "inicio:fin")
+        firewall-cmd --permanent --add-port="${RTP_PORTS/:/-}" 2>/dev/null || true
+        firewall-cmd --permanent --add-port="${TURN_RELAY_PORTS/:/-}" 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=8080/tcp 2>/dev/null || true
+        firewall-cmd --permanent --remove-port=5061/tcp 2>/dev/null || true
         firewall-cmd --reload 2>/dev/null || true
         log_success "Firewall firewalld configurado"
         
@@ -855,8 +889,9 @@ configure_firewall() {
         iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
         iptables -A INPUT -p tcp --dport 5060 -j ACCEPT 2>/dev/null || true
         iptables -A INPUT -p udp --dport 5060 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 5061 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 3478 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 3478 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 49152:49200 -j ACCEPT 2>/dev/null || true
         
         # RTP
         iptables -A INPUT -p udp --dport 10000:23100 -j ACCEPT 2>/dev/null || true
@@ -1486,6 +1521,9 @@ update_production() {
             log_success "GRAFANA_PASSWORD generado para instalación existente"
         fi
 
+        # Nuevo en esta versión: secreto de TURN (coturn) para credenciales temporales
+        ensure_env_secret TURN_SECRET 32
+
         for variable in SECRET_KEY POSTGRES_PASSWORD REDIS_PASSWORD ASTERISK_AMI_PASSWORD FIELD_ENCRYPTION_KEY; do
             if ! grep -q "^${variable}=" "$env_file" || [ -z "$(grep "^${variable}=" "$env_file" | head -1 | cut -d= -f2-)" ]; then
                 log_error "Falta $variable en $env_file"
@@ -1496,6 +1534,16 @@ update_production() {
     }
 
     ensure_update_secrets
+
+    # Puertos de TURN (coturn) para instalaciones existentes
+    if command -v ufw &>/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
+        for port in 3478/tcp 3478/udp 49152:49200/udp; do ufw allow "$port" >/dev/null 2>&1 || true; done
+        log_success "Firewall: puertos TURN 3478 y 49152-49200/udp abiertos"
+    elif command -v firewall-cmd &>/dev/null && firewall-cmd --state >/dev/null 2>&1; then
+        for port in 3478/tcp 3478/udp 49152-49200/udp; do firewall-cmd --permanent --add-port="$port" >/dev/null 2>&1 || true; done
+        firewall-cmd --reload >/dev/null 2>&1 || true
+        log_success "Firewall: puertos TURN 3478 y 49152-49200/udp abiertos"
+    fi
 
     # 1b. Persistir IPs en .env para futuros reinicios (no depender de env vars de shell)
     if [ -f "$INSTALL_DIR/.env" ]; then

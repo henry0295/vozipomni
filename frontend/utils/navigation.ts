@@ -113,6 +113,7 @@ export const NAVIGATION: NavItem[] = [
       { label: 'Buzones de Voz', icon: 'i-heroicons-inbox', to: '/voicemail', roles: ADMIN },
       { label: 'Condiciones Horario', icon: 'i-heroicons-clock', to: '/time-conditions', roles: ADMIN },
       { label: 'Destinos Personalizados', icon: 'i-heroicons-map-pin', to: '/custom-destinations', roles: ADMIN },
+      { label: 'Seguridad y antifraude', icon: 'i-heroicons-shield-check', to: '/settings/security', roles: ADMIN },
     ],
   },
 

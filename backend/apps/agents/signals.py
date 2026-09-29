@@ -35,7 +35,8 @@ def sync_agent_sip_extension(sender, instance, created, update_fields=None, **kw
                 'name': name,
                 'extension_type': ext_type,
                 'transport': transport,
-                'secret': instance.sip_password or 'VoziPOmni2026!',
+                # Agent.save() garantiza que sip_password nunca esté vacío
+                'secret': instance.sip_password,
                 'context': 'from-internal',
                 'is_active': True,
             }

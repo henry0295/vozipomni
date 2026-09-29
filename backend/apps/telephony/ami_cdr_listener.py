@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 AMI_HOST = os.environ.get('ASTERISK_HOST', 'asterisk')
 AMI_PORT = int(os.environ.get('ASTERISK_AMI_PORT', '5038'))
 AMI_USER = os.environ.get('ASTERISK_AMI_USER', 'admin')
-AMI_SECRET = os.environ.get('ASTERISK_AMI_PASSWORD', 'vozipomni_ami_2026')
+AMI_SECRET = os.environ.get('ASTERISK_AMI_PASSWORD', '')  # sin valor por defecto (secreto)
 
 RECONNECT_DELAY = 5
 MAX_RECONNECT_DELAY = 60
@@ -769,7 +769,20 @@ def _process_user_event(event: dict):
     CampaignID, ContactID, Status (HUMAN|MACHINE|NOTSURE|HANGUP|SKIPPED), Cause, Uniqueid.
     Vincula la llamada a la campaña/contacto y marca los contestadores.
     """
-    if (event.get('UserEvent') or '') != 'DialerAMD':
+    name = event.get('UserEvent') or ''
+    if name == 'VozipFraud':
+        # Llamada bloqueada por [vozip-outbound-policy]
+        try:
+            from apps.telephony.security import record_event
+            reason = (event.get('Reason') or 'blocked_prefix').strip()
+            severity = 'critical' if reason in ('international', 'blocked_prefix', 'not_allowed') else 'warning'
+            record_event(reason, number=event.get('Number', ''), trunk=event.get('Trunk', ''),
+                         source=event.get('Source', ''), severity=severity,
+                         detail=f"Marcado final: {event.get('Dialed', '')}")
+        except Exception as e:
+            logger.error(f"[Seguridad] No se pudo registrar evento de fraude: {e}")
+        return
+    if name != 'DialerAMD':
         return
     uniqueid = event.get('Uniqueid') or event.get('UniqueID') or ''
     if not uniqueid:
@@ -1102,6 +1115,9 @@ def start_listener():
 
     if _listener_thread and _listener_thread.is_alive():
         logger.info("[AMI Listener] Ya está ejecutándose")
+        return
+    if not AMI_SECRET:
+        logger.error("[AMI Listener] ASTERISK_AMI_PASSWORD no está definido: listener deshabilitado")
         return
 
     _stop_event.clear()

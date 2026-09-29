@@ -183,6 +183,18 @@ ASTERISK_AMI_PORT = config('ASTERISK_AMI_PORT', default=5038, cast=int)
 ASTERISK_AMI_USER = config('ASTERISK_AMI_USER', default='admin')
 ASTERISK_AMI_PASSWORD = config('ASTERISK_AMI_PASSWORD', default='')
 ASTERISK_CONFIG_DIR = config('ASTERISK_CONFIG_DIR', default='/var/lib/asterisk/dynamic')
+if not DEBUG and not ASTERISK_AMI_PASSWORD:
+    import warnings
+    warnings.warn('ASTERISK_AMI_PASSWORD no está definido: la conexión a AMI fallará.', RuntimeWarning)
+
+# TURN (coturn con use-auth-secret): el backend emite credenciales temporales por agente.
+# Sin TURN_SECRET los navegadores solo usan STUN.
+TURN_SECRET = config('TURN_SECRET', default='')
+TURN_HOST = config('TURN_HOST', default='')          # vacío = host con el que se abrió la web
+TURN_PORT = config('TURN_PORT', default=3478, cast=int)
+TURN_CREDENTIAL_TTL = config('TURN_CREDENTIAL_TTL', default=12 * 3600, cast=int)
+# Ticket firmado para abrir el WebSocket SIP (/sip/ws); nginx lo valida con auth_request
+SIP_WS_TICKET_TTL = config('SIP_WS_TICKET_TTL', default=24 * 3600, cast=int)
 
 # Celery Configuration
 CELERY_BROKER_URL = REDIS_URL
@@ -243,6 +255,15 @@ CELERY_BEAT_SCHEDULE = {
     'sync-telephony-config': {
         'task': 'apps.telephony.tasks.sync_all_telephony_config_to_redis',
         'schedule': crontab(minute='*/5'),  # cada 5 minutos
+    },
+    # ── Antifraude telefónico ────────────────────────────────────────────────
+    'check-fraud-alerts': {
+        'task': 'apps.telephony.tasks.check_fraud_alerts',
+        'schedule': 120.0,
+    },
+    'reset-extension-rate-counters': {
+        'task': 'apps.telephony.tasks.reset_extension_rate_counters',
+        'schedule': crontab(hour=3, minute=15),
     },
     # ── Grabaciones sin vincular ─────────────────────────────────────────────
     'scan-unlinked-recordings': {

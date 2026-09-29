@@ -455,6 +455,8 @@ generate_credentials() {
     REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
     SECRET_KEY=$(openssl rand -base64 50 | tr -d "=+/")
     ADMIN_PASSWORD=$(openssl rand -base64 16 | tr -d "=+/" | cut -c1-12)
+    AMI_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-24)
+    TURN_SECRET=$(openssl rand -hex 32)
     
     log_success "Credenciales generadas"
 }
@@ -470,12 +472,11 @@ configure_firewall() {
         ufw allow 443/tcp
         ufw allow 5060/tcp
         ufw allow 5060/udp
-        ufw allow 5061/tcp
-        ufw allow 5161/udp
-        ufw allow 5162/udp
-        ufw allow 5038/tcp
-        ufw allow 10000:20000/udp
-        ufw allow 8089/tcp
+        ufw allow 3478/tcp
+        ufw allow 3478/udp
+        ufw allow 49152:49200/udp
+        ufw allow 10000:23100/udp
+        # AMI (5038), WS de Kamailio (8080) y 8089 no se publican: solo acceso local/nginx
         ufw --force enable
         log_success "Firewall UFW configurado"
     elif command -v firewall-cmd &> /dev/null; then
@@ -485,12 +486,10 @@ configure_firewall() {
         firewall-cmd --permanent --add-service=ssh 2>/dev/null || true
         firewall-cmd --permanent --add-port=5060/tcp 2>/dev/null || true
         firewall-cmd --permanent --add-port=5060/udp 2>/dev/null || true
-        firewall-cmd --permanent --add-port=5061/tcp 2>/dev/null || true
-        firewall-cmd --permanent --add-port=5161/udp 2>/dev/null || true
-        firewall-cmd --permanent --add-port=5162/udp 2>/dev/null || true
-        firewall-cmd --permanent --add-port=5038/tcp 2>/dev/null || true
-        firewall-cmd --permanent --add-port=10000-20000/udp 2>/dev/null || true
-        firewall-cmd --permanent --add-port=8089/tcp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=3478/tcp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=3478/udp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=49152-49200/udp 2>/dev/null || true
+        firewall-cmd --permanent --add-port=10000-23100/udp 2>/dev/null || true
         firewall-cmd --reload 2>/dev/null || true
         log_success "Firewall firewalld configurado"
     elif command -v iptables &> /dev/null; then
@@ -500,12 +499,10 @@ configure_firewall() {
         iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
         iptables -A INPUT -p tcp --dport 5060 -j ACCEPT 2>/dev/null || true
         iptables -A INPUT -p udp --dport 5060 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 5061 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p udp --dport 5161 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p udp --dport 5162 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 5038 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p udp --dport 10000:20000 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 8089 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p tcp --dport 3478 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 3478 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 49152:49200 -j ACCEPT 2>/dev/null || true
+        iptables -A INPUT -p udp --dport 10000:23100 -j ACCEPT 2>/dev/null || true
         log_success "Firewall iptables configurado"
     else
         log_warning "No se detectó firewall (ufw, firewalld, iptables). Configure manualmente."
@@ -553,7 +550,7 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 # Asterisk (network_mode: host → usa IP del servidor)
 ASTERISK_HOST=$SERVER_IP
 ASTERISK_AMI_USER=admin
-ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
+ASTERISK_AMI_PASSWORD=$AMI_PASSWORD
 ASTERISK_CONFIG_DIR=/var/lib/asterisk/dynamic
 ASTERISK_PUBLIC_IP=$SERVER_IP
 
@@ -612,7 +609,16 @@ CELERY_CONCURRENCY=4
 
 # === ASTERISK ===
 ASTERISK_AMI_USER=admin
-ASTERISK_AMI_PASSWORD=vozipomni_ami_2026
+ASTERISK_AMI_PASSWORD=$AMI_PASSWORD
+
+# === TURN (coturn, credenciales temporales HMAC) ===
+TURN_SECRET=$TURN_SECRET
+TURN_HOST=
+TURN_PORT=3478
+
+# === KAMAILIO ===
+# 1 = confiar en teléfonos SIP de la LAN (10/8, 172.16/12, 192.168/16)
+KAMAILIO_TRUST_LAN=0
 
 # === FRONTEND (Nuxt 3) ===
 NUXT_PUBLIC_API_BASE=/api
@@ -805,7 +811,7 @@ ASTERISK AMI:
   Host: localhost (desde el servidor)
   Puerto: 5038
   Usuario: admin
-  Contraseña: vozipomni_ami_2026
+  Contraseña: $AMI_PASSWORD
 
 ════════════════════════════════════════════════════════════
 IMPORTANTE: Guarda este archivo en un lugar seguro.

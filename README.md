@@ -701,7 +701,8 @@ La configuración centralizada está en `/opt/vozipomni/.env`:
 | `SECRET_KEY` | Clave secreta de Django (generada) |
 | `POSTGRES_PASSWORD` | Password de PostgreSQL (generada) |
 | `REDIS_PASSWORD` | Password de Redis (generada) |
-| `ASTERISK_AMI_PASSWORD` | Password de AMI (default: `vozipomni_ami_2026`) |
+| `ASTERISK_AMI_PASSWORD` | Password de AMI (generada, obligatoria) |
+| `TURN_SECRET` | Secreto compartido de coturn para credenciales TURN temporales (generado) |
 
 ### Desarrollo local
 
@@ -711,10 +712,9 @@ Definidas en `.env` (raíz) y `backend/.env`. El template base es `env.template`
 - Usuario: `admin`
 - Contraseña: generada automáticamente en producción (ver `credentials.txt`)
 
-**Agente de prueba WebRTC**:
-- Extensión SIP: `agent1000`
-- Contraseña: `vozipomni_ami_2026`
-- WebSocket: `wss://TU_IP:8089/ws`
+**Agentes WebRTC**:
+- La contraseña SIP de cada agente se genera automáticamente al crearlo.
+- El softphone obtiene un ticket de WebSocket y credenciales TURN temporales desde `/api/telephony/webrtc-credentials/`; `/sip/ws` rechaza conexiones sin ticket.
 
 ---
 

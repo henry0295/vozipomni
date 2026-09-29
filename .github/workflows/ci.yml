@@ -103,4 +103,5 @@ jobs:
           ASTERISK_AMI_PASSWORD: ci-ami-password
           FIELD_ENCRYPTION_KEY: ZHVtbXkta2V5LWZvci10ZXN0
           GRAFANA_PASSWORD: ci-grafana-password
+          TURN_SECRET: ci-turn-secret
         run: docker compose -f docker-compose.prod.yml config --quiet

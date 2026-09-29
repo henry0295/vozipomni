@@ -313,7 +313,9 @@ def _sync_agent_pjsip():
             ]
             for a in agents:
                 ext = a.sip_extension
-                password = a.sip_password or ext
+                if not a.sip_password:
+                    a.save()  # Agent.save() genera una clave aleatoria
+                password = a.sip_password
                 display = a.user.get_full_name() or ext
                 lines += [
                     f'[{ext}](webrtc_endpoint)',

@@ -1,27 +1,35 @@
 import { computed, markRaw } from 'vue'
 import JsSIP from 'jssip'
 
-// Construye la lista de ICE servers: STUN público + TURN propio si está configurado.
-// STUN: permite al browser descubrir su IP pública.
-// TURN: relay de último recurso cuando UDP directo está bloqueado (NAT simétrica, firewall corporativo).
-function buildIceServers(): RTCIceServer[] {
-  const config = useRuntimeConfig()
-  const servers: RTCIceServer[] = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
-  ]
-  const turn = config.public.turnServer
-  if (turn) {
-    servers.push({
-      urls: [
-        `turn:${turn}:3478?transport=udp`,
-        `turn:${turn}:3478?transport=tcp`,
-        `turns:${turn}:5349`
-      ],
-      username: config.public.turnUser as string,
-      credential: config.public.turnPassword as string
-    })
+// ICE servers: STUN público + TURN propio con credenciales TEMPORALES.
+// El backend las firma con TURN_SECRET (coturn use-auth-secret) y entrega además el
+// ticket para abrir el WebSocket SIP; así no hay claves fijas en el JavaScript.
+const DEFAULT_ICE: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+]
+let _iceServers: RTCIceServer[] = DEFAULT_ICE
+let _credentialsTimer: any = null
+
+async function fetchWebRTCCredentials(): Promise<{ ice_servers: RTCIceServer[], ws_ticket: string } | null> {
+  try {
+    const base = String(useRuntimeConfig().public.apiBase || '/api').replace(/\/$/, '')
+    const data: any = await $fetch(`${base}/telephony/webrtc-credentials/`)
+    if (Array.isArray(data?.ice_servers) && data.ice_servers.length) _iceServers = data.ice_servers
+    return data
+  } catch (err) {
+    console.warn('WebRTC: no se pudieron obtener credenciales TURN/WS', err)
+    return null
   }
-  return servers
+}
+
+function buildIceServers(): RTCIceServer[] {
+  return _iceServers
+}
+
+function withTicket(url: string, ticket?: string) {
+  if (!ticket) return url
+  const clean = url.replace(/([?&])ticket=[^&]*&?/, '$1').replace(/[?&]$/, '')
+  return `${clean}${clean.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket)}`
 }
 
 export interface WebRTCConfig {
@@ -84,7 +92,7 @@ export const useWebRTC = () => {
 
 
   // Configurar y registrar UA
-  const register = (config: WebRTCConfig) => {
+  const register = async (config: WebRTCConfig) => {
     if (_ua) {
       console.warn('UA already exists, unregistering first')
       unregister()
@@ -93,8 +101,19 @@ export const useWebRTC = () => {
     try {
       // Guardar configuración para reconexión automática
       lastConfig.value = config
-      
-      const wsEndpoint = config.wsUrl || `wss://${config.sipServer}:${config.sipPort}/ws`
+
+      // Ticket del WebSocket SIP (nginx lo exige) + TURN temporal; se piden en cada
+      // registro/reconexión para no usar tickets vencidos.
+      const creds = await fetchWebRTCCredentials()
+      if (!_credentialsTimer) {
+        // Renovar credenciales TURN cada 30 min (duran 12 h) para llamadas en sesiones largas
+        _credentialsTimer = setInterval(() => { fetchWebRTCCredentials() }, 30 * 60 * 1000)
+      }
+      // Otro register() pudo crear el UA mientras esperábamos: detenerlo sin perder la configuración
+      if (_ua) { try { _ua.stop() } catch { /* ignore */ } _ua = null }
+      lastConfig.value = config
+
+      const wsEndpoint = withTicket(config.wsUrl || `wss://${config.sipServer}:${config.sipPort}/ws`, creds?.ws_ticket)
       const socket = new JsSIP.WebSocketInterface(wsEndpoint)
       
       const configuration = {
@@ -462,6 +481,10 @@ export const useWebRTC = () => {
     if (_reconnectTimer) {
       clearTimeout(_reconnectTimer)
       _reconnectTimer = null
+    }
+    if (_credentialsTimer) {
+      clearInterval(_credentialsTimer)
+      _credentialsTimer = null
     }
     
     stopCallTimer()

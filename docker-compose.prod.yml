@@ -71,6 +71,10 @@ x-django-env: &django-env
   # URL pública HTTPS con certificado válido para webhooks de Meta/WhatsApp
   PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
   WHATSAPP_GRAPH_API_VERSION: ${WHATSAPP_GRAPH_API_VERSION:-v21.0}
+  # TURN (coturn): el backend firma credenciales temporales con este secreto
+  TURN_SECRET: ${TURN_SECRET:-}
+  TURN_HOST: ${TURN_HOST:-}
+  TURN_PORT: ${TURN_PORT:-3478}
   TZ: ${TZ:-America/Bogota}
 
 # ─── Django common service ──────────────────────────────────────────────────
@@ -370,6 +374,8 @@ services:
       ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
       RTPENGINE_HOST: 127.0.0.1
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-}
+      # 1 = aceptar registros/llamadas SIP desde la red local (teléfonos IP). Por defecto solo WebRTC.
+      KAMAILIO_TRUST_LAN: ${KAMAILIO_TRUST_LAN:-0}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:
@@ -423,6 +429,51 @@ services:
           cpus: '0.5'
         reservations:
           memory: 64M
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # TURN (coturn) — relay de audio para agentes detrás de NAT/firewall estricto
+  # Credenciales temporales firmadas por el backend con TURN_SECRET (use-auth-secret):
+  # no hay usuario/clave fijos expuestos en el navegador.
+  # Solo retransmite hacia este servidor (RTPEngine): no sirve como proxy abierto.
+  # ──────────────────────────────────────────────────────────────────────────
+  coturn:
+    image: coturn/coturn:4.6.3
+    container_name: vozipomni_coturn
+    network_mode: host
+    command:
+      - -n
+      - --log-file=stdout
+      - --listening-port=${TURN_PORT:-3478}
+      - --fingerprint
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:?TURN_SECRET requerido en .env (deploy.sh lo genera)}
+      - --realm=${TURN_REALM:-vozipomni}
+      - --external-ip=${NAT_IPV4:-${VOZIPOMNI_IPV4}}/${VOZIPOMNI_IPV4}
+      - --min-port=49152
+      - --max-port=49200
+      - --no-multicast-peers
+      - --no-cli
+      - --no-tlsv1
+      - --no-tlsv1_1
+      - --stale-nonce=600
+      - --user-quota=12
+      - --total-quota=1200
+      # Relay solo hacia el propio servidor; bloquear redes internas y loopback
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
+      - --allowed-peer-ip=${VOZIPOMNI_IPV4}
+    <<: *restart-policy
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
 
   # ──────────────────────────────────────────────────────────────────────────
   # WEB & PROXY — Nginx en network_mode: host (WebRTC proxy directo)

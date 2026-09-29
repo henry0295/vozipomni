@@ -771,3 +771,140 @@ class WebhookDelivery(models.Model):
         ordering = ['-created_at']
         verbose_name = 'Entrega de Webhook'
         verbose_name_plural = 'Entregas de Webhook'
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Seguridad y antifraude de llamadas salientes
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TelephonySecurityPolicy(models.Model):
+    """
+    Política única (singleton) de marcación saliente. Se aplica en el dialplan
+    ([vozip-outbound-policy]) a toda llamada que use una ruta saliente y en el
+    marcador automático antes de originar.
+    """
+    block_international = models.BooleanField(
+        default=True, verbose_name='Bloquear llamadas internacionales',
+        help_text='Números que empiezan por 00 o por + distinto al indicativo del país.')
+    home_country_code = models.CharField(max_length=4, default='57', verbose_name='Indicativo del país')
+    blocked_prefixes = models.TextField(
+        blank=True, default='01900\n1900', verbose_name='Prefijos bloqueados',
+        help_text='Uno por línea (tarifas especiales, satelitales, destinos de fraude).')
+    allowed_prefixes = models.TextField(
+        blank=True, default='', verbose_name='Prefijos permitidos (lista blanca)',
+        help_text='Si se llena, SOLO se permiten números que empiecen por estos prefijos.')
+    max_number_length = models.PositiveIntegerField(default=15, verbose_name='Longitud máxima del número')
+    max_concurrent_outbound = models.PositiveIntegerField(
+        default=0, verbose_name='Llamadas salientes simultáneas (total)', help_text='0 = sin límite')
+    enforce_trunk_channels = models.BooleanField(
+        default=True, verbose_name='Respetar canales máximos por troncal')
+    max_calls_per_extension_hour = models.PositiveIntegerField(
+        default=0, verbose_name='Llamadas por extensión por hora', help_text='0 = sin límite')
+
+    # Alertas
+    alert_emails = models.TextField(blank=True, default='', verbose_name='Correos de alerta',
+                                    help_text='Uno por línea. Vacío = administradores activos con email.')
+    alert_calls_per_10min = models.PositiveIntegerField(
+        default=150, verbose_name='Alerta: llamadas salientes en 10 min', help_text='0 = desactivada')
+    alert_international_per_hour = models.PositiveIntegerField(
+        default=5, verbose_name='Alerta: llamadas internacionales por hora', help_text='0 = desactivada')
+    alert_blocked_per_10min = models.PositiveIntegerField(
+        default=10, verbose_name='Alerta: intentos bloqueados en 10 min', help_text='0 = desactivada')
+
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        db_table = 'telephony_security_policy'
+        verbose_name = 'Política de seguridad telefónica'
+        verbose_name_plural = 'Política de seguridad telefónica'
+
+    def __str__(self):
+        return 'Política de seguridad telefónica'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    @staticmethod
+    def _prefix_list(text):
+        import re
+        seen, out = set(), []
+        for raw in (text or '').replace(',', '\n').splitlines():
+            p = re.sub(r'[^0-9]', '', raw)
+            if p and p not in seen:
+                seen.add(p)
+                out.append(p)
+        return out
+
+    @property
+    def blocked_list(self):
+        return self._prefix_list(self.blocked_prefixes)
+
+    @property
+    def allowed_list(self):
+        return self._prefix_list(self.allowed_prefixes)
+
+    def is_international(self, number: str) -> bool:
+        raw = (number or '').strip()
+        cc = (self.home_country_code or '').strip()
+        if raw.startswith('00'):
+            return True
+        if raw.startswith('+'):
+            return not (cc and raw[1:].startswith(cc))
+        return False
+
+    def check_number(self, number: str):
+        """(permitido, motivo) — misma lógica que el dialplan, para el marcador y validaciones."""
+        import re
+        raw = (number or '').strip()
+        digits = re.sub(r'\D', '', raw)
+        if not digits:
+            return False, 'invalid'
+        if self.max_number_length and len(digits) > self.max_number_length:
+            return False, 'too_long'
+        if self.block_international and self.is_international(raw):
+            return False, 'international'
+        if any(digits.startswith(p) for p in self.blocked_list):
+            return False, 'blocked_prefix'
+        allowed = self.allowed_list
+        if allowed and not any(digits.startswith(p) for p in allowed):
+            return False, 'not_allowed'
+        return True, ''
+
+
+class TelephonySecurityEvent(models.Model):
+    TYPE_CHOICES = [
+        ('international', 'Internacional bloqueada'),
+        ('blocked_prefix', 'Prefijo bloqueado'),
+        ('not_allowed', 'Fuera de la lista blanca'),
+        ('too_long', 'Número demasiado largo'),
+        ('trunk_full', 'Troncal sin canales'),
+        ('global_limit', 'Límite total de llamadas'),
+        ('extension_rate', 'Límite por extensión'),
+        ('dialer_blocked', 'Bloqueada en el marcador'),
+        ('alert_spike', 'Alerta: pico de llamadas'),
+        ('alert_international', 'Alerta: llamadas internacionales'),
+        ('alert_blocked', 'Alerta: muchos intentos bloqueados'),
+    ]
+    SEVERITY_CHOICES = [('info', 'Info'), ('warning', 'Advertencia'), ('critical', 'Crítico')]
+
+    event_type = models.CharField(max_length=30, choices=TYPE_CHOICES, db_index=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='warning')
+    number = models.CharField(max_length=50, blank=True, default='')
+    trunk = models.CharField(max_length=100, blank=True, default='')
+    source = models.CharField(max_length=100, blank=True, default='', help_text='Extensión o sistema de origen')
+    detail = models.TextField(blank=True, default='')
+    notified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'telephony_security_events'
+        ordering = ['-created_at']
+        verbose_name = 'Evento de seguridad telefónica'
+        verbose_name_plural = 'Eventos de seguridad telefónica'
+
+    def __str__(self):
+        return f"{self.get_event_type_display()} {self.number}"

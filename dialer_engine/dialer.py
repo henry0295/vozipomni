@@ -6,6 +6,8 @@ Utiliza Asterisk AMI para originar llamadas
 
 import asyncio
 import logging
+import re
+import time
 from datetime import datetime, timezone as dt_timezone
 from enum import Enum
 from typing import List, Dict, Optional
@@ -332,11 +334,16 @@ class DialerEngine:
                 contact = await self.get_next_contact(campaign_id)
                 
                 if contact:
-                    await self.originate_call(
+                    placed = await self.originate_call(
                         campaign_id=campaign_id,
                         contact=contact,
                         agent=None  # Se asigna cuando contesta
                     )
+                    if placed is False:
+                        # Troncal o límite total sin canales: esperar al siguiente ciclo
+                        if contact.get('_requeued'):
+                            break
+                        continue
                     campaign['calls_made'] += 1
             
             # Esperar antes del siguiente ciclo
@@ -494,6 +501,11 @@ class DialerEngine:
                 # Predictivo: llamar directamente al contacto y encolarlo.
                 # El contexto outbound-queue ejecuta AMD (si está activo) y conecta
                 # la llamada contestada por una persona a la cola.
+                # Antifraude: el Originate directo a la troncal no pasa por las rutas salientes
+                if not await self._guard_outbound(campaign_id, contact, trunk, destination):
+                    return False
+                variables['GROUP(vozip_trunk)'] = trunk
+                variables['GROUP(vozip_out)'] = 'total'
                 queue_name = config.get('queue_name', '')
                 variables['QUEUE_NAME'] = queue_name
                 variables['AMD_ENABLED'] = '1' if config.get('amd_enabled') else '0'
@@ -570,6 +582,9 @@ class DialerEngine:
             destination = contact['phone_number']
             caller_id = config.get('caller_id', '1000')
             audio_file = config.get('audio_file', 'welcome')
+
+            if not await self._guard_outbound(campaign_id, contact, trunk, destination):
+                return False
             
             # Originar y reproducir mensaje
             response = await self.ami_client.send_action({
@@ -580,7 +595,10 @@ class DialerEngine:
                 'CallerID': caller_id,
                 'Timeout': '30000',
                 'Async': 'true',
-                'Variable': f'CAMPAIGN_ID={campaign_id},CONTACT_ID={contact["id"]}'
+                'Variable': [
+                    f'CAMPAIGN_ID={campaign_id}', f'CONTACT_ID={contact["id"]}',
+                    f'GROUP(vozip_trunk)={trunk}', 'GROUP(vozip_out)=total',
+                ],
             })
             
             ami_response = getattr(response, 'Response', '') or ''
@@ -592,6 +610,84 @@ class DialerEngine:
         except Exception as e:
             logger.error(f"Error en call blasting: {e}")
             
+    # ─────────────────────────────────────────────────────────────────────────
+    # Antifraude (misma política que [vozip-outbound-policy]; la publica el backend en Redis)
+    # ─────────────────────────────────────────────────────────────────────────
+
+    async def _dial_policy(self) -> Dict:
+        cached = getattr(self, '_policy_cache', None)
+        if cached and time.monotonic() - cached[0] < 30:
+            return cached[1]
+        try:
+            raw = await self.redis_client.get('telephony:dial_policy')
+            policy = json.loads(raw) if raw else {}
+        except Exception as e:
+            logger.warning(f"[Antifraude] No se pudo leer la política: {e}")
+            policy = cached[1] if cached else {}
+        self._policy_cache = (time.monotonic(), policy)
+        return policy
+
+    @staticmethod
+    def _number_reason(policy: Dict, number: str) -> str:
+        """'' si el número está permitido; si no, el motivo (igual que el dialplan)."""
+        raw = (number or '').strip()
+        digits = re.sub(r'\D', '', raw)
+        if not digits:
+            return 'invalid'
+        max_len = policy.get('max_number_length') or 0
+        if max_len and len(digits) > max_len:
+            return 'too_long'
+        if policy.get('block_international', True):
+            cc = str(policy.get('home_country_code') or '')
+            if raw.startswith('00') or (raw.startswith('+') and not (cc and raw[1:].startswith(cc))):
+                return 'international'
+        if any(digits.startswith(p) for p in policy.get('blocked_prefixes') or []):
+            return 'blocked_prefix'
+        allowed = policy.get('allowed_prefixes') or []
+        if allowed and not any(digits.startswith(p) for p in allowed):
+            return 'not_allowed'
+        return ''
+
+    async def _group_count(self, group: str, category: str) -> int:
+        try:
+            resp = await self.ami_client.send_action({'Action': 'Getvar', 'Variable': f'GROUP_COUNT({group}@{category})'})
+            return int(getattr(resp, 'Value', 0) or 0)
+        except Exception:
+            return 0
+
+    async def _guard_outbound(self, campaign_id: int, contact: Dict, trunk: str, destination: str) -> bool:
+        """
+        False = no originar. Número bloqueado → se descarta el contacto y se registra el evento.
+        Sin canales en la troncal / límite total → se re-encola el contacto.
+        """
+        contact.pop('_requeued', None)
+        policy = await self._dial_policy()
+        if not policy:
+            return True
+        reason = self._number_reason(policy, destination)
+        if reason:
+            logger.warning(f"[Antifraude] Campaña {campaign_id}: {destination} bloqueado ({reason})")
+            try:
+                await self.redis_client.rpush('telephony:security_events', json.dumps({
+                    'event_type': 'dialer_blocked', 'number': destination, 'trunk': trunk,
+                    'source': f'campaña {campaign_id}', 'detail': f'Motivo: {reason}',
+                }))
+            except Exception:
+                pass
+            return False
+
+        limit_trunk = int((policy.get('trunk_limits') or {}).get(trunk) or 0) \
+            if policy.get('enforce_trunk_channels', True) else 0
+        limit_total = int(policy.get('max_concurrent_outbound') or 0)
+        full = (limit_trunk and await self._group_count(trunk, 'vozip_trunk') >= limit_trunk) or \
+               (limit_total and await self._group_count('total', 'vozip_out') >= limit_total)
+        if full:
+            contact['_requeued'] = True
+            await self.redis_client.lpush(f'campaign:{campaign_id}:contacts:pending', json.dumps(contact))
+            logger.info(f"[Antifraude] Troncal {trunk} sin canales disponibles; contacto re-encolado")
+            return False
+        return True
+
     async def calculate_predictive_ratio(self, campaign_id: int) -> float:
         """
         Calcular ratio de discado predictivo basado en estadísticas

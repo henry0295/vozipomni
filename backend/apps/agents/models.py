@@ -64,6 +64,16 @@ class Agent(models.Model):
     
     def __str__(self):
         return f"{self.user.get_full_name()} - {self.sip_extension}"
+
+    def save(self, *args, **kwargs):
+        # Nunca dejar la clave SIP vacía (antes se usaba la extensión como clave)
+        if not self.sip_password:
+            import secrets
+            self.sip_password = secrets.token_urlsafe(12)
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'sip_password' not in update_fields:
+                kwargs['update_fields'] = list(update_fields) + ['sip_password']
+        super().save(*args, **kwargs)
     
     def login(self):
         """Marcar agente como conectado"""

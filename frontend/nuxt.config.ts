@@ -60,10 +60,8 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api',
       wsBase: process.env.NUXT_PUBLIC_WS_BASE || 'ws://localhost:8000/ws',
-      // TURN/STUN para WebRTC — requerido cuando el agente está detrás de NAT estricta
-      turnServer: process.env.NUXT_PUBLIC_TURN_SERVER || '',    // ej: 190.159.139.176
-      turnUser: process.env.NUXT_PUBLIC_TURN_USER || 'vozipomni',
-      turnPassword: process.env.NUXT_PUBLIC_TURN_PASSWORD || 'vozipomni2026'
+      // TURN: ya no hay usuario/clave en la configuración pública. El softphone pide
+      // credenciales temporales a /api/telephony/webrtc-credentials/ (coturn use-auth-secret).
     }
   },
 

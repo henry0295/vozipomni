@@ -285,3 +285,29 @@ def process_pending_callbacks(self):
 
 
 # El import de models ahora está al inicio del archivo
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Antifraude
+# ══════════════════════════════════════════════════════════════════════════════
+
+@shared_task
+def check_fraud_alerts():
+    """Cada 2 min: umbrales de fraude (picos, internacionales, bloqueos) y publica la política en Redis."""
+    from apps.telephony.security import check_alerts
+    return check_alerts()
+
+
+@shared_task
+def reset_extension_rate_counters():
+    """Diario: borra los contadores por extensión/hora que usa el dialplan (AstDB vozip_rate)."""
+    from apps.telephony.asterisk_ami import AsteriskAMI
+    ami = AsteriskAMI()
+    if not ami.connect():
+        return 'AMI no disponible'
+    try:
+        ami._send_command("Action: Command\r\nCommand: database deltree vozip_rate\r\n\r\n")
+        ami._read_command_response()
+    finally:
+        ami.disconnect()
+    return 'Contadores vozip_rate borrados'

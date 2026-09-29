@@ -33,6 +33,13 @@ sed -i "s|RTPENGINE_HOST_PLACEHOLDER|${RTPENGINE_ADDR}|g"   "$KAM_CFG"
 sed -i "s|ASTERISK_HOST_PLACEHOLDER|${ASTERISK_ADDR}|g"     "$KAM_CFG"
 sed -i "s|REDIS_HOST_PLACEHOLDER|${REDIS_ADDR}|g"           "$KAM_CFG"
 sed -i "s|VOZIPOMNI_HOST_PLACEHOLDER|${VOZIPOMNI_HOST}|g"   "$KAM_CFG"
+# KAMAILIO_TRUST_LAN=1 permite registrar teléfonos SIP desde la red local (RFC1918)
+TRUST_LAN="${KAMAILIO_TRUST_LAN:-0}"
+[ "$TRUST_LAN" = "1" ] || TRUST_LAN="0"
+if [ "$TRUST_LAN" = "1" ]; then
+    sed -i "s|^##!define TRUST_LAN$|#!define TRUST_LAN|" "$KAM_CFG"
+fi
+echo "  [entrypoint] Confiar en red local (KAMAILIO_TRUST_LAN) → ${TRUST_LAN}"
 
 echo "  [entrypoint] RTPEngine   → ${RTPENGINE_ADDR}:22222"
 echo "  [entrypoint] Asterisk    → ${ASTERISK_ADDR}:5080"

@@ -215,12 +215,14 @@ class AgentSerializer(serializers.ModelSerializer):
             
             # Crear usuario
             try:
+                # Sin contraseña: la cuenta queda sin clave utilizable hasta que un admin
+                # la defina en Usuarios y roles (antes quedaba con 'changeme123').
                 user = User.objects.create_user(
                     username=username,
                     email=email,
                     first_name=first_name,
                     last_name=last_name,
-                    password=password or 'changeme123',
+                    password=password or None,
                     role='agent',
                     is_active_agent=True
                 )

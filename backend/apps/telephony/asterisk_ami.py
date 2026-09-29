@@ -27,12 +27,17 @@ class AsteriskAMI:
         self.ami_host = getattr(settings, 'ASTERISK_HOST', 'asterisk')
         self.ami_port = getattr(settings, 'ASTERISK_AMI_PORT', 5038)
         self.ami_user = getattr(settings, 'ASTERISK_AMI_USER', 'admin')
-        self.ami_password = getattr(settings, 'ASTERISK_AMI_PASSWORD', 'vozipomni_ami_2026')
+        # Sin valor por defecto: una contraseña fija en el código sería conocida por cualquiera
+        self.ami_password = getattr(settings, 'ASTERISK_AMI_PASSWORD', '') or ''
     
     # ========== MÉTODOS SINCRÓNICOS PARA COMANDOS SIMPLES ==========
     
     def connect(self):
         """Conectar al AMI de Asterisk (versión sincrónica)"""
+        if not self.ami_password:
+            logger.error("ASTERISK_AMI_PASSWORD no está configurado: no se intenta conectar a AMI")
+            self.connected = False
+            return False
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.sock.settimeout(5)
