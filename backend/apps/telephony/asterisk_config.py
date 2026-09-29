@@ -209,7 +209,8 @@ class AsteriskConfigGenerator:
             config.extend([
                 f"exten => {ext.extension},1,NoOp(Llamada a {ext.name})",
                 f" same => n,Set(CALLERID(name)=${{CALLERID(name)}})",
-                f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_{ext.extension}.wav,ab)",
+                # ${UNIQUEID} en el nombre: así recordings.link_recording_to_call asocia el archivo al Call
+                f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_${{UNIQUEID}}_{ext.extension}.wav,ab)",
                 f" same => n,Dial(PJSIP/{ext.extension},30,trg)",
             ])
             if ext.voicemail_enabled:
@@ -233,7 +234,7 @@ class AsteriskConfigGenerator:
                     config.extend([
                         f"exten => {queue.extension},1,NoOp(Cola: {queue.name})",
                         f" same => n,Answer()",
-                        f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_{queue.extension}_${{CALLERID(num)}}.wav,ab)",
+                        f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_${{UNIQUEID}}_{queue.extension}_${{CALLERID(num)}}.wav,ab)",
                         f" same => n,Queue({queue.name},tT,,,{max_wait})",
                         " same => n,Hangup()",
                         "",
@@ -255,7 +256,7 @@ class AsteriskConfigGenerator:
                     f"exten => {route.did},1,NoOp(DID: {route.description})",
                     f" same => n,Set(CALLERID(name)=${{CALLERID(num)}})",
                     f" same => n,Set(__DID_NUMBER={route.did})",
-                    f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_{route.did}_${{CALLERID(num)}}.wav,ab)",
+                    f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_${{UNIQUEID}}_{route.did}_${{CALLERID(num)}}.wav,ab)",
                 ])
                 
                 if route.destination_type == 'extension':
@@ -325,7 +326,7 @@ class AsteriskConfigGenerator:
                 config.append(route_policy_gosub(route, security_policy))
                 
                 config.extend([
-                    f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_${{CALLERID(num)}}_${{dial_number}}.wav,ab)",
+                    f" same => n,MixMonitor(${{STRFTIME(${{EPOCH}},,%Y%m%d-%H%M%S)}}_${{UNIQUEID}}_${{CALLERID(num)}}_${{dial_number}}.wav,ab)",
                     f" same => n,Dial(PJSIP/${{dial_number}}@{route.trunk.name},{ring_time},{dial_options})",
                     " same => n,Hangup()",
                     "",

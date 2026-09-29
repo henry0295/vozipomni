@@ -187,6 +187,9 @@ chmod -R 777 "${DYNAMIC_DIR}"                      2>/dev/null || true
 chown -R asterisk:asterisk /var/log/asterisk       2>/dev/null || true
 chown -R asterisk:asterisk /var/run/asterisk       2>/dev/null || true
 chown -R asterisk:asterisk /var/spool/asterisk     2>/dev/null || true
+# Grabaciones: el backend/celery (uid 1000) las lee y la retención/borrado desde la web las elimina
+mkdir -p /var/spool/asterisk/monitor
+chmod 0777 /var/spool/asterisk/monitor             2>/dev/null || true
 
 # -------------------------------------------------------
 # 7. Fix DNS: con network_mode:host el nombre "asterisk" no resuelve

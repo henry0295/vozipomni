@@ -118,8 +118,9 @@
             <p><strong>Duración:</strong> {{ formatDuration(selectedRecording?.duration) }}</p>
           </div>
           
-          <audio controls class="w-full">
-            <source :src="selectedRecording?.file_url" type="audio/wav">
+          <div v-if="audioLoading" class="text-sm text-gray-500">Cargando audio…</div>
+          <UAlert v-else-if="audioError" color="red" icon="i-heroicons-exclamation-triangle" :title="audioError" />
+          <audio v-else-if="audioUrl" :src="audioUrl" controls autoplay class="w-full" aria-label="Reproductor de la grabación">
             Tu navegador no soporta el elemento de audio.
           </audio>
         </div>
@@ -144,12 +145,19 @@ definePageMeta({
   middleware: 'auth'
 })
 
+const http = useHttp()
+const toast = useToast()
+
 // Estados reactivos
 const loading = ref(false)
 const error = ref<string | null>(null)
 const page = ref(1)
 const showPlayer = ref(false)
-const selectedRecording = ref(null)
+const selectedRecording = ref<any>(null)
+// El audio se pide autenticado (Bearer) y se reproduce desde un blob: <audio src> no envía el token
+const audioUrl = ref('')
+const audioLoading = ref(false)
+const audioError = ref('')
 
 // Filtros
 const filters = reactive({
@@ -215,14 +223,36 @@ const getStatusColor = (status: string) => {
 }
 
 // Acciones
-const playRecording = (recording: any) => {
-  selectedRecording.value = recording
-  showPlayer.value = true
+const releaseAudio = () => {
+  if (audioUrl.value) URL.revokeObjectURL(audioUrl.value)
+  audioUrl.value = ''
 }
 
-const downloadRecording = (recording: any) => {
-  if (recording.file_url) {
-    window.open(recording.file_url, '_blank')
+const playRecording = async (recording: any) => {
+  selectedRecording.value = recording
+  showPlayer.value = true
+  releaseAudio()
+  audioError.value = ''
+  audioLoading.value = true
+  try {
+    const { data } = await http.blob(`/recordings/${recording.id}/download/`, { inline: 1 })
+    audioUrl.value = URL.createObjectURL(data)
+  } catch (err: any) {
+    audioError.value = await http.blobErrorMessage(err, 'No se pudo cargar el audio')
+  } finally {
+    audioLoading.value = false
+  }
+}
+
+watch(showPlayer, (open) => { if (!open) releaseAudio() })
+onBeforeUnmount(releaseAudio)
+
+const downloadRecording = async (recording: any) => {
+  if (!recording) return
+  try {
+    await http.download(`/recordings/${recording.id}/download/`, undefined, recording.filename || `grabacion-${recording.id}.wav`)
+  } catch (err: any) {
+    toast.add({ title: 'No se pudo descargar', description: await http.blobErrorMessage(err), color: 'red' })
   }
 }
 
@@ -238,28 +268,47 @@ const deleteRecording = async (recording: any) => {
 const loadRecordings = async () => {
   loading.value = true
   error.value = null
-  const { getRecordings } = useRecordings()
-  const result = await getRecordings({ page: page.value })
-  if (result.error) {
-    error.value = 'Error al cargar grabaciones'
+  try {
+    const query: Record<string, any> = { page: page.value }
+    if (filters.dateFrom) query.date_from = filters.dateFrom
+    if (filters.dateTo) query.date_to = filters.dateTo
+    if (filters.search) query.search = filters.search
+    const data: any = await http.get('/recordings/', query)
+    const rows = http.results<any>(data)
+    recordings.value = rows
+      .map((recording: any) => {
+        const call = recording.call_details || {}
+        return {
+          id: recording.id,
+          filename: recording.filename,
+          call_id: call.call_id || `CALL-${recording.call}`,
+          // Saliente: el cliente es el número marcado; entrante: quien llama
+          caller: (call.direction === 'outbound' ? call.called_number : call.caller_id) || call.caller_id || '-',
+          agent: call.agent_name || '-',
+          agent_name: call.agent_name || '',
+          duration: recording.duration || call.talk_time || 0,
+          created_at: recording.created_at,
+          status: recording.status,
+          file_size: `${recording.file_size_mb || 0} MB`
+        }
+      })
+      .filter((r: any) => !filters.agent || r.agent_name === filters.agent)
+    totalRecordings.value = data?.count ?? rows.length
+  } catch (err: any) {
+    error.value = http.errorMessage(err, 'Error al cargar grabaciones')
     recordings.value = []
     totalRecordings.value = 0
-  } else {
-    recordings.value = result.data.map(recording => ({
-      id: recording.id,
-      call_id: recording.call_details?.call_id || `CALL-${recording.call}`,
-      caller: recording.call_details?.caller_id || '-',
-      agent: recording.call_details?.agent_name || '-',
-      duration: recording.duration || 0,
-      created_at: recording.created_at,
-      status: recording.status,
-      file_url: recording.file_path,
-      file_size: `${recording.file_size_mb || 0} MB`
-    }))
-    totalRecordings.value = result.total || 0
+  } finally {
+    loading.value = false
   }
-  loading.value = false
 }
+
+watch(page, loadRecordings)
+let searchTimer: any = null
+watch(() => [filters.dateFrom, filters.dateTo, filters.search, filters.agent], () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { page.value === 1 ? loadRecordings() : (page.value = 1) }, 400)
+})
 
 // Metadata de la página
 useHead({

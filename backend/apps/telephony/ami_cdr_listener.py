@@ -399,6 +399,9 @@ def _process_cdr_event(event: dict):
         dst_channel = event.get('DestinationChannel', '')
         ext = _extract_extension(dst_channel or channel)
         agent = _find_agent_by_extension(ext)
+        # Softphone WebRTC: entra por Kamailio (PJSIP/kamailio-endpoint-xxx); el origen es la extensión
+        if not agent and 'kamailio-endpoint' in channel and src.isdigit():
+            agent = _find_agent_by_extension(src)
 
     # Queue del estado en memoria
     queue = state.get('queue')

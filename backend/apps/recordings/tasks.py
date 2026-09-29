@@ -7,6 +7,39 @@ from config.recording_config import RECORDING_RETENTION
 
 logger = logging.getLogger(__name__)
 
+# MixMonitor escribe en el spool de Asterisk (volumen asterisk_spool montado en backend y celery)
+RECORDING_DIRS = ('/var/spool/asterisk/monitor', '/app/recordings')
+RECORDING_EXTS = ('.wav', '.wav49', '.gsm', '.mp3', '.ogg')
+
+
+def _id_in_name(token: str, fname: str) -> bool:
+    """El Uniqueid de Asterisk (p. ej. 1727630981.12) aparece completo en el nombre, no como parte
+    de otro (1727630981.123) — los nombres del dialplan son FECHA_${UNIQUEID}_origen_destino.wav."""
+    import re
+    return bool(token) and re.search(rf'(?<![\d.]){re.escape(token)}(?![\d])', fname) is not None
+
+
+def find_recording_file(unique_id: str = '', call_id: str = '') -> str:
+    raw_id = (call_id or '').replace('ast-', '')
+    for rdir in RECORDING_DIRS:
+        if not os.path.isdir(rdir):
+            continue
+        try:
+            names = os.listdir(rdir)
+        except OSError:
+            continue
+        for fname in names:
+            if not fname.lower().endswith(RECORDING_EXTS):
+                continue
+            if _id_in_name(unique_id, fname) or (raw_id != unique_id and _id_in_name(raw_id, fname)):
+                candidate = os.path.join(rdir, fname)
+                try:
+                    if os.path.getsize(candidate) > 100:
+                        return candidate
+                except OSError:
+                    continue
+    return ''
+
 
 @shared_task(
     bind=True,
@@ -32,35 +65,12 @@ def link_recording_to_call(self, call_id: str):
         return
 
     unique_id = call.unique_id or ''
-    recording_dirs = [
-        '/var/spool/asterisk/monitor',
-        '/app/recordings',
-    ]
-
-    found_path = ''
-    for rdir in recording_dirs:
-        if not os.path.isdir(rdir):
-            continue
-        try:
-            for fname in os.listdir(rdir):
-                if unique_id and unique_id in fname:
-                    candidate = os.path.join(rdir, fname)
-                    if os.path.getsize(candidate) > 100:
-                        found_path = candidate
-                        break
-                # Fallback: buscar por call_id sin prefijo "ast-"
-                raw_id = call_id.replace('ast-', '')
-                if raw_id and raw_id in fname:
-                    candidate = os.path.join(rdir, fname)
-                    if os.path.getsize(candidate) > 100:
-                        found_path = candidate
-                        break
-        except OSError:
-            continue
-        if found_path:
-            break
+    found_path = find_recording_file(unique_id, call_id)
 
     if not found_path:
+        if self.request.retries >= self.max_retries:
+            logger.warning(f"[Recording] Sin archivo de grabación para call {call_id} (unique_id={unique_id})")
+            return
         logger.debug(f"[Recording] Archivo no encontrado para call {call_id} (unique_id={unique_id}), reintentando…")
         raise self.retry(countdown=30)
 
@@ -98,30 +108,28 @@ def scan_unlinked_recordings():
     from apps.telephony.models import Call
     from apps.recordings.models import Recording
 
-    recording_dirs = [
-        '/var/spool/asterisk/monitor',
-        '/app/recordings',
-    ]
     linked = 0
-    for rdir in recording_dirs:
-        if not os.path.isdir(rdir):
+    pending = [c for c in Call.objects.filter(recording_file='').exclude(unique_id='')
+               .order_by('-start_time')[:500]]
+    for rdir in RECORDING_DIRS:
+        if not os.path.isdir(rdir) or not pending:
             continue
         for fname in os.listdir(rdir):
-            if not fname.endswith(('.wav', '.mp3', '.gsm', '.ogg')):
+            if not fname.lower().endswith(RECORDING_EXTS):
                 continue
             full_path = os.path.join(rdir, fname)
-            if os.path.getsize(full_path) < 100:
+            try:
+                if os.path.getsize(full_path) < 100:
+                    continue
+            except OSError:
                 continue
             # Ya vinculado
             if Recording.objects.filter(file_path=full_path).exists():
                 continue
-            # Intentar identificar la llamada por nombre de archivo (contiene unique_id)
-            matched_call = None
-            for call in Call.objects.filter(recording_file='').order_by('-start_time')[:500]:
-                uid = call.unique_id or ''
-                if uid and uid in fname:
-                    matched_call = call
-                    break
+            # Identificar la llamada por el Uniqueid del nombre de archivo
+            matched_call = next((c for c in pending if _id_in_name(c.unique_id, fname)), None)
+            if matched_call:
+                pending.remove(matched_call)
             if matched_call:
                 file_size = os.path.getsize(full_path)
                 Recording.objects.update_or_create(
