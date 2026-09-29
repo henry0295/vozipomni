@@ -223,12 +223,146 @@ def build_chats(start, end, filters):
     return headers, rows
 
 
+# ─── Datasets de la analítica (apps/reports/analytics.py) ───────────────────
+
+def build_hourly(start, end, filters):
+    from apps.reports import analytics
+    data = analytics.summary(start, end, filters)
+    headers = ['Hora', 'Total', 'Contestadas', 'Abandonadas', 'Perdidas', 'Nivel de servicio (%)', 'ASA (s)']
+    return headers, [[h['label'], h['total'], h['answered'], h['abandoned'], h['missed'],
+                      h['serviceLevel'], h['asa']] for h in data['hourly']]
+
+
+def build_agent_kpis(start, end, filters):
+    from apps.reports import analytics
+    headers = [
+        'Ranking', 'Agente', 'Extensión', 'Puntaje', 'Llamadas', 'Atendidas', 'Entrantes', 'Salientes',
+        'Chats', 'AHT (s)', 'Conversación prom. (s)', 'Retención prom. (s)', 'Post-llamada prom. (s)',
+        'Conectado (s)', 'Disponible (s)', 'En llamada (s)', 'Pausa (s)', 'Ocupación (%)', 'Utilización (%)',
+        'Llamadas/hora', 'Transferencias (%)', 'Tipificación (%)', 'Conversión (%)', 'Calidad', 'Evaluaciones',
+    ]
+    rows = [[
+        r['rank'], r['agentName'], r['extension'], r['score'], r['totalCalls'], r['answeredCalls'],
+        r['inboundCalls'], r['outboundCalls'], r['chats'], r['aht'], r['avgTalkTime'], r['avgHoldTime'],
+        r['avgWrapupTime'], r['loggedTime'], r['availableTime'], r['oncallTime'], r['breakTime'],
+        r['occupancy'], r['utilization'], r['callsPerHour'], r['transferRate'], r['typingRate'],
+        r['conversionRate'], r['qualityScore'], r['evaluations'],
+    ] for r in analytics.agents_report(start, end, filters)]
+    return headers, rows
+
+
+def build_breaks(start, end, filters):
+    from apps.reports import analytics
+    data = analytics.breaks_report(start, end, filters)
+    headers = ['Agente', 'Motivo', 'Pausas', 'Tiempo (s)', 'Excedidas']
+    rows = []
+    for a in data['byAgent']:
+        for reason, r in sorted(a['reasons'].items(), key=lambda x: -x[1]['total']):
+            rows.append([a['agentName'], reason, r['count'], r['total'], r['exceeded']])
+        rows.append([a['agentName'], 'TOTAL', a['count'], a['total'], a['exceeded']])
+    return headers, rows
+
+
+def build_queue_sla(start, end, filters):
+    from apps.reports import analytics
+    headers = [
+        'Cola', 'Ofrecidas', 'Atendidas', 'Abandonadas', 'Abandono corto (<5 s)', '% atención',
+        '% abandono', 'Nivel de servicio (%)', 'Umbral SL (s)', 'ASA (s)', 'Espera máx. (s)',
+        'Espera prom. abandono (s)', 'AHT (s)',
+    ]
+    rows = [[
+        q['queueName'], q['offered'], q['answered'], q['abandoned'], q['shortAbandoned'], q['answerRate'],
+        q['abandonRate'], q['serviceLevel'], q['slaThreshold'], q['asa'], q['maxWait'],
+        q['avgAbandonWait'], q['aht'],
+    ] for q in analytics.queues_report(start, end, filters)['queues']]
+    return headers, rows
+
+
+def build_abandoned(start, end, filters):
+    from apps.reports import analytics
+    headers = ['Fecha', 'Número', 'Cola', 'Estado', 'Espera (s)', 'Intentos del número',
+               'Devuelta', 'Devuelta en (s)', 'Devuelta por']
+    data = analytics.abandoned_report(start, end, filters, limit=MAX_ROWS)
+    rows = [[
+        r['start'][:19].replace('T', ' '), r['caller'], r['queue'], r['statusLabel'], r['waitTime'],
+        r['attempts'], 'Sí' if r['returned'] else 'No', r['returnDelay'] if r['returnDelay'] is not None else '',
+        r['returnedBy'],
+    ] for r in data['rows']]
+    return headers, rows
+
+
+def build_campaign_kpis(start, end, filters):
+    from apps.reports import analytics
+    headers = [
+        'Campaña', 'Tipo', 'Estado', 'Llamadas', 'Contactadas', 'Contactabilidad (%)', 'Contestador',
+        'No contesta/ocupado', 'Tipificadas (%)', 'Éxitos', 'Conversión (%)', 'Rellamadas',
+        'Conversación prom. (s)', 'Agentes', 'Chats', 'Contactos base', 'Contactos trabajados',
+        'Penetración (%)', 'Pendientes', 'Intentos prom.',
+    ]
+    rows = [[
+        c['campaignName'], c['type'], c['status'], c['calls'], c['answered'], c['contactRate'], c['machine'],
+        c['noAnswer'], c['typingRate'], c['success'], c['conversionRate'], c['callbacks'], c['avgTalkTime'],
+        c['agents'], c['chats'], c['contactsTotal'], c['contactsTouched'], c['penetration'],
+        c['contactsPending'], c['avgAttempts'],
+    ] for c in analytics.campaigns_report(start, end, filters)]
+    return headers, rows
+
+
+def build_dispositions(start, end, filters):
+    from apps.reports import analytics
+    headers = ['Campaña', 'Tipificación', 'Exitosa', 'Llamadas', 'Chats', 'Total', '% del total']
+    rows = [[d['campaign'], d['name'], 'Sí' if d['isSuccess'] else 'No', d['calls'], d['chats'],
+             d['total'], d['share']] for d in analytics.dispositions_report(start, end, filters)['rows']]
+    return headers, rows
+
+
+def build_omnichannel(start, end, filters):
+    from apps.reports import analytics
+    headers = ['Canal', 'Conversaciones', 'Cerradas', 'Abiertas', 'Sin asignar', '% respondidas',
+               f'% 1ª respuesta ≤ {analytics.CHAT_FRT_TARGET // 60} min', '1ª respuesta prom. (s)',
+               'Resolución prom. (s)', 'Mensajes entrantes', 'Mensajes salientes']
+    data = analytics.omnichannel_report(start, end, filters)
+    rows = [[c['label'], c['total'], c['closed'], c['open'], c['unassigned'], c['responseRate'],
+             c['frtWithinTarget'], c['avgFirstResponse'], c['avgResolution'], c['inboundMessages'],
+             c['outboundMessages']] for c in data['byChannel']]
+    return headers, rows
+
+
+def build_quality(start, end, filters):
+    from apps.reports import analytics
+    headers = ['Agente', 'Evaluaciones', 'Promedio', 'Mínimo', 'Máximo', 'Bajo 60']
+    rows = [[a['agentName'], a['evaluations'], a['avgScore'], a['minScore'], a['maxScore'], a['belowTarget']]
+            for a in analytics.quality_report(start, end, filters)['byAgent']]
+    return headers, rows
+
+
+DATASETS.update({
+    'hourly': 'Llamadas por hora (nivel de servicio / ASA)',
+    'agent_kpis': 'KPIs y ranking de agentes (AHT, ocupación, calidad)',
+    'breaks': 'Pausas por agente y motivo',
+    'queue_sla': 'Nivel de servicio y abandono por cola',
+    'abandoned': 'Llamadas perdidas y devoluciones',
+    'campaign_kpis': 'KPIs de campañas (contactabilidad, conversión)',
+    'dispositions': 'Tipificaciones',
+    'omnichannel': 'Omnicanal por canal (primera respuesta, resolución)',
+    'quality': 'Calidad por agente',
+})
+
 BUILDERS = {
     'calls': build_calls,
     'agents': build_agents,
     'daily': build_daily,
     'queues': build_queues,
     'chats': build_chats,
+    'hourly': build_hourly,
+    'agent_kpis': build_agent_kpis,
+    'breaks': build_breaks,
+    'queue_sla': build_queue_sla,
+    'abandoned': build_abandoned,
+    'campaign_kpis': build_campaign_kpis,
+    'dispositions': build_dispositions,
+    'omnichannel': build_omnichannel,
+    'quality': build_quality,
 }
 
 # report_type del modelo Report → dataset

@@ -29,6 +29,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 
 from rest_framework.permissions import BasePermission
+from rest_framework.negotiation import DefaultContentNegotiation
 
 from apps.telephony.models import Call
 from apps.agents.models import Agent, AgentStatusHistory
@@ -52,24 +53,34 @@ class _ReportRolePermission(BasePermission):
 def _parse_date_range(request):
     """Parsea parámetros period / start_date / end_date del request."""
     period = request.query_params.get('period', 'today')
-    now = timezone.now()
+    # Hora LOCAL (America/Bogota): con timezone.now() (UTC) "hoy" empezaba a las 19:00 del día anterior
+    now = timezone.localtime()
+    midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     if period == 'today':
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = midnight
         end = now
     elif period == 'yesterday':
-        yesterday = now - timedelta(days=1)
-        start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = yesterday.replace(hour=23, minute=59, second=59, microsecond=999999)
+        start = midnight - timedelta(days=1)
+        end = midnight - timedelta(microseconds=1)
+    elif period == 'thisweek':
+        start = midnight - timedelta(days=now.weekday())
+        end = now
+    elif period == 'lastweek':
+        start = midnight - timedelta(days=now.weekday() + 7)
+        end = start + timedelta(days=7) - timedelta(microseconds=1)
     elif period == 'last7days':
-        start = (now - timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = midnight - timedelta(days=6)
         end = now
     elif period == 'last30days':
-        start = (now - timedelta(days=30)).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = midnight - timedelta(days=29)
         end = now
     elif period == 'thismonth':
-        start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        start = midnight.replace(day=1)
         end = now
+    elif period == 'lastmonth':
+        end = midnight.replace(day=1) - timedelta(microseconds=1)
+        start = end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     elif period == 'custom':
         try:
             start = timezone.make_aware(
@@ -83,10 +94,38 @@ def _parse_date_range(request):
             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end = now
     else:
-        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        start = midnight
         end = now
 
     return start, end
+
+
+def _analytics_filters(request):
+    """Filtros comunes de la analítica (ids numéricos o dirección)."""
+    out = {}
+    for key in ('campaign', 'agent', 'queue'):
+        value = request.query_params.get(key, '')
+        if value.isdigit():
+            out[key] = int(value)
+    if request.query_params.get('direction') in ('inbound', 'outbound'):
+        out['direction'] = request.query_params['direction']
+    return out
+
+
+def _sla_threshold(request):
+    try:
+        return max(1, min(600, int(request.query_params.get('sla', 20))))
+    except (TypeError, ValueError):
+        return 20
+
+
+class _FileFormatNegotiation(DefaultContentNegotiation):
+    """
+    En /export/ el parámetro ?format=csv|xlsx es el formato del ARCHIVO. DRF lo usa por defecto para
+    elegir el renderer de la API y, al no existir uno 'xlsx'/'csv', respondía 404 "No encontrado".
+    """
+    class settings:  # noqa: N801 — mismo nombre de atributo que DefaultContentNegotiation.settings
+        URL_FORMAT_OVERRIDE = None
 
 
 class ReportViewSet(viewsets.ModelViewSet):
@@ -108,6 +147,7 @@ class ReportViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         # Analistas pueden crear/exportar reportes (no es una operación destructiva)
         if self.action in ('create', 'generate', 'download', 'export', 'datasets') or \
+                (self.action or '').startswith('analytics_') or \
                 self.request.method in ('GET', 'HEAD', 'OPTIONS'):
             return [IsAuthenticated(), _ReportRolePermission()]
         return super().get_permissions()
@@ -150,7 +190,7 @@ class ReportViewSet(viewsets.ModelViewSet):
         from apps.reports.exporters import DATASETS
         return Response([{'value': k, 'label': v} for k, v in DATASETS.items()])
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get'], content_negotiation_class=_FileFormatNegotiation)
     def export(self, request):
         """
         Exportación inmediata (sin guardar) de un dataset.
@@ -177,6 +217,64 @@ class ReportViewSet(viewsets.ModelViewSet):
         response['Content-Disposition'] = f'attachment; filename="{export_filename(dataset, start, end, ext)}"'
         response['Access-Control-Expose-Headers'] = 'Content-Disposition'
         return response
+
+    # ─────────────────────────────────────────────────────────────
+    # Analítica por período (ver apps/reports/analytics.py)
+    #   Filtros: period/start_date/end_date, campaign, agent, queue, direction, sla
+    # ─────────────────────────────────────────────────────────────
+
+    def _analytics(self, request, fn, **kwargs):
+        start, end = _parse_date_range(request)
+        data = fn(start, end, _analytics_filters(request), **kwargs)
+        payload = data if isinstance(data, dict) else {'rows': data}
+        payload['period'] = {'start': start.isoformat(), 'end': end.isoformat()}
+        return Response(payload)
+
+    @action(detail=False, methods=['get'], url_path='analytics/summary')
+    def analytics_summary(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.summary, sla=_sla_threshold(request))
+
+    @action(detail=False, methods=['get'], url_path='analytics/agents')
+    def analytics_agents(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.agents_report)
+
+    @action(detail=False, methods=['get'], url_path='analytics/breaks')
+    def analytics_breaks(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.breaks_report)
+
+    @action(detail=False, methods=['get'], url_path='analytics/queues')
+    def analytics_queues(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.queues_report)
+
+    @action(detail=False, methods=['get'], url_path='analytics/abandoned')
+    def analytics_abandoned(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.abandoned_report)
+
+    @action(detail=False, methods=['get'], url_path='analytics/campaigns')
+    def analytics_campaigns(self, request):
+        from apps.reports import analytics
+        start, end = _parse_date_range(request)
+        filters = _analytics_filters(request)
+        return Response({
+            'rows': analytics.campaigns_report(start, end, filters),
+            'dispositions': analytics.dispositions_report(start, end, filters),
+            'period': {'start': start.isoformat(), 'end': end.isoformat()},
+        })
+
+    @action(detail=False, methods=['get'], url_path='analytics/omnichannel')
+    def analytics_omnichannel(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.omnichannel_report)
+
+    @action(detail=False, methods=['get'], url_path='analytics/quality')
+    def analytics_quality(self, request):
+        from apps.reports import analytics
+        return self._analytics(request, analytics.quality_report)
 
     # ─────────────────────────────────────────────────────────────
     # KPIs en Tiempo Real

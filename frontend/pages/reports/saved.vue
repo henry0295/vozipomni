@@ -169,9 +169,12 @@ const datasets = ref<{ label: string, value: string }[]>([
 const periods = [
   { label: 'Hoy', value: 'today' },
   { label: 'Ayer', value: 'yesterday' },
+  { label: 'Esta semana', value: 'thisweek' },
+  { label: 'Semana pasada', value: 'lastweek' },
   { label: 'Últimos 7 días', value: 'last7days' },
   { label: 'Últimos 30 días', value: 'last30days' },
   { label: 'Este mes', value: 'thismonth' },
+  { label: 'Mes pasado', value: 'lastmonth' },
   { label: 'Personalizado', value: 'custom' },
 ]
 const directions = [
