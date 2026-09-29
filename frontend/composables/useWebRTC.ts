@@ -217,6 +217,8 @@ export const useWebRTC = () => {
   // Manejar nueva sesión
   const handleNewSession = (session: any, direction: 'incoming' | 'outgoing') => {
     const remoteIdentity = session.remote_identity.uri.user || 'Unknown'
+    // Limpiar el error anterior: si la próxima llamada falla con el mismo motivo, vuelve a notificarse
+    lastCallError.value = null
 
     currentSession.value = {
       session: markRaw(session),  // markRaw evita que Vue proxie la sesión JsSIP
@@ -267,9 +269,13 @@ export const useWebRTC = () => {
       const reasonPhrase = data.message?.reason_phrase || ''
       const cause = data.cause || 'Unknown'
       console.error(`WebRTC: Call failed — SIP ${statusCode} ${reasonPhrase} | cause: ${cause}`, data)
-      lastCallError.value = statusCode
-        ? `Llamada rechazada (${statusCode} ${reasonPhrase})`
-        : `Llamada fallida: ${cause}`
+      // originator 'local' = la cortó el propio agente (colgar antes de contestar, cerrar sesión,
+      // desregistrar el softphone): no es un error que haya que notificar.
+      if (data.originator !== 'local') {
+        lastCallError.value = statusCode
+          ? `Llamada rechazada (${statusCode} ${reasonPhrase})`
+          : `Llamada fallida: ${cause}`
+      }
       handleCallEnded()
     })
 

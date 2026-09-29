@@ -50,9 +50,6 @@
         </div>
       </template>
     </UCard>
-
-    <!-- Notificaciones -->
-    <UNotifications />
   </div>
 </template>
 

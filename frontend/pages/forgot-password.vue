@@ -28,7 +28,6 @@
         </div>
       </template>
     </UCard>
-    <UNotifications />
   </div>
 </template>
 
