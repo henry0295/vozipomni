@@ -273,33 +273,53 @@ export const useWebRTC = () => {
       handleCallEnded()
     })
 
-    session.on('peerconnection', (data: any) => {
-      console.log('WebRTC: Peer connection')
-      const pc = data.peerconnection
-
-      if (_remoteAudio) {
-        _remoteAudio.pause()
-        _remoteAudio.srcObject = null
-        _remoteAudio.remove()
-        _remoteAudio = null
-      }
-
-      _remoteAudio = document.createElement('audio')
-      _remoteAudio.autoplay = true
-      _remoteAudio.setAttribute('playsinline', '')
-      _remoteAudio.style.display = 'none'
-      document.body.appendChild(_remoteAudio)
-
-      pc.addEventListener('track', (event: RTCTrackEvent) => {
-        if (event.track.kind !== 'audio') return
-        console.log('WebRTC: Remote audio track received')
-        const stream = event.streams[0] ?? new MediaStream([event.track])
-        _remoteAudio!.srcObject = stream
-        _remoteAudio!.play().catch((err: any) => {
-          console.warn('WebRTC: Audio autoplay bloqueado:', err)
-        })
+    // En llamadas SALIENTES JsSIP crea el RTCPeerConnection antes de emitir newRTCSession,
+    // así que el evento 'peerconnection' ya pasó: hay que usar session.connection directamente.
+    // Sin esto el agente no escuchaba al destino (el RTP llegaba al navegador pero no se reproducía).
+    if (session.connection) {
+      attachRemoteAudio(session.connection as RTCPeerConnection)
+    } else {
+      session.on('peerconnection', (data: any) => {
+        console.log('WebRTC: Peer connection')
+        attachRemoteAudio(data.peerconnection as RTCPeerConnection)
       })
+    }
+  }
+
+  // Reproduce el audio remoto de la llamada (también el early media: timbre/mensajes del operador)
+  const attachRemoteAudio = (pc: RTCPeerConnection) => {
+    if (_remoteAudio) {
+      _remoteAudio.pause()
+      _remoteAudio.srcObject = null
+      _remoteAudio.remove()
+      _remoteAudio = null
+    }
+
+    _remoteAudio = document.createElement('audio')
+    _remoteAudio.autoplay = true
+    _remoteAudio.setAttribute('playsinline', '')
+    _remoteAudio.style.display = 'none'
+    document.body.appendChild(_remoteAudio)
+
+    const play = (stream: MediaStream) => {
+      if (!_remoteAudio) return
+      _remoteAudio.srcObject = stream
+      _remoteAudio.play().catch((err: any) => {
+        console.warn('WebRTC: Audio autoplay bloqueado:', err)
+      })
+    }
+
+    pc.addEventListener('track', (event: RTCTrackEvent) => {
+      if (event.track.kind !== 'audio') return
+      console.log('WebRTC: Remote audio track received')
+      play(event.streams[0] ?? new MediaStream([event.track]))
     })
+
+    // Por si el track remoto ya existía al enganchar el listener
+    const tracks = pc.getReceivers()
+      .map(r => r.track)
+      .filter((t): t is MediaStreamTrack => !!t && t.kind === 'audio')
+    if (tracks.length) play(new MediaStream(tracks))
   }
 
   // Hacer llamada

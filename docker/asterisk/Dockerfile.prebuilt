@@ -52,6 +52,19 @@ RUN git clone --depth 1 --branch 21.12.3 https://github.com/asterisk/asterisk.gi
     make samples && \
     cd / && rm -rf /tmp/asterisk-src
 
+# Locuciones del sistema (español + inglés como respaldo) en ulaw/alaw, sin transcodificar.
+# Se guardan fuera de /var/lib/asterisk porque el volumen asterisk_lib oculta esa ruta;
+# el entrypoint las copia al volumen si faltan.
+ARG ASTERISK_SOUNDS_VERSION=1.6.1
+RUN mkdir -p /opt/asterisk-sounds/en /opt/asterisk-sounds/es && \
+    for lang in es en; do \
+      for fmt in ulaw alaw; do \
+        wget -q -O - "https://downloads.asterisk.org/pub/telephony/sounds/releases/asterisk-core-sounds-${lang}-${fmt}-${ASTERISK_SOUNDS_VERSION}.tar.gz" \
+          | tar -xz -C "/opt/asterisk-sounds/${lang}" || exit 1; \
+      done; \
+    done && \
+    test -f /opt/asterisk-sounds/es/ss-noservice.ulaw -o -f /opt/asterisk-sounds/en/ss-noservice.ulaw
+
 # ------- Runtime Stage -------
 FROM debian:bookworm-slim
 
@@ -102,6 +115,9 @@ COPY --from=builder /etc/asterisk/ /etc/asterisk/
 # El volumen monta /var/lib/asterisk y puede ocultar su contenido al iniciarse;
 # el entrypoint restaura los docs desde aqui si no los encuentra en el volumen.
 RUN cp -rp /var/lib/asterisk/documentation /usr/share/asterisk-xml-docs
+
+# Locuciones del sistema (el entrypoint las copia a /var/lib/asterisk/sounds)
+COPY --from=builder /opt/asterisk-sounds/ /usr/share/asterisk-sounds/
 
 # Crear directorios necesarios
 RUN mkdir -p /var/log/asterisk \

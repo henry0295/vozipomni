@@ -32,6 +32,20 @@ if [ ! -f /var/lib/asterisk/documentation/core-en_US.xml ]; then
 fi
 
 # -------------------------------------------------------
+# 0c. Locuciones del sistema (es/en). El volumen asterisk_lib oculta las de la imagen;
+#     copiar las que falten sin pisar audios propios (cp -n).
+# -------------------------------------------------------
+SOUNDS_MARK=/var/lib/asterisk/sounds/.vozipomni-core-sounds-1.6.1
+if [ -d /usr/share/asterisk-sounds ] && [ ! -f "$SOUNDS_MARK" ]; then
+    echo "  [entrypoint] Instalando locuciones del sistema (es/en)..."
+    mkdir -p /var/lib/asterisk/sounds
+    cp -rn /usr/share/asterisk-sounds/. /var/lib/asterisk/sounds/
+    touch "$SOUNDS_MARK"
+    chown -R asterisk:asterisk /var/lib/asterisk/sounds
+    echo "  [entrypoint] ✓ Locuciones instaladas"
+fi
+
+# -------------------------------------------------------
 # 1. Placeholders vacíos para archivos dinámicos
 #    (evita que #include/#tryinclude falle al primer arranque)
 # -------------------------------------------------------

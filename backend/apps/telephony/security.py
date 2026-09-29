@@ -103,9 +103,13 @@ def outbound_policy_dialplan(policy=None):
         'exten => deny,1,NoOp(LLAMADA BLOQUEADA ${reason}: ${ARG1} via ${ARG3} desde ${src})',
         ' same => n,UserEvent(VozipFraud,Reason: ${reason},Number: ${ARG1},Dialed: ${ARG2},Trunk: ${ARG3},Source: ${src})',
         ' same => n,GotoIf($["${reason}" = "trunk_full" | "${reason}" = "global_limit" | "${reason}" = "extension_rate"]?busy)',
-        ' same => n,Playback(ss-noservice)',
+        # Sin contestar la llamada: locución como early media (183) y rechazo con código SIP
+        # (21 → 403 bloqueada, 34 → 503 sin canales) para que el softphone muestre el motivo.
+        ' same => n,Progress()',
+        ' same => n,Playback(ss-noservice,noanswer)',
         ' same => n,Hangup(21)',
-        ' same => n(busy),Playback(all-circuits-busy-now)',
+        ' same => n(busy),Progress()',
+        ' same => n,Playback(all-circuits-busy-now,noanswer)',
         ' same => n,Hangup(34)',
         '',
     ]
