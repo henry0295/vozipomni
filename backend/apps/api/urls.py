@@ -17,6 +17,7 @@ from apps.api.cc_viewsets import (
     DNCCheckView, BulkContactImportView, QualityStatsView,
 )
 from apps.telephony.views import SIPTrunkViewSet
+from apps.messaging.views import MetaWebhookView
 from apps.reports.views import ReportViewSet as ReportViewSetFull
 
 router = DefaultRouter()
@@ -57,6 +58,10 @@ urlpatterns = [
     path('auth/password-reset/', PasswordResetRequestView.as_view(), name='password_reset'),
     path('auth/password-reset/confirm/', PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
     path('auth/change-password/', ChangePasswordView.as_view(), name='change_password'),
+
+    # Webhook público de Meta (WhatsApp, Messenger, Instagram).
+    # Va ANTES del router: /api/webhooks/ también lo usa WebhookViewSet (webhooks salientes).
+    path('webhooks/whatsapp/<str:app_id>/', MetaWebhookView.as_view(), name='meta-webhook'),
 
     # ViewSets
     path('', include(router.urls)),

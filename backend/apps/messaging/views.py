@@ -29,7 +29,8 @@ WhatsApp (solo admin):
   /api/messaging/whatsapp/templates/                listar / crear / borrar plantillas
 
 Webhook público:
-  /api/messaging/webhooks/meta/<app_id>/            GET verificación, POST eventos
+  /api/webhooks/whatsapp/<app_id>/                  GET verificación, POST eventos
+  (/api/messaging/webhooks/meta/<app_id>/ se mantiene como alias por compatibilidad)
 """
 import hashlib
 import hmac
@@ -612,12 +613,12 @@ class WhatsAppProviderViewSet(viewsets.ModelViewSet):
     def webhook_info(self, request):
         """
         Webhook de ESTA instalación (cada servidor tiene el suyo):
-          {base_url}/api/messaging/webhooks/meta/{APP_ID}/
+          {base_url}/api/webhooks/whatsapp/{APP_ID}/
         base_url sale de PUBLIC_BASE_URL (.env) o, si no existe, del host con el que se abrió la web.
         """
         from .serializers import build_webhook_url, webhook_base_diagnostics
         info = webhook_base_diagnostics(request)
-        info['path_template'] = '/api/messaging/webhooks/meta/{APP_ID}/'
+        info['path_template'] = '/api/webhooks/whatsapp/{APP_ID}/'
         info['url_template'] = build_webhook_url(request, '{APP_ID}')
         info['providers'] = [{
             'id': p.id, 'name': p.name, 'app_id': p.app_id,
@@ -845,7 +846,7 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
 class MetaWebhookView(APIView):
     """
     Callback URL a configurar en Meta for Developers → WhatsApp → Configuración:
-        https://<dominio>/api/messaging/webhooks/meta/<APP_ID>/
+        https://<dominio>/api/webhooks/whatsapp/<APP_ID>/
     Suscribir el campo "messages".
     """
     authentication_classes = []

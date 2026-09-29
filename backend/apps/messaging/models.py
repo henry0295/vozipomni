@@ -218,7 +218,7 @@ class Message(models.Model):
 #
 # Modelo inspirado en OMniLeads: Proveedor (App de Meta) → Líneas (números)
 #   • WhatsAppProvider: App de Meta for Developers + token de Usuario del Sistema.
-#     El webhook se configura en Meta con la URL /api/messaging/webhooks/meta/<app_id>/
+#     El webhook se configura en Meta con la URL /api/webhooks/whatsapp/<app_id>/
 #     y el verify_token generado aquí.
 #   • WhatsAppLine: número de WhatsApp Business (Phone Number ID + WABA ID),
 #     vinculado 1:1 a un Channel para reutilizar Conversation/Message.

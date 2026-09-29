@@ -1100,7 +1100,7 @@ async function checkWebhook(p: any) {
 
 const webhookFaq = [
   { icon: 'i-heroicons-server', title: 'Cada servidor tiene su propia URL',
-    text: 'La URL es https://<dominio de ese servidor>/api/messaging/webhooks/meta/<APP_ID>/. Se arma con PUBLIC_BASE_URL del .env de cada instalación, así que dos servidores nunca comparten URL.' },
+    text: 'La URL es https://<dominio de ese servidor>/api/webhooks/whatsapp/<APP_ID>/. Se arma con PUBLIC_BASE_URL del .env de cada instalación, así que dos servidores nunca comparten URL.' },
   { icon: 'i-heroicons-key', title: 'El token de verificación es único',
     text: 'Se genera al azar al conectar cada App de Meta y solo existe en ese servidor. Puedes regenerarlo; después debes actualizarlo en Meta.' },
   { icon: 'i-heroicons-cube-transparent', title: 'Una App de Meta por instalación',

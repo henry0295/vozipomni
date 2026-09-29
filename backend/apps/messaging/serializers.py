@@ -153,7 +153,7 @@ class ConversationDetailSerializer(ConversationSerializer):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def build_webhook_url(request, app_id: str) -> str:
-    path = f"/api/messaging/webhooks/meta/{app_id}/"
+    path = f"/api/webhooks/whatsapp/{app_id}/"
     base = getattr(settings, 'PUBLIC_BASE_URL', '').rstrip('/')
     if base:
         return base + path

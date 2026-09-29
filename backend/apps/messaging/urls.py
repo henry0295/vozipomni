@@ -26,8 +26,9 @@ router.register(r'webchat/widgets', WebChatWidgetViewSet, basename='messaging-we
 router.register(r'meta/pages', MetaPageViewSet, basename='messaging-meta-page')
 
 urlpatterns = [
-    # Webhook público de Meta: WhatsApp, Messenger e Instagram (verificación GET + eventos POST)
-    path('webhooks/meta/<str:app_id>/', MetaWebhookView.as_view(), name='whatsapp-meta-webhook'),
+    # Ruta anterior del webhook de Meta. La oficial ahora es /api/webhooks/whatsapp/<app_id>/
+    # (apps/api/urls.py); esta se conserva para Apps que ya la tengan registrada en Meta.
+    path('webhooks/meta/<str:app_id>/', MetaWebhookView.as_view(), name='whatsapp-meta-webhook-legacy'),
     # API pública del widget de chat web
     path('webchat/public/<str:key>/config/', WebChatConfigView.as_view(), name='webchat-config'),
     path('webchat/public/<str:key>/session/', WebChatSessionView.as_view(), name='webchat-session'),
