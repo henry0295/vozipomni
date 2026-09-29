@@ -75,6 +75,9 @@ class ConversationSerializer(serializers.ModelSerializer):
     window_open = serializers.BooleanField(source='is_window_open', read_only=True)
     whatsapp_line_id = serializers.SerializerMethodField()
     campaign_name = serializers.CharField(source='campaign.name', read_only=True, default=None)
+    disposition_name = serializers.CharField(source='disposition.name', read_only=True, default=None)
+    tags = serializers.SerializerMethodField()
+    window_hours = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Conversation
@@ -82,10 +85,17 @@ class ConversationSerializer(serializers.ModelSerializer):
             'id', 'channel', 'channel_name', 'channel_type', 'whatsapp_line_id',
             'agent', 'agent_name', 'contact', 'display_name', 'contact_name',
             'contact_identifier', 'status', 'status_display',
-            'started_at', 'closed_at', 'last_message_at', 'last_inbound_at', 'window_open',
+            'started_at', 'closed_at', 'last_message_at', 'last_inbound_at', 'window_open', 'window_hours',
             'campaign', 'campaign_name', 'last_message', 'unread_count',
+            'disposition', 'disposition_name', 'tags', 'close_notes', 'closed_reason',
+            'assigned_at', 'first_response_at', 'subject', 'metadata',
         ]
-        read_only_fields = ['started_at', 'closed_at', 'last_message_at', 'last_inbound_at']
+        read_only_fields = ['started_at', 'closed_at', 'last_message_at', 'last_inbound_at',
+                            'disposition', 'close_notes', 'closed_reason', 'assigned_at',
+                            'first_response_at', 'metadata']
+
+    def get_tags(self, obj):
+        return [{'id': t.id, 'name': t.name, 'color': t.color} for t in obj.tags.all()]
 
     def get_agent_name(self, obj):
         if obj.agent and obj.agent.user:
@@ -95,7 +105,11 @@ class ConversationSerializer(serializers.ModelSerializer):
     def get_display_name(self, obj):
         if obj.contact:
             return obj.contact.full_name
-        return obj.contact_name or obj.contact_identifier
+        if obj.contact_name:
+            return obj.contact_name
+        if obj.channel.channel_type == 'webchat':
+            return 'Visitante web'
+        return obj.contact_identifier
 
     def get_last_message(self, obj):
         msg = obj.messages.order_by('-sent_at').first()
@@ -210,6 +224,7 @@ class WhatsAppLineSerializer(serializers.ModelSerializer):
     provider_name = serializers.CharField(source='provider.name', read_only=True)
     channel_id = serializers.IntegerField(source='channel.id', read_only=True)
     default_campaign_name = serializers.CharField(source='default_campaign.name', read_only=True, default=None)
+    time_condition_name = serializers.CharField(source='time_condition.name', read_only=True, default=None)
     templates_count = serializers.SerializerMethodField()
     open_conversations = serializers.SerializerMethodField()
 
@@ -220,7 +235,9 @@ class WhatsAppLineSerializer(serializers.ModelSerializer):
             'display_phone_number', 'verified_name', 'quality_rating', 'messaging_limit',
             'status', 'status_detail', 'webhook_subscribed',
             'default_campaign', 'default_campaign_name', 'auto_assign', 'max_chats_per_agent',
-            'welcome_message', 'is_active', 'last_sync_at',
+            'welcome_message', 'time_condition', 'time_condition_name', 'after_hours_message',
+            'opt_out_keywords', 'opt_in_keywords', 'opt_out_reply', 'opt_in_reply',
+            'is_active', 'last_sync_at',
             'templates_count', 'open_conversations', 'created_at', 'updated_at',
         ]
         read_only_fields = [

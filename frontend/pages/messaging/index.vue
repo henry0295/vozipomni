@@ -4,14 +4,17 @@
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Bandeja omnicanal</h1>
         <p class="text-sm text-gray-500 mt-1 flex items-center gap-2">
-          Conversaciones de WhatsApp en tiempo real
+          WhatsApp, email, chat web, Messenger e Instagram en tiempo real
           <UBadge :color="inbox.isConnected.value ? 'green' : 'gray'" variant="soft" size="xs">
             {{ inbox.isConnected.value ? 'En vivo' : 'Reconectando…' }}
           </UBadge>
         </p>
       </div>
-      <div class="flex gap-2">
-        <UButton v-if="isAdmin" icon="i-heroicons-cog-6-tooth" color="gray" variant="outline" to="/settings/whatsapp">Configurar WhatsApp</UButton>
+      <div class="flex flex-wrap gap-2">
+        <UButton icon="i-heroicons-chart-bar" color="gray" variant="outline" to="/messaging/metrics">Métricas</UButton>
+        <UButton icon="i-heroicons-megaphone" color="gray" variant="outline" to="/messaging/broadcasts">Envíos masivos</UButton>
+        <UButton icon="i-heroicons-adjustments-horizontal" color="gray" variant="outline" to="/messaging/settings">Respuestas y etiquetas</UButton>
+        <UButton v-if="isAdmin" icon="i-heroicons-cog-6-tooth" color="gray" variant="outline" to="/settings/channels">Canales</UButton>
         <UButton icon="i-heroicons-plus" color="green" @click="startOpen = true">Nueva conversación</UButton>
       </div>
     </div>
@@ -30,11 +33,13 @@
         <!-- Lista -->
         <div class="w-full md:w-96 border-r border-gray-200 flex flex-col" :class="selectedId ? 'hidden md:flex' : 'flex'">
           <div class="p-3 space-y-2 border-b border-gray-200">
-            <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Buscar nombre o número" size="sm" @keyup.enter="inbox.load()" />
+            <UInput v-model="search" icon="i-heroicons-magnifying-glass" placeholder="Buscar nombre, número o email" size="sm" @keyup.enter="inbox.load()" />
             <div class="flex gap-2">
               <USelect v-model="statusFilter" size="sm" class="flex-1" :options="statusOptions" @change="inbox.load()" />
-              <USelect v-model="lineFilter" size="sm" class="flex-1" :options="[{ label: 'Todas las líneas', value: '' }, ...lineOptions]" @change="inbox.load()" />
+              <USelect v-model="channelFilter" size="sm" class="flex-1" :options="channelOptions" @change="lineFilter = ''; inbox.load()" />
             </div>
+            <USelect v-if="channelFilter === 'whatsapp' && lineOptions.length > 1" v-model="lineFilter" size="sm"
+                     :options="[{ label: 'Todas las líneas', value: '' }, ...lineOptions]" @change="inbox.load()" />
             <div class="flex gap-1">
               <UButton v-for="q in quickFilters" :key="q.value" size="2xs" :color="quick === q.value ? 'primary' : 'gray'"
                        :variant="quick === q.value ? 'solid' : 'ghost'" @click="setQuick(q.value)">{{ q.label }}</UButton>
@@ -45,7 +50,12 @@
             <button v-for="c in inbox.conversations.value" :key="c.id" type="button"
                     class="w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 flex gap-3"
                     :class="{ 'bg-green-50': selectedId === c.id }" @click="selectedId = c.id">
-              <UAvatar :alt="c.display_name" size="md" class="flex-shrink-0" />
+              <div class="relative flex-shrink-0">
+                <UAvatar :alt="c.display_name" size="md" />
+                <span class="absolute -bottom-1 -right-1 rounded-full bg-white p-0.5">
+                  <UIcon :name="channelMeta(c.channel_type).icon" class="w-3.5 h-3.5" :class="channelMeta(c.channel_type).color" />
+                </span>
+              </div>
               <div class="flex-1 min-w-0">
                 <div class="flex justify-between gap-2">
                   <p class="font-medium truncate" :class="{ 'font-bold': c.unread_count }">{{ c.display_name }}</p>
@@ -57,7 +67,8 @@
                 <div class="flex items-center gap-1 mt-1 flex-wrap">
                   <UBadge size="xs" :color="c.agent ? 'gray' : 'amber'" variant="soft">{{ c.agent_name || 'Sin asignar' }}</UBadge>
                   <UBadge v-if="c.status === 'closed'" size="xs" color="gray" variant="outline">Cerrada</UBadge>
-                  <UBadge v-else-if="!c.window_open" size="xs" color="amber" variant="outline">Fuera de 24 h</UBadge>
+                  <UBadge v-else-if="c.window_hours && !c.window_open" size="xs" color="amber" variant="outline">Ventana cerrada</UBadge>
+                  <UBadge v-for="t in (c.tags || []).slice(0, 2)" :key="t.id" size="xs" :color="t.color || 'gray'" variant="soft">{{ t.name }}</UBadge>
                   <UBadge v-if="c.unread_count" size="xs" color="green">{{ c.unread_count }}</UBadge>
                 </div>
               </div>
@@ -90,8 +101,12 @@
 </template>
 
 <script setup lang="ts">
+import { CHANNEL_FILTER_OPTIONS, channelMeta } from '~/utils/channels'
+
 useHead({ title: 'Bandeja omnicanal - VozipOmni' })
 
+const channelOptions = CHANNEL_FILTER_OPTIONS
+const channelFilter = ref('')
 const http = useHttp()
 const toast = useToast()
 const authStore = useAuthStore()
@@ -138,6 +153,7 @@ const inbox = useMessaging(() => {
   if (statusFilter.value === 'active') q.active = 'true'
   else if (statusFilter.value) q.status = statusFilter.value
   if (lineFilter.value) q.line = lineFilter.value
+  if (channelFilter.value) q.channel_type = channelFilter.value
   if (quick.value === 'unassigned') q.unassigned = 'true'
   if (quick.value === 'mine') q.mine = 'true'
   return q

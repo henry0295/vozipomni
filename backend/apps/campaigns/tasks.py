@@ -45,6 +45,10 @@ def _build_campaign_config(campaign):
         'dnc_enabled': campaign.dnc_enabled,
         'timezone': campaign.timezone,
         'vip_priority_boost': campaign.vip_priority_boost,
+        # Detección de contestador (solo predictivo: el contacto contesta antes que el agente)
+        'amd_enabled': bool(getattr(campaign, 'amd_enabled', False)),
+        'amd_action': getattr(campaign, 'amd_action', 'hangup') or 'hangup',
+        'amd_message': getattr(campaign, 'amd_message', '') or '',
         'audio_file': 'welcome',       # para call_blasting
         'max_concurrent_calls': 50,    # para call_blasting
         'batch_delay': 5,              # para call_blasting

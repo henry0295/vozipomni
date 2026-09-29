@@ -10,8 +10,7 @@ import logging
 import re
 from datetime import datetime, timezone as dt_timezone
 
-from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import Channel, Conversation, Message, WhatsAppLine
@@ -91,88 +90,70 @@ def _parse_inbound(msg: dict):
 
 
 def auto_assign(conversation: Conversation, line: WhatsAppLine | None = None):
-    """Asigna la conversación al agente conectado con menos chats abiertos."""
-    from apps.agents.models import Agent
-
-    if conversation.agent_id:
-        return conversation.agent
-    line = line or getattr(conversation.channel, 'whatsapp_line', None)
-    if line and not line.auto_assign:
-        return None
-
-    agents = Agent.objects.exclude(status='offline').filter(user__is_active=True)
-    if line and line.default_campaign_id:
-        in_campaign = agents.filter(campaigns__id=line.default_campaign_id)
-        if in_campaign.exists():
-            agents = in_campaign
-
-    limit = line.max_chats_per_agent if line else 5
-    candidate = agents.annotate(
-        open_chats=Count('conversations', filter=Q(conversations__status__in=['open', 'waiting']))
-    ).filter(open_chats__lt=limit).order_by('open_chats', 'id')
-    # Preferir agentes en estado "disponible"; si no hay, cualquier conectado (no en pausa)
-    agent = (candidate.filter(status='available').first()
-             or candidate.exclude(status='break').first())
-    if agent:
-        conversation.agent = agent
-        conversation.status = 'open'
-        conversation.save(update_fields=['agent', 'status'])
-        logger.info(f"[WhatsApp] Conversación {conversation.id} asignada a {agent.agent_id}")
-    return agent
+    """Compatibilidad: la lógica vive en routing.auto_assign (común a todos los canales)."""
+    from .routing import auto_assign as _auto_assign
+    return _auto_assign(conversation, line)
 
 
-def _get_or_create_conversation(line: WhatsAppLine, wa_id: str, profile_name: str):
-    conv = Conversation.objects.filter(
-        channel=line.channel, contact_identifier=wa_id,
-    ).exclude(status='closed').order_by('-started_at').first()
-    created = False
-    if not conv:
-        conv = Conversation.objects.create(
-            channel=line.channel,
-            contact_identifier=wa_id,
-            contact=_find_contact(wa_id),
-            contact_name=profile_name or '',
-            campaign=line.default_campaign,
-            status='waiting',
-        )
-        created = True
-    elif profile_name and conv.contact_name != profile_name:
-        conv.contact_name = profile_name
-        conv.save(update_fields=['contact_name'])
-    return conv, created
+def _keywords(value: str):
+    return {k.strip().upper() for k in (value or '').split(',') if k.strip()}
+
+
+def _handle_opt_keywords(line: WhatsAppLine, conv: Conversation, body: str) -> bool:
+    """
+    Palabras clave de baja/alta (ej: BAJA / ALTA). Actualiza el consentimiento de
+    WhatsApp de los contactos con ese número y confirma al cliente.
+    Devuelve True si el mensaje era una palabra clave.
+    """
+    from apps.contacts.models import Contact
+
+    word = (body or '').strip().upper().rstrip('.!')
+    if not word:
+        return False
+    opt_out = word in _keywords(line.opt_out_keywords)
+    opt_in = word in _keywords(line.opt_in_keywords)
+    if not (opt_out or opt_in):
+        return False
+
+    tail = re.sub(r'\D', '', conv.contact_identifier)[-10:]
+    contacts = Contact.objects.filter(
+        Q(phone__endswith=tail) | Q(phone2__endswith=tail) | Q(phone3__endswith=tail)
+    ) if tail else Contact.objects.none()
+    now = timezone.now()
+    if opt_out:
+        contacts.update(whatsapp_opt_in=False, whatsapp_opt_in_at=now, whatsapp_opt_in_source='keyword_out')
+    else:
+        contacts.update(whatsapp_opt_in=True, whatsapp_opt_in_at=now, whatsapp_opt_in_source='keyword')
+    conv.metadata = {**(conv.metadata or {}), 'whatsapp_opt_in': bool(opt_in), 'opt_changed_at': now.isoformat()}
+    conv.save(update_fields=['metadata'])
+
+    reply = (line.opt_out_reply if opt_out else line.opt_in_reply) or ''
+    if reply.strip():
+        try:
+            create_outbound(conv, body=reply.strip(), sender=None, system=True)
+        except Exception as e:
+            logger.warning(f"[WhatsApp] No se pudo confirmar opt-in/out: {e}")
+    logger.info(f"[WhatsApp] {'Opt-out' if opt_out else 'Opt-in'} de {conv.contact_identifier} "
+                f"({contacts.count()} contacto/s)")
+    return True
 
 
 def _handle_inbound(line: WhatsAppLine, msg: dict, profiles: dict):
-    external_id = msg.get('id')
-    if external_id and Message.objects.filter(external_id=external_id).exists():
-        return  # Meta reintenta webhooks: evitar duplicados
+    from .routing import ingest_inbound, send_auto_replies
 
     wa_id = msg.get('from', '')
     mtype, body, meta = _parse_inbound(msg)
 
-    with transaction.atomic():
-        conv, created = _get_or_create_conversation(line, wa_id, profiles.get(wa_id, ''))
-        sent_at = _ts(msg.get('timestamp'))
-        message = Message.objects.create(
-            conversation=conv,
-            direction='inbound',
-            message_type=mtype,
-            body=body,
-            status='received',
-            metadata=meta,
-            sent_at=sent_at,
-            external_id=external_id,
-        )
-        conv.last_message_at = sent_at
-        conv.last_inbound_at = sent_at
-        fields = ['last_message_at', 'last_inbound_at']
-        if conv.status == 'closed':
-            conv.status = 'waiting'
-            fields.append('status')
-        conv.save(update_fields=fields)
-
-    if not conv.agent_id:
-        auto_assign(conv, line)
+    result = ingest_inbound(
+        line.channel, wa_id,
+        message_type=mtype, body=body, metadata=meta,
+        external_id=msg.get('id'), sent_at=_ts(msg.get('timestamp')),
+        name=profiles.get(wa_id, ''), contact=_find_contact(wa_id), config=line,
+        auto_replies=False,
+    )
+    if result is None:
+        return  # Meta reintenta webhooks: duplicado
+    conv, message, created = result
 
     # Descargar media en segundo plano
     if meta.get('media_id'):
@@ -182,14 +163,10 @@ def _handle_inbound(line: WhatsAppLine, msg: dict, profiles: dict):
         except Exception as e:
             logger.warning(f"[WhatsApp] No se pudo encolar descarga de media: {e}")
 
-    push(conv, 'message.new', {'message_id': message.id, 'direction': 'inbound',
-                               'preview': body[:120], 'created': created})
-
-    if created and line.welcome_message:
-        try:
-            create_outbound(conv, body=line.welcome_message, sender=None, system=True)
-        except Exception as e:
-            logger.warning(f"[WhatsApp] Error enviando bienvenida: {e}")
+    # Palabra clave de baja/alta: se confirma y no se envían otras respuestas automáticas
+    if mtype == 'text' and _handle_opt_keywords(line, conv, body):
+        return
+    send_auto_replies(conv, line, created)
 
 
 def _handle_status(line: WhatsAppLine, st: dict):
@@ -212,8 +189,21 @@ def _handle_status(line: WhatsAppLine, st: dict):
             msg.error_message = f"{e.get('code', '')} {e.get('title', '')} {(e.get('error_data') or {}).get('details', '')}".strip()
             fields.append('error_message')
     msg.save(update_fields=fields)
+    _sync_broadcast_recipient(msg)
     push(msg.conversation, 'message.status', {'message_id': msg.id, 'message_status': new_status,
                                               'error': msg.error_message})
+
+
+def _sync_broadcast_recipient(msg: Message):
+    """Refleja el estado de entrega en el destinatario del envío masivo (si aplica)."""
+    try:
+        from .models import WhatsAppBroadcastRecipient
+        WhatsAppBroadcastRecipient.objects.filter(message=msg).update(
+            status=msg.status if msg.status in ('sent', 'delivered', 'read', 'failed') else 'sent',
+            error=msg.error_message or '',
+        )
+    except Exception as e:
+        logger.debug(f"[WhatsApp] No se pudo actualizar destinatario de envío masivo: {e}")
 
 
 def process_webhook_payload(provider, payload: dict):
@@ -254,39 +244,65 @@ class WindowClosedError(Exception):
     """Fuera de la ventana de 24 h: solo se permiten plantillas."""
 
 
-def send_outbound(message: Message) -> Message:
-    """Envía un Message saliente ya creado. Actualiza status/external_id/error."""
-    conv = message.conversation
-    line = getattr(conv.channel, 'whatsapp_line', None)
-    if conv.channel.channel_type != 'whatsapp' or not line:
-        # Otros canales aún sin proveedor: se registra el mensaje localmente
-        message.status = 'sent'
-        message.save(update_fields=['status'])
-        return message
+MEDIA_TYPES = ('image', 'video', 'audio', 'document', 'sticker')
 
+
+def _send_whatsapp(message: Message, line: WhatsAppLine):
     client = client_for_line(line)
-    to = conv.contact_identifier
+    to = message.conversation.contact_identifier
     meta = message.metadata or {}
-    try:
-        if message.message_type == 'template':
-            resp = client.send_template(
-                line.phone_number_id, to,
-                name=meta.get('template_name'),
-                language=meta.get('language', 'es'),
-                body_params=meta.get('body_params') or [],
-                header_params=meta.get('header_params') or [],
-            )
-        elif message.message_type in ('image', 'video', 'audio', 'document') and message.media_url:
-            resp = client.send_media(line.phone_number_id, to, message.message_type, message.media_url,
+    if message.message_type == 'template':
+        return client.send_template(
+            line.phone_number_id, to,
+            name=meta.get('template_name'),
+            language=meta.get('language', 'es'),
+            body_params=meta.get('body_params') or [],
+            header_params=meta.get('header_params') or [],
+        )
+    if message.message_type in MEDIA_TYPES:
+        media_id = meta.get('wa_media_id')
+        if not media_id and meta.get('local_path'):
+            # Subir el archivo a Meta (queda disponible 30 días) y enviar por ID
+            media_id = client.upload_media(line.phone_number_id, meta['local_path'],
+                                           meta.get('mime_type') or 'application/octet-stream')
+            message.metadata = {**meta, 'wa_media_id': media_id}
+            message.save(update_fields=['metadata'])
+        if media_id:
+            return client.send_media_id(line.phone_number_id, to, message.message_type, media_id,
+                                        caption=message.body or None, filename=meta.get('filename'))
+        if message.media_url:
+            return client.send_media(line.phone_number_id, to, message.message_type, message.media_url,
                                      caption=message.body or None, filename=meta.get('filename'))
-        else:
-            resp = client.send_text(line.phone_number_id, to, message.body)
-        message.external_id = extract_message_id(resp)
+    return client.send_text(line.phone_number_id, to, message.body)
+
+
+def send_outbound(message: Message) -> Message:
+    """
+    Envía un Message saliente ya creado por el canal de su conversación.
+    Actualiza status / external_id / error y notifica por WebSocket.
+    """
+    conv = message.conversation
+    channel = conv.channel
+    ctype = channel.channel_type
+    try:
+        if ctype == 'whatsapp' and getattr(channel, 'whatsapp_line', None):
+            message.external_id = extract_message_id(_send_whatsapp(message, channel.whatsapp_line))
+        elif ctype == 'email' and getattr(channel, 'email_account', None):
+            from .email_channel import send_email_message
+            message.external_id = send_email_message(message)
+        elif ctype in ('messenger', 'instagram') and getattr(channel, 'meta_page', None):
+            from .meta_pages import send_page_message
+            message.external_id = send_page_message(message)
+        # webchat / otros: el visitante lo recoge por la API pública (no hay envío externo)
         message.status = 'sent'
         message.error_message = ''
     except WhatsAppAPIError as e:
         message.status = 'failed'
         message.error_message = e.message + (f" — {e.details}" if e.details else '')
+    except Exception as e:
+        logger.exception(f"[Messaging] Error enviando mensaje {message.id} por {ctype}")
+        message.status = 'failed'
+        message.error_message = str(e)[:500]
     message.save(update_fields=['external_id', 'status', 'error_message'])
     push(conv, 'message.status', {'message_id': message.id, 'message_status': message.status,
                                   'error': message.error_message})
@@ -310,14 +326,19 @@ def create_outbound(conversation: Conversation, body: str = '', sender=None, *,
                     message_type: str = 'text', metadata: dict | None = None,
                     media_url: str | None = None, system: bool = False,
                     enforce_window: bool = True) -> Message:
-    """Crea y envía un mensaje saliente respetando la ventana de 24 h de WhatsApp."""
-    if (enforce_window and message_type != 'template'
-            and conversation.channel.channel_type == 'whatsapp'
-            and not conversation.is_window_open):
-        raise WindowClosedError(
-            'Han pasado más de 24 h desde el último mensaje del cliente. '
-            'Para escribirle debes usar una plantilla aprobada por Meta.'
-        )
+    """Crea y envía un mensaje saliente respetando la ventana de mensajería del canal."""
+    ctype = conversation.channel.channel_type
+    if enforce_window and message_type != 'template' and not conversation.is_window_open:
+        if ctype == 'whatsapp':
+            raise WindowClosedError(
+                'Han pasado más de 24 h desde el último mensaje del cliente. '
+                'Para escribirle debes usar una plantilla aprobada por Meta.'
+            )
+        if ctype in ('messenger', 'instagram'):
+            raise WindowClosedError(
+                'Han pasado más de 7 días desde el último mensaje del cliente. '
+                'Meta no permite escribirle hasta que vuelva a escribir.'
+            )
 
     now = timezone.now()
     message = Message.objects.create(
@@ -335,6 +356,9 @@ def create_outbound(conversation: Conversation, body: str = '', sender=None, *,
     updates = {'last_message_at': now}
     if conversation.status != 'open' and conversation.agent_id:
         updates['status'] = 'open'
+    # Métrica: primera respuesta humana (no cuentan bienvenida / fuera de horario / masivos)
+    if sender is not None and not system and not conversation.first_response_at:
+        updates['first_response_at'] = now
     for k, v in updates.items():
         setattr(conversation, k, v)
     conversation.save(update_fields=list(updates))

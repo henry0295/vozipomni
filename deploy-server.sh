@@ -127,11 +127,11 @@ fi
 # ─── PASO 2: Reconstruir imágenes con el nuevo código ────────────────────────
 echo ""
 echo -e "${YELLOW}▶  Paso 2/7 — Reconstruyendo imágenes Docker...${NC}"
-log_info "Reconstruyendo: backend, celery_worker, celery_beat, dialer_engine, websocket_server, frontend, nginx"
+log_info "Reconstruyendo: backend, daphne, celery_worker, celery_beat, dialer_engine, websocket_server, frontend, nginx"
 
 $COMPOSE_CMD -f docker-compose.prod.yml build \
     --build-arg BUILDKIT_INLINE_CACHE=1 \
-    backend celery_worker celery_beat dialer_engine websocket_server frontend nginx 2>&1
+    backend daphne celery_worker celery_beat dialer_engine websocket_server frontend nginx 2>&1
 
 log_ok "Imágenes reconstruidas"
 

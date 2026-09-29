@@ -193,6 +193,49 @@ class WhatsAppCloudClient:
             media_type: media,
         })
 
+    def upload_media(self, phone_number_id: str, path: str, mime_type: str) -> str:
+        """Sube un archivo local a Meta y devuelve el media_id (válido 30 días)."""
+        import os
+        try:
+            with open(path, 'rb') as fh:
+                resp = requests.post(
+                    self._url(f'{phone_number_id}/media'),
+                    headers={'Authorization': f'Bearer {self.token}'},
+                    data={'messaging_product': 'whatsapp', 'type': mime_type},
+                    files={'file': (os.path.basename(path), fh, mime_type)},
+                    timeout=120,
+                )
+        except OSError as e:
+            raise WhatsAppAPIError(f'No se pudo leer el archivo: {e}')
+        except requests.RequestException as e:
+            raise WhatsAppAPIError(f'No se pudo subir el archivo a Meta: {e}')
+        try:
+            data = resp.json()
+        except ValueError:
+            data = {}
+        if resp.status_code >= 400 or 'error' in data:
+            err = data.get('error', {}) if isinstance(data, dict) else {}
+            code = err.get('code')
+            raise WhatsAppAPIError(
+                _ERROR_HINTS.get(code) or err.get('message') or f'Error subiendo archivo ({resp.status_code})',
+                code=code, subcode=err.get('error_subcode'),
+                details=(err.get('error_data') or {}).get('details'), status=resp.status_code,
+            )
+        return data.get('id', '')
+
+    def send_media_id(self, phone_number_id: str, to: str, media_type: str, media_id: str,
+                      caption: str = None, filename: str = None):
+        media = {'id': media_id}
+        if caption and media_type in ('image', 'video', 'document'):
+            media['caption'] = caption
+        if filename and media_type == 'document':
+            media['filename'] = filename
+        return self.send(phone_number_id, {
+            'to': normalize_wa_number(to),
+            'type': media_type,
+            media_type: media,
+        })
+
     def mark_read(self, phone_number_id: str, message_id: str):
         return self._request('POST', f'{phone_number_id}/messages', json={
             'messaging_product': 'whatsapp',

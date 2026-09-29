@@ -111,6 +111,22 @@ class Campaign(models.Model):
                                           help_text='Segundos para revisar datos del contacto antes de marcar.')
     timezone = models.CharField(max_length=50, default='America/Bogota', verbose_name='Zona horaria campaña')
     vip_priority_boost = models.IntegerField(default=10, verbose_name='Boost prioridad VIP')
+
+    # Detección de contestador automático (AMD) — marcador predictivo
+    AMD_ACTIONS = [
+        ('hangup', 'Colgar'),
+        ('message', 'Dejar mensaje grabado'),
+    ]
+    amd_enabled = models.BooleanField(
+        default=False, verbose_name='Detectar contestador (AMD)',
+        help_text='Solo marcador predictivo: las llamadas atendidas por buzón no pasan a los agentes.'
+    )
+    amd_action = models.CharField(max_length=20, choices=AMD_ACTIONS, default='hangup',
+                                  verbose_name='Acción ante contestador')
+    amd_message = models.CharField(
+        max_length=200, blank=True, default='', verbose_name='Audio para el contestador',
+        help_text='Nombre del audio en Asterisk (sin extensión), ej: custom/mensaje-campana'
+    )
     required_skills = models.ManyToManyField(
         'agents.AgentGroup', blank=True, related_name='campaigns_requiring',
         verbose_name='Skills requeridos',

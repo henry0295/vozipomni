@@ -23,6 +23,7 @@ class Call(models.Model):
         ('failed', 'Fallida'),
         ('cancelled', 'Cancelada'),
         ('voicemail', 'Buzón de Voz'),
+        ('machine', 'Contestador automático'),
         ('abandoned', 'Abandonada'),
         ('transferred', 'Transferida'),
     ]

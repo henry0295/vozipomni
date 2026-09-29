@@ -51,7 +51,8 @@ export const useMessaging = (query: () => Record<string, any> = () => ({})) => {
     if (document.visibilityState === 'visible' && document.hasFocus()) return
     try {
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('Nuevo mensaje de WhatsApp', { body: evt.preview || '', tag: `conv-${evt.conversation_id}` })
+        const channel = ({ whatsapp: 'WhatsApp', email: 'email', webchat: 'chat web', messenger: 'Messenger', instagram: 'Instagram' } as Record<string, string>)[evt.channel_type] || 'chat'
+        new Notification(`Nuevo mensaje de ${channel}`, { body: evt.preview || '', tag: `conv-${evt.conversation_id}` })
       }
     } catch { /* ignore */ }
   }

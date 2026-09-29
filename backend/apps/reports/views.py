@@ -168,7 +168,8 @@ class ReportViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Formato inválido (csv|xlsx)'}, status=status.HTTP_400_BAD_REQUEST)
 
         start, end = _parse_date_range(request)
-        filters = {k: request.query_params.get(k) for k in ('campaign', 'agent', 'queue', 'direction', 'status')
+        filters = {k: request.query_params.get(k)
+                   for k in ('campaign', 'agent', 'queue', 'direction', 'status', 'channel_type')
                    if request.query_params.get(k)}
         headers, rows = build_dataset(dataset, start, end, filters)
         content, ctype, ext = render_table(headers, rows, fmt, DATASETS[dataset])

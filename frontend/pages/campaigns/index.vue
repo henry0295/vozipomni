@@ -274,6 +274,24 @@
                 title="Configuración de Rendimiento"
                 description="Ajusta las llamadas simultáneas según tu capacidad de agentes y líneas disponibles. Más llamadas = mayor throughput pero requiere más recursos."
               />
+
+              <!-- Detección de contestador (AMD) -->
+              <div class="rounded-lg border border-gray-200 p-4 space-y-3">
+                <UCheckbox v-model="newCampaign.amd_enabled" :disabled="newCampaign.dialer_type !== 'predictive'"
+                           label="Detectar contestador automático (AMD)" />
+                <p class="text-xs text-gray-500">
+                  Solo en marcación predictiva: las llamadas atendidas por un buzón de voz no se pasan a los agentes.
+                  Las personas que tardan en hablar pueden detectarse como contestador; revisa los resultados en los reportes.
+                </p>
+                <div v-if="newCampaign.amd_enabled" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <UFormGroup label="Si es contestador">
+                    <USelect v-model="newCampaign.amd_action" :options="[{ label: 'Colgar', value: 'hangup' }, { label: 'Dejar mensaje grabado', value: 'message' }]" />
+                  </UFormGroup>
+                  <UFormGroup v-if="newCampaign.amd_action === 'message'" label="Audio del mensaje" help="Nombre en Asterisk sin extensión, ej: custom/mensaje-campana">
+                    <UInput v-model="newCampaign.amd_message" placeholder="custom/mensaje-campana" />
+                  </UFormGroup>
+                </div>
+              </div>
             </div>
           </template>
         </UTabs>
@@ -333,6 +351,9 @@ const emptyForm = () => ({
   end_date: '',
   max_concurrent_calls: 5,
   max_attempts: 3,
+  amd_enabled: false,
+  amd_action: 'hangup',
+  amd_message: '',
 })
 
 const newCampaign = ref(emptyForm())
@@ -559,6 +580,9 @@ const createCampaignAction = async () => {
     if (payload.campaign_type === 'inbound') {
       delete payload.dialer_type
     }
+    // El formulario usa max_attempts; el modelo se llama max_retries
+    payload.max_retries = payload.max_attempts
+    if (payload.dialer_type !== 'predictive') payload.amd_enabled = false
 
     await $fetch('/api/campaigns/', {
       method: 'POST',

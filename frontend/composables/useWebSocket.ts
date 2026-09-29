@@ -76,7 +76,7 @@ export const useWebSocket = (options: { autoCleanup?: boolean } = {}) => {
     socket.onclose = (ev) => {
       isConnected.value = false
       socket = null
-      if (ev.code === 4403) return // sin permiso: no reintentar
+      if (ev.code === 4403 || ev.code === 4404) return // sin permiso / ruta inexistente: no reintentar
       scheduleReconnect()
     }
   }

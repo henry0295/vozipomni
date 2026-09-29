@@ -255,6 +255,15 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': crontab(hour=1, minute=30),  # 01:30 cada día
     },
     # ── Plantillas de WhatsApp (estado de aprobación en Meta) ────────────────
+    # ── Canal email (IMAP) y envíos masivos programados ──────────────────────
+    'poll-email-accounts': {
+        'task': 'apps.messaging.tasks.poll_email_accounts',
+        'schedule': 60.0,
+    },
+    'dispatch-scheduled-broadcasts': {
+        'task': 'apps.messaging.tasks.dispatch_scheduled_broadcasts',
+        'schedule': 60.0,
+    },
     'sync-whatsapp-templates': {
         'task': 'apps.messaging.tasks.sync_all_whatsapp_templates',
         'schedule': crontab(minute=0, hour='*/2'),  # cada 2 horas
@@ -307,6 +316,7 @@ REST_FRAMEWORK = {
         'user': '200/minute',  # usuarios autenticados
         'login': '5/minute',   # solo para el endpoint de login
         'password_reset': '5/hour',  # recuperación de contraseña
+        'webchat': '60/minute',      # API pública del widget de chat web (por IP)
     }
 }
 

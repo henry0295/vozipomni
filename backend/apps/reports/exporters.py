@@ -26,13 +26,14 @@ DATASETS = {
     'agents': 'Rendimiento de agentes',
     'daily': 'Resumen diario',
     'queues': 'Resumen por cola',
+    'chats': 'Conversaciones (WhatsApp, email, chat web, redes)',
 }
 
 STATUS_LABELS = {
     'initiated': 'Iniciada', 'ringing': 'Timbrando', 'answered': 'Contestada',
     'completed': 'Completada', 'busy': 'Ocupado', 'no_answer': 'No contestada',
     'failed': 'Fallida', 'cancelled': 'Cancelada', 'voicemail': 'Buzón',
-    'abandoned': 'Abandonada', 'transferred': 'Transferida',
+    'machine': 'Contestador', 'abandoned': 'Abandonada', 'transferred': 'Transferida',
 }
 
 MISSED = ['no_answer', 'busy', 'cancelled']
@@ -179,11 +180,55 @@ def build_queues(start, end, filters):
     return headers, rows
 
 
+def build_chats(start, end, filters):
+    from django.db.models import Count, Q
+    from apps.messaging.models import Channel, Conversation
+
+    headers = [
+        'ID', 'Canal', 'Contacto', 'Identificador', 'Agente', 'Campaña', 'Estado',
+        'Inicio', 'Asignada', 'Primera respuesta (s)', 'Cierre', 'Duración (s)',
+        'Tipificación', 'Etiquetas', 'Mensajes entrantes', 'Mensajes salientes', 'Notas de cierre',
+    ]
+    f = filters or {}
+    qs = Conversation.objects.filter(started_at__gte=start, started_at__lte=end) \
+        .exclude(closed_reason='broadcast', last_inbound_at__isnull=True)
+    if f.get('campaign'):
+        qs = qs.filter(campaign_id=f['campaign'])
+    if f.get('agent'):
+        qs = qs.filter(agent_id=f['agent'])
+    if f.get('channel_type'):
+        qs = qs.filter(channel__channel_type=f['channel_type'])
+    qs = qs.select_related('channel', 'agent__user', 'contact', 'campaign', 'disposition') \
+        .prefetch_related('tags').annotate(
+            n_in=Count('messages', filter=Q(messages__direction='inbound')),
+            n_out=Count('messages', filter=Q(messages__direction='outbound')),
+        ).order_by('started_at')[:MAX_ROWS]
+    types = dict(Channel.CHANNEL_TYPES)
+    status_labels = {'open': 'Abierta', 'waiting': 'En espera', 'closed': 'Cerrada'}
+    rows = []
+    for c in qs:
+        agent_name = ''
+        if c.agent and c.agent.user:
+            agent_name = c.agent.user.get_full_name() or c.agent.user.username
+        frt = int((c.first_response_at - c.started_at).total_seconds()) if c.first_response_at else ''
+        aht = int((c.closed_at - c.started_at).total_seconds()) if c.closed_at else ''
+        rows.append([
+            c.id, types.get(c.channel.channel_type, c.channel.channel_type),
+            c.contact.full_name if c.contact else (c.contact_name or ''), c.contact_identifier,
+            agent_name, c.campaign.name if c.campaign else '', status_labels.get(c.status, c.status),
+            _fmt_dt(c.started_at), _fmt_dt(c.assigned_at), frt, _fmt_dt(c.closed_at), aht,
+            c.disposition.name if c.disposition else '', ', '.join(t.name for t in c.tags.all()),
+            c.n_in, c.n_out, c.close_notes,
+        ])
+    return headers, rows
+
+
 BUILDERS = {
     'calls': build_calls,
     'agents': build_agents,
     'daily': build_daily,
     'queues': build_queues,
+    'chats': build_chats,
 }
 
 # report_type del modelo Report → dataset

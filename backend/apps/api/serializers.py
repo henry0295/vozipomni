@@ -413,8 +413,12 @@ class ContactSerializer(serializers.ModelSerializer):
     
     def validate(self, attrs):
         """Validaciones adicionales"""
-        # Validar que al menos un teléfono esté presente
-        if not any([attrs.get('phone'), attrs.get('phone2'), attrs.get('phone3')]):
+        # Validar que al menos un teléfono esté presente (en PATCH, considerar los valores actuales)
+        def _val(field):
+            if field in attrs:
+                return attrs.get(field)
+            return getattr(self.instance, field, None) if self.instance else None
+        if not any([_val('phone'), _val('phone2'), _val('phone3')]):
             raise serializers.ValidationError({
                 'phone': 'Debe proporcionar al menos un número de teléfono'
             })
@@ -425,7 +429,14 @@ class ContactSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'priority': 'La prioridad debe estar entre 0 y 10'
             })
-        
+
+        # Registrar cuándo cambia el consentimiento de WhatsApp
+        if 'whatsapp_opt_in' in attrs and (
+                not self.instance or attrs['whatsapp_opt_in'] != self.instance.whatsapp_opt_in):
+            from django.utils import timezone as dj_tz
+            attrs['whatsapp_opt_in_at'] = dj_tz.now()
+            attrs.setdefault('whatsapp_opt_in_source', 'agente')
+
         return attrs
 
 

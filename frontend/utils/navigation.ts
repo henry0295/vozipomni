@@ -42,8 +42,20 @@ export const NAVIGATION: NavItem[] = [
     roles: ADMIN_SUP,
     children: [
       { label: 'Monitor en vivo', icon: 'i-heroicons-signal', to: '/supervisor', roles: ADMIN_SUP },
-      { label: 'Bandeja omnicanal', icon: 'i-heroicons-chat-bubble-left-right', to: '/messaging', roles: ADMIN_SUP },
       { label: 'Auditoría de gestiones', icon: 'i-heroicons-clipboard-document-check', to: '/audit', roles: ADMIN_SUP },
+    ],
+  },
+
+  {
+    id: 'omnichannel',
+    label: 'Omnicanal',
+    icon: 'i-heroicons-chat-bubble-left-right',
+    roles: ADMIN_SUP_ANALYST,
+    children: [
+      { label: 'Bandeja omnicanal', icon: 'i-heroicons-inbox-stack', to: '/messaging', roles: ADMIN_SUP },
+      { label: 'Métricas de chat', icon: 'i-heroicons-chart-bar-square', to: '/messaging/metrics', roles: ADMIN_SUP_ANALYST },
+      { label: 'Envíos masivos', icon: 'i-heroicons-megaphone', to: '/messaging/broadcasts', roles: ADMIN_SUP },
+      { label: 'Respuestas y etiquetas', icon: 'i-heroicons-bolt', to: '/messaging/settings', roles: ADMIN_SUP },
     ],
   },
 
@@ -112,6 +124,7 @@ export const NAVIGATION: NavItem[] = [
     children: [
       { label: 'Usuarios y roles', icon: 'i-heroicons-identification', to: '/users', roles: ADMIN },
       { label: 'WhatsApp Business', icon: 'i-heroicons-chat-bubble-oval-left-ellipsis', to: '/settings/whatsapp', roles: ADMIN },
+      { label: 'Email, chat web y redes', icon: 'i-heroicons-globe-alt', to: '/settings/channels', roles: ADMIN },
       { label: 'Grupos y pausas', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced', roles: ADMIN_SUP },
       { label: 'Webhooks', icon: 'i-heroicons-link', to: '/webhooks', roles: ADMIN_SUP },
       { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings', roles: ADMIN },

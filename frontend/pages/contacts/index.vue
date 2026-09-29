@@ -87,6 +87,10 @@
           </UBadge>
         </template>
 
+        <template #whatsappOptIn-data="{ row }">
+          <UToggle :model-value="row.whatsappOptIn" aria-label="Acepta mensajes de WhatsApp" @update:model-value="toggleOptIn(row)" />
+        </template>
+
         <template #lastContact-data="{ row }">
           <span class="text-sm text-gray-600">
             {{ row.lastContact || 'Sin contacto' }}
@@ -219,9 +223,23 @@ const columns = [
   { key: 'name', label: 'Nombre' },
   { key: 'contact', label: 'Contacto' },
   { key: 'status', label: 'Estado' },
+  { key: 'whatsappOptIn', label: 'Acepta WhatsApp' },
   { key: 'lastContact', label: 'Último Contacto' },
   { key: 'actions', label: '' }
 ]
+
+async function toggleOptIn(row: any) {
+  const value = !row.whatsappOptIn
+  try {
+    await $fetch(`/api/contacts/${row.id}/`, {
+      method: 'PATCH', headers: authHeaders(),
+      body: { whatsapp_opt_in: value, whatsapp_opt_in_source: 'agente' },
+    })
+    row.whatsappOptIn = value
+  } catch (e: any) {
+    useToast().add({ title: 'No se pudo actualizar el consentimiento', description: e?.data?.detail || '', color: 'red' })
+  }
+}
 
 const contacts = ref<any[]>([])
 
@@ -284,6 +302,7 @@ const loadContacts = async () => {
       company: contact.company,
       status: contact.status,
       statusLabel: contact.status,
+      whatsappOptIn: !!contact.whatsapp_opt_in,
       lastContact: null
     }))
   }

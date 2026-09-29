@@ -112,8 +112,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Conversation.objects.select_related(
-            'channel__whatsapp_line', 'agent__user', 'contact', 'campaign'
-        )
+            'channel__whatsapp_line', 'agent__user', 'contact', 'campaign', 'disposition'
+        ).prefetch_related('tags')
         user = self.request.user
         if not _is_supervisor(user):
             agent = _agent_for(user)
@@ -256,7 +256,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
         # Si el agente escribe en una conversación sin asignar, la toma
         if not conv.agent_id and not _is_supervisor(request.user):
             conv.agent = _agent_for(request.user)
-            conv.save(update_fields=['agent'])
+            conv.assigned_at = timezone.now()
+            conv.save(update_fields=['agent', 'assigned_at'])
 
         try:
             msg = create_outbound(conv, body=body, sender=request.user)
@@ -313,7 +314,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
                 return Response({'error': 'Agente no encontrado'}, status=status.HTTP_404_NOT_FOUND)
             conv.agent = agent
             conv.status = 'open'
-        conv.save(update_fields=['agent', 'status'])
+            conv.assigned_at = conv.assigned_at or timezone.now()
+        conv.save(update_fields=['agent', 'status', 'assigned_at'])
         push(conv, 'conversation.assigned', also_agents=[previous_agent_id],
              also_unassigned=previous_agent_id is None)
         return Response(ConversationSerializer(conv, context={'request': request}).data)
@@ -329,7 +331,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
         previous_agent_id = conv.agent_id
         conv.agent = agent
         conv.status = 'open'
-        conv.save(update_fields=['agent', 'status'])
+        conv.assigned_at = conv.assigned_at or timezone.now()
+        conv.save(update_fields=['agent', 'status', 'assigned_at'])
         push(conv, 'conversation.assigned', also_agents=[previous_agent_id],
              also_unassigned=previous_agent_id is None)
         return Response(ConversationSerializer(conv, context={'request': request}).data)
@@ -342,11 +345,159 @@ class ConversationViewSet(viewsets.ModelViewSet):
             return denied
         if conv.status == 'closed':
             return Response({'error': 'La conversación ya está cerrada'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Tipificación (calificaciones de la campaña) + etiquetas + notas
+        from apps.campaigns.models import CampaignDisposition
+        from .models import ConversationTag
+        data = request.data
+        disposition_id = data.get('disposition_id')
+        campaign_dispositions = CampaignDisposition.objects.filter(campaign_id=conv.campaign_id) \
+            if conv.campaign_id else CampaignDisposition.objects.none()
+        if disposition_id:
+            disposition = campaign_dispositions.filter(pk=disposition_id).first()
+            if not disposition:
+                return Response({'disposition_id': ['La tipificación no pertenece a la campaña de la conversación.']},
+                                status=status.HTTP_400_BAD_REQUEST)
+            conv.disposition = disposition
+        elif campaign_dispositions.exists() and not data.get('skip_disposition'):
+            return Response({'error': 'Selecciona una tipificación para cerrar la conversación.',
+                             'code': 'disposition_required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        conv.close_notes = str(data.get('notes', '') or '')[:2000]
         conv.status = 'closed'
         conv.closed_at = timezone.now()
-        conv.save(update_fields=['status', 'closed_at'])
+        conv.closed_reason = 'agent'
+        conv.save(update_fields=['status', 'closed_at', 'closed_reason', 'disposition', 'close_notes'])
+        if 'tag_ids' in data:
+            conv.tags.set(ConversationTag.objects.filter(pk__in=data.get('tag_ids') or [], is_active=True))
+
+        # Calificación con "requiere rellamada" → programar callback (si hay contacto)
+        if conv.disposition_id and conv.disposition.requires_callback and conv.contact_id:
+            try:
+                from apps.contacts.models import Contact
+                Contact.objects.filter(pk=conv.contact_id).update(status='callback')
+            except Exception:
+                pass
+
         push(conv, 'conversation.closed')
-        return Response({'status': 'closed', 'closed_at': conv.closed_at.isoformat()})
+        return Response(ConversationSerializer(conv, context={'request': request}).data)
+
+    @action(detail=True, methods=['get'], url_path='close-options')
+    def close_options(self, request, pk=None):
+        """Tipificaciones de la campaña de la conversación y etiquetas activas."""
+        from apps.campaigns.models import CampaignDisposition
+        from .models import ConversationTag
+        conv = self.get_object()
+        dispositions = CampaignDisposition.objects.filter(campaign_id=conv.campaign_id) \
+            .values('id', 'code', 'name', 'is_success', 'requires_callback') if conv.campaign_id else []
+        return Response({
+            'dispositions': list(dispositions),
+            'disposition_required': bool(conv.campaign_id and len(dispositions)),
+            'tags': list(ConversationTag.objects.filter(is_active=True).values('id', 'name', 'color')),
+            'current_tags': list(conv.tags.values_list('id', flat=True)),
+        })
+
+    @action(detail=True, methods=['post'])
+    def tags(self, request, pk=None):
+        """Reemplaza las etiquetas de la conversación. Body: {tag_ids: []}"""
+        from .models import ConversationTag
+        conv = self.get_object()
+        denied = self._check_can_act(conv)
+        if denied:
+            return denied
+        conv.tags.set(ConversationTag.objects.filter(pk__in=request.data.get('tag_ids') or [], is_active=True))
+        return Response(ConversationSerializer(conv, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'], url_path='attachments')
+    def attachments(self, request, pk=None):
+        """
+        Enviar un archivo (multipart: file, caption). Límites de WhatsApp:
+        imagen 5 MB (jpg/png), audio y video 16 MB, documento 100 MB.
+        """
+        import uuid
+        from django.conf import settings as dj_settings
+        conv = self.get_object()
+        denied = self._check_can_act(conv)
+        if denied:
+            return denied
+        upload = request.FILES.get('file')
+        if not upload:
+            return Response({'file': ['Adjunta un archivo.']}, status=status.HTTP_400_BAD_REQUEST)
+
+        mime = upload.content_type or mimetypes.guess_type(upload.name)[0] or 'application/octet-stream'
+        if mime in ('image/jpeg', 'image/png'):
+            mtype, limit = 'image', 5
+        elif mime.startswith('image/'):
+            mtype, limit = 'document', 100  # WhatsApp solo acepta jpg/png como imagen
+        elif mime.startswith('audio/'):
+            mtype, limit = 'audio', 16
+        elif mime in ('video/mp4', 'video/3gpp'):
+            mtype, limit = 'video', 16
+        else:
+            mtype, limit = 'document', 100
+        if conv.channel.channel_type == 'email':
+            limit = 20
+        if upload.size > limit * 1024 * 1024:
+            return Response({'file': [f'El archivo supera el límite de {limit} MB para este tipo.']},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        safe = ''.join(ch for ch in upload.name if ch.isalnum() or ch in '._-')[:120] or 'archivo'
+        directory = os.path.join(str(dj_settings.MEDIA_ROOT), 'outbound')
+        os.makedirs(directory, exist_ok=True)
+        path = os.path.join(directory, f"{uuid.uuid4().hex}_{safe}")
+        with open(path, 'wb') as fh:
+            for chunk in upload.chunks():
+                fh.write(chunk)
+
+        if not conv.agent_id and not _is_supervisor(request.user):
+            agent = _agent_for(request.user)
+            if agent:
+                conv.agent = agent
+                conv.assigned_at = timezone.now()
+                conv.save(update_fields=['agent', 'assigned_at'])
+        caption = (request.data.get('caption') or '').strip()[:1024]
+        try:
+            msg = create_outbound(conv, body=caption, sender=request.user, message_type=mtype,
+                                  metadata={'local_path': path, 'mime_type': mime,
+                                            'filename': upload.name, 'size': upload.size})
+        except WindowClosedError as e:
+            os.remove(path)
+            return Response({'error': str(e), 'code': 'window_closed', 'requires_template': True},
+                            status=status.HTTP_400_BAD_REQUEST)
+        http = status.HTTP_201_CREATED if msg.status != 'failed' else status.HTTP_502_BAD_GATEWAY
+        return Response(MessageSerializer(msg).data, status=http)
+
+    @action(detail=False, methods=['post'], url_path='start-email')
+    def start_email(self, request):
+        """Nuevo correo saliente. Body: {account_id, to, subject, body}"""
+        from django.core.exceptions import ValidationError
+        from django.core.validators import validate_email
+        from .models import EmailAccount
+        data = request.data
+        account = EmailAccount.objects.select_related('channel').filter(pk=data.get('account_id'), is_active=True).first()
+        if not account:
+            return Response({'error': 'Cuenta de email no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        to = (data.get('to') or '').strip().lower()
+        try:
+            validate_email(to)
+        except ValidationError:
+            return Response({'to': ['Email inválido']}, status=status.HTTP_400_BAD_REQUEST)
+        subject = (data.get('subject') or '').strip()[:300]
+        body = (data.get('body') or '').strip()
+        if not subject or not body:
+            return Response({'error': 'Asunto y mensaje son obligatorios'}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.contacts.models import Contact
+        conv = Conversation.objects.create(
+            channel=account.channel, contact_identifier=to, subject=subject,
+            contact=Contact.objects.filter(email__iexact=to).first(),
+            agent=_agent_for(request.user), assigned_at=timezone.now(),
+            campaign=account.default_campaign, status='open',
+        )
+        msg = create_outbound(conv, body=body, sender=request.user, metadata={'subject': subject})
+        return Response({
+            'conversation': ConversationSerializer(conv, context={'request': request}).data,
+            'message': MessageSerializer(msg).data,
+        }, status=status.HTTP_201_CREATED if msg.status != 'failed' else status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['post'])
     def reopen(self, request, pk=None):
@@ -356,7 +507,8 @@ class ConversationViewSet(viewsets.ModelViewSet):
             return denied
         conv.status = 'open' if conv.agent_id else 'waiting'
         conv.closed_at = None
-        conv.save(update_fields=['status', 'closed_at'])
+        conv.closed_reason = ''
+        conv.save(update_fields=['status', 'closed_at', 'closed_reason'])
         push(conv, 'conversation.reopened')
         return Response(ConversationSerializer(conv, context={'request': request}).data)
 
@@ -681,7 +833,11 @@ class MetaWebhookView(APIView):
         provider.save(update_fields=['last_webhook_at'])
 
         try:
-            process_webhook_payload(provider, payload)
+            if payload.get('object') in ('page', 'instagram'):
+                from .meta_pages import process_page_webhook
+                process_page_webhook(provider, payload)
+            else:
+                process_webhook_payload(provider, payload)
         except Exception:
             # Responder 200 igualmente: si devolvemos error Meta reintenta en bucle
             logger.exception("[WhatsApp] Error procesando webhook")

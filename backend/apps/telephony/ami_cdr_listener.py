@@ -460,6 +460,9 @@ def _process_cdr_event(event: dict):
         agent.last_call_time = timezone.now()
         agent.save(update_fields=['calls_today', 'talk_time_today', 'last_call_time'])
 
+    # Llamadas del marcador predictivo: campaña, contacto, resultado AMD e intentos
+    _apply_dialer_result(call, state)
+
     # Buscar grabación asociada
     _link_recording(call, event)
 
@@ -760,6 +763,76 @@ def _process_attended_transfer(event: dict):
         logger.info(f"[TRANSFER] Transferencia asistida {uniqueid} → {dest_exten}")
 
 
+def _process_user_event(event: dict):
+    """
+    UserEvent(DialerAMD) emitido por [outbound-queue]:
+    CampaignID, ContactID, Status (HUMAN|MACHINE|NOTSURE|HANGUP|SKIPPED), Cause, Uniqueid.
+    Vincula la llamada a la campaña/contacto y marca los contestadores.
+    """
+    if (event.get('UserEvent') or '') != 'DialerAMD':
+        return
+    uniqueid = event.get('Uniqueid') or event.get('UniqueID') or ''
+    if not uniqueid:
+        return
+    state = _get_state(uniqueid)
+    try:
+        state['campaign_id'] = int(event.get('CampaignID') or 0) or None
+        state['contact_id'] = int(event.get('ContactID') or 0) or None
+    except ValueError:
+        pass
+    amd_status = (event.get('Status') or '').upper()
+    state['amd_status'] = amd_status
+    state['amd_cause'] = event.get('Cause', '')
+    if amd_status == 'MACHINE':
+        state['final_status'] = 'machine'
+        logger.info(f"[AMD] Contestador detectado en {uniqueid} (campaña {state.get('campaign_id')})")
+
+
+def _apply_dialer_result(call, state: dict):
+    """Asocia campaña/contacto a la llamada del marcador y actualiza intentos del contacto."""
+    campaign_id = state.get('campaign_id')
+    contact_id = state.get('contact_id')
+    if not campaign_id and not contact_id:
+        return
+    fields = []
+    if campaign_id and not call.campaign_id:
+        call.campaign_id = campaign_id
+        fields.append('campaign')
+    if contact_id and not call.contact_id:
+        call.contact_id = contact_id
+        fields.append('contact')
+    meta = dict(call.metadata or {})
+    if state.get('amd_status'):
+        meta.update({'amd_status': state['amd_status'], 'amd_cause': state.get('amd_cause', '')})
+        call.metadata = meta
+        fields.append('metadata')
+    if fields:
+        try:
+            call.save(update_fields=fields)
+        except Exception as e:
+            logger.warning(f"[CDR] No se pudo vincular campaña/contacto a {call.call_id}: {e}")
+
+    if not contact_id:
+        return
+    try:
+        from apps.campaigns.models import Campaign
+        from apps.contacts.models import Contact
+        contact = Contact.objects.filter(pk=contact_id).first()
+        if not contact:
+            return
+        max_retries = Campaign.objects.filter(pk=campaign_id).values_list('max_retries', flat=True).first() or 3
+        contact.attempts += 1
+        contact.last_attempt = timezone.now()
+        update = ['attempts', 'last_attempt']
+        # Contestador / no contestada / ocupado → reintentar hasta max_retries
+        if call.status in ('machine', 'no_answer', 'busy', 'failed') and contact.status in ('new', 'pending'):
+            contact.status = 'pending' if contact.attempts < max_retries else 'failed'
+            update.append('status')
+        contact.save(update_fields=update)
+    except Exception as e:
+        logger.warning(f"[CDR] No se pudo actualizar intentos del contacto {contact_id}: {e}")
+
+
 def _process_voicemail_entry(event: dict):
     """
     Evento: VoicemailUserEntry — Llamante dejó un mensaje de voz.
@@ -906,6 +979,7 @@ _EVENT_HANDLERS = {
     'BlindTransfer':        _process_blind_transfer,
     'AttendedTransfer':     _process_attended_transfer,
     'VoicemailUserEntry':   _process_voicemail_entry,
+    'UserEvent':            _process_user_event,
     'QueueMemberStatus':    _process_queue_member_status,
     'QueueMemberPause':     _process_queue_member_pause,
     'QueueMemberPaused':    _process_queue_member_pause,  # alias

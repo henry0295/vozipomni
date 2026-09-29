@@ -7,6 +7,7 @@ import io
 from django.db import transaction
 from django.db.models import F
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from typing import Dict, List, Optional
 import phonenumbers
 
@@ -160,18 +161,22 @@ class ContactService:
                 continue
 
             existing_phones.add(phone)  # Avoid dupes within the same file
+            # Columna opcional whatsapp_opt_in: si / sí / yes / true / 1 / x
+            opt_raw = str(row.get('whatsapp_opt_in', '') or '').strip().lower()
+            opt_in = opt_raw in ('1', 'si', 'sí', 'yes', 'y', 'true', 'x', 'verdadero')
             to_create.append(Contact(
                 contact_list=contact_list,
                 phone=phone,
-                first_name=row.get('first_name', '').strip(),
-                last_name=row.get('last_name', '').strip(),
-                email=row.get('email', '').strip() or None,
-                company=row.get('company', '').strip(),
-                address=row.get('address', '').strip(),
-                city=row.get('city', '').strip(),
-                state=row.get('state', '').strip(),
-                zip_code=row.get('zip_code', '').strip(),
-                country=row.get('country', 'CO').strip(),
+                first_name=(row.get('first_name') or '').strip()[:100],
+                last_name=(row.get('last_name') or '').strip()[:100],
+                email=(row.get('email') or '').strip(),
+                company=(row.get('company') or '').strip()[:200],
+                address=(row.get('address') or '').strip(),
+                city=(row.get('city') or '').strip()[:100],
+                country=((row.get('country') or 'CO').strip() or 'CO')[:2].upper(),
+                whatsapp_opt_in=opt_in,
+                whatsapp_opt_in_at=timezone.now() if opt_in else None,
+                whatsapp_opt_in_source='import' if opt_in else '',
             ))
 
         # Bulk insert in batches — single transaction, minimal round-trips

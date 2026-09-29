@@ -113,6 +113,8 @@ class DialerEngine:
         self.ami_client.register_event('Hangup', self.on_hangup)
         self.ami_client.register_event('AgentConnect', self.on_agent_connect)
         self.ami_client.register_event('AgentComplete', self.on_agent_complete)
+        # Resultado de AMD emitido por el dialplan [outbound-queue] (UserEvent DialerAMD)
+        self.ami_client.register_event('UserEvent', self.on_user_event)
         
     async def start_campaign(self, campaign_id: int, campaign_type: str):
         """Iniciar una campaña de discado"""
@@ -461,6 +463,10 @@ class DialerEngine:
             # Construir número de destino
             destination = contact['phone_number']
             caller_id = config.get('caller_id', '1000')
+            try:
+                timeout_ms = max(10, min(120, int(config.get('call_timeout') or 30))) * 1000
+            except (TypeError, ValueError):
+                timeout_ms = 30000
             
             # Variables de canal — se envían como headers separados via panoramisk
             variables = {
@@ -481,14 +487,18 @@ class DialerEngine:
                     'Exten': destination,
                     'Priority': '1',
                     'CallerID': caller_id,
-                    'Timeout': '30000',
+                    'Timeout': str(timeout_ms),
                     'Async': 'true',
                 }
             else:
                 # Predictivo: llamar directamente al contacto y encolarlo.
-                # El contexto outbound-queue conecta la llamada contestada a la cola.
+                # El contexto outbound-queue ejecuta AMD (si está activo) y conecta
+                # la llamada contestada por una persona a la cola.
                 queue_name = config.get('queue_name', '')
                 variables['QUEUE_NAME'] = queue_name
+                variables['AMD_ENABLED'] = '1' if config.get('amd_enabled') else '0'
+                variables['AMD_ACTION'] = config.get('amd_action', 'hangup') or 'hangup'
+                variables['AMD_MESSAGE'] = config.get('amd_message', '') or ''
                 originate_action = {
                     'Action': 'Originate',
                     'Channel': f'PJSIP/{trunk}/{destination}',
@@ -496,7 +506,7 @@ class DialerEngine:
                     'Exten': 's',
                     'Priority': '1',
                     'CallerID': caller_id,
-                    'Timeout': '30000',
+                    'Timeout': str(timeout_ms),
                     'Async': 'true',
                 }
             
@@ -808,7 +818,10 @@ class DialerEngine:
         # Actualizar estadísticas según la causa del hangup
         # Causas normales: 16 (Normal Clearing), 17 (User busy)
         # Causas de no respuesta: 19 (No answer), 21 (Call rejected)
-        if cause in ['16', '17']:  # Normal clearing o busy
+        if call_data.get('status') == 'machine':
+            # Contestador detectado por AMD: no es abandono (nunca debía llegar a un agente)
+            logger.info(f"Call {call_id} ended after answering machine detection")
+        elif cause in ['16', '17']:  # Normal clearing o busy
             if call_data.get('status') == CallStatus.ANSWERED.value:
                 campaign['calls_answered'] += 1
                 logger.info(f"Call {call_id} answered and completed normally")
@@ -889,6 +902,50 @@ class DialerEngine:
                 f"{self.active_campaigns[campaign_id]['calls_answered']}"
             )
         
+    async def on_user_event(self, manager, event):
+        """
+        UserEvent(DialerAMD) desde [outbound-queue]:
+          CampaignID, ContactID, Status (HUMAN|MACHINE|NOTSURE|HANGUP|SKIPPED), Cause, Uniqueid
+        Sirve también para mapear el Uniqueid real del canal (el Originate asíncrono no lo devuelve).
+        """
+        if (event.get('UserEvent') or '') != 'DialerAMD':
+            return
+        try:
+            campaign_id = int(event.get('CampaignID') or 0)
+        except ValueError:
+            return
+        contact_id = str(event.get('ContactID') or '')
+        amd_status = (event.get('Status') or '').upper()
+        uniqueid = event.get('Uniqueid') or event.get('UniqueID') or ''
+
+        call_id = None
+        for cid, data in self.active_calls.items():
+            if data.get('campaign_id') == campaign_id and str((data.get('contact') or {}).get('id')) == contact_id:
+                call_id = cid
+                break
+        if not call_id:
+            logger.debug(f"[AMD] Sin llamada activa para campaña {campaign_id} contacto {contact_id}")
+            return
+
+        call_data = self.active_calls[call_id]
+        call_data['amd_status'] = amd_status
+        if uniqueid:
+            call_data['uniqueid'] = uniqueid
+            await self.redis_client.setex(f'uniqueid:{uniqueid}:call_id', 3600, call_id)
+        if event.get('Channel'):
+            await self.redis_client.setex(f"channel:{event.get('Channel')}:call_id", 3600, call_id)
+
+        campaign = self.active_campaigns.get(campaign_id)
+        if amd_status == 'MACHINE':
+            call_data['status'] = 'machine'
+            if campaign is not None:
+                campaign['calls_machine'] = campaign.get('calls_machine', 0) + 1
+                await self.redis_client.hset(f'campaign:{campaign_id}:stats', 'calls_machine',
+                                             campaign['calls_machine'])
+            logger.info(f"[AMD] Contestador en campaña {campaign_id} contacto {contact_id} ({event.get('Cause', '')})")
+        else:
+            logger.debug(f"[AMD] {amd_status} campaña {campaign_id} contacto {contact_id}")
+
     async def on_agent_complete(self, manager, event):
         """Agente completó llamada"""
         agent = event.get('Agent')

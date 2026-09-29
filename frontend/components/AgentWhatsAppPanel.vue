@@ -5,7 +5,8 @@
         <div class="flex items-center justify-between">
           <h3 class="text-lg font-semibold flex items-center gap-2">
             <UIcon name="i-heroicons-chat-bubble-left-right" class="text-green-600" />
-            WhatsApp
+            Chats
+            <span class="text-xs font-normal text-gray-500">WhatsApp · email · web · redes</span>
           </h3>
           <div class="flex items-center gap-2">
             <UBadge v-if="inbox.stats.value.unread > 0" color="red">{{ inbox.stats.value.unread }} sin leer</UBadge>
@@ -34,7 +35,12 @@
           <div class="conversations-scroll px-3 pb-3">
             <div v-for="conv in filtered" :key="conv.id" class="conversation-item" :class="{ unread: conv.unread_count > 0 }"
                  @click="selectedId = conv.id">
-              <UAvatar :alt="conv.display_name" size="md" class="flex-shrink-0" />
+              <div class="relative flex-shrink-0">
+                <UAvatar :alt="conv.display_name" size="md" />
+                <span class="absolute -bottom-1 -right-1 rounded-full bg-white p-0.5" :title="channelMeta(conv.channel_type).label">
+                  <UIcon :name="channelMeta(conv.channel_type).icon" class="w-3.5 h-3.5" :class="channelMeta(conv.channel_type).color" />
+                </span>
+              </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-start justify-between mb-1 gap-2">
                   <p class="font-semibold text-gray-800 truncate">{{ conv.display_name }}</p>
@@ -46,7 +52,7 @@
                 <div class="flex items-center gap-2 mt-1">
                   <UBadge v-if="!conv.agent" size="xs" color="amber" variant="soft">Sin asignar</UBadge>
                   <UBadge v-if="conv.campaign_name" size="xs" color="blue" variant="soft">{{ conv.campaign_name }}</UBadge>
-                  <UBadge v-if="!conv.window_open" size="xs" color="gray" variant="outline">Fuera de 24 h</UBadge>
+                  <UBadge v-if="conv.window_hours && !conv.window_open" size="xs" color="gray" variant="outline">Ventana cerrada</UBadge>
                   <UBadge v-if="conv.unread_count > 0" size="xs" color="red">{{ conv.unread_count }}</UBadge>
                   <UButton v-if="!conv.agent" size="2xs" class="ml-auto" :loading="taking === conv.id" @click.stop="take(conv)">Tomar</UButton>
                 </div>
@@ -74,6 +80,8 @@
  * Muestra las conversaciones propias y las sin asignar (para tomarlas),
  * con actualización en tiempo real vía /ws/messaging/.
  */
+import { channelMeta } from '~/utils/channels'
+
 const http = useHttp()
 const toast = useToast()
 

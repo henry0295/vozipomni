@@ -225,3 +225,10 @@ class MessagingConsumer(AsyncJsonWebsocketConsumer):
 
     async def messaging_event(self, event):
         await self.send_json({'type': 'messaging', **event.get('payload', {})})
+
+
+class NotFoundConsumer(AsyncJsonWebsocketConsumer):
+    """Rutas WebSocket inexistentes: rechaza con 4404 (sin traza 500 en Daphne)."""
+
+    async def connect(self):
+        await self.close(code=4404)

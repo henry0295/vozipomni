@@ -20,9 +20,16 @@ export default defineNuxtConfig({
 
   // Iconos: incluir en el bundle para evitar requests HTTP en producción
   icon: {
+    // Con ssr:false el proveedor por defecto es 'iconify' (api.iconify.design), bloqueado por la CSP.
+    // 'server' sirve los iconos desde el propio Nuxt en /api/_nuxt_icon (nginx ya lo enruta).
+    provider: 'server',
     serverBundle: 'local',
     clientBundle: {
-      scan: true,
+      // Por defecto el scanner no revisa .ts: incluir utils/ (menú) y composables/
+      scan: {
+        globInclude: ['**/*.{vue,ts,jsx,tsx,md,mdc,mdx}'],
+        globExclude: ['node_modules/**', '.nuxt/**', '.output/**', 'dist/**'],
+      },
       // Iconos usados por Nuxt UI internamente que no son detectados por el scanner
       // (loading spinners, paginación, selects, etc.)
       icons: [

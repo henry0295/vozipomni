@@ -17,4 +17,7 @@ websocket_urlpatterns = [
 
     # ── Mensajería omnicanal / WhatsApp ───────────────────────────────────────
     re_path(r'ws/messaging/$', consumers.MessagingConsumer.as_asgi()),
+
+    # ── Ruta desconocida: cerrar limpio (4404) en vez de error 500 en el handshake ──
+    re_path(r'^.*$', consumers.NotFoundConsumer.as_asgi()),
 ]

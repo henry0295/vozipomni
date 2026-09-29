@@ -73,6 +73,14 @@ class Contact(models.Model):
     is_vip = models.BooleanField(default=False, verbose_name='VIP')
     dnc_opt_out = models.BooleanField(default=False, verbose_name='No llamar (DNC)',
                                       help_text='Contacto solicitó no ser contactado.')
+
+    # Consentimiento para mensajes de WhatsApp (envíos masivos / marketing)
+    whatsapp_opt_in = models.BooleanField(default=False, verbose_name='Acepta WhatsApp')
+    whatsapp_opt_in_at = models.DateTimeField(null=True, blank=True)
+    whatsapp_opt_in_source = models.CharField(
+        max_length=50, blank=True, default='',
+        help_text='Origen del consentimiento: import, formulario, keyword, agente…'
+    )
     
     # Auditoría
     created_at = models.DateTimeField(auto_now_add=True)

@@ -108,6 +108,20 @@
               <dd>{{ campaign.end_date ? formatDate(campaign.end_date) : '-' }}</dd>
             </div>
           </dl>
+
+          <!-- Detección de contestador (AMD) -->
+          <div v-if="campaign.dialer_type === 'predictive'" class="mt-4 pt-4 border-t border-gray-100 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-medium text-gray-700">Detectar contestador (AMD)</span>
+              <UToggle v-model="amd.enabled" aria-label="Detectar contestador" />
+            </div>
+            <template v-if="amd.enabled">
+              <USelect v-model="amd.action" size="sm" :options="[{ label: 'Colgar', value: 'hangup' }, { label: 'Dejar mensaje grabado', value: 'message' }]" />
+              <UInput v-if="amd.action === 'message'" v-model="amd.message" size="sm" placeholder="Audio en Asterisk: custom/mensaje-campana" />
+            </template>
+            <UButton size="xs" :loading="amd.saving" :disabled="!amdDirty" @click="saveAmd">Guardar AMD</UButton>
+            <p class="text-xs text-gray-400">Se aplica al reiniciar la campaña (pausar y reanudar).</p>
+          </div>
         </UCard>
 
         <!-- Progreso + llamadas recientes -->
@@ -216,13 +230,39 @@ const statusColor = (s: string) => ({
 
 const callStatusLabel = (s: string) => ({
   completed: 'Completada', answered: 'Contestada', no_answer: 'No contestada',
-  busy: 'Ocupado', failed: 'Fallida', cancelled: 'Cancelada',
+  busy: 'Ocupado', failed: 'Fallida', cancelled: 'Cancelada', machine: 'Contestador',
+  voicemail: 'Buzón', abandoned: 'Abandonada',
 }[s] ?? s)
 
 const callStatusColor = (s: string) => ({
   completed: 'green', answered: 'green', no_answer: 'orange',
-  busy: 'yellow', failed: 'red', cancelled: 'gray',
+  busy: 'yellow', failed: 'red', cancelled: 'gray', machine: 'violet', voicemail: 'violet', abandoned: 'red',
 }[s] ?? 'gray')
+
+const amd = reactive({ enabled: false, action: 'hangup', message: '', saving: false })
+const amdDirty = computed(() => !!campaign.value && (
+  amd.enabled !== !!campaign.value.amd_enabled || amd.action !== (campaign.value.amd_action || 'hangup')
+  || amd.message !== (campaign.value.amd_message || '')))
+
+async function saveAmd() {
+  amd.saving = true
+  try {
+    campaign.value = await $fetch<any>(`/api/campaigns/${route.params.id}/`, {
+      method: 'PATCH', headers: authHeaders(),
+      body: { amd_enabled: amd.enabled, amd_action: amd.action, amd_message: amd.message },
+    })
+    toast.add({ title: 'Configuración AMD guardada', color: 'green' })
+  } catch (err: any) {
+    toast.add({ title: 'No se pudo guardar', description: err?.data?.detail || JSON.stringify(err?.data || {}), color: 'red' })
+  } finally { amd.saving = false }
+}
+
+watch(campaign, (c: any) => {
+  if (!c) return
+  amd.enabled = !!c.amd_enabled
+  amd.action = c.amd_action || 'hangup'
+  amd.message = c.amd_message || ''
+})
 
 const loadCampaign = async () => {
   try {
