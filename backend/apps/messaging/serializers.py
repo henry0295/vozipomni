@@ -164,6 +164,44 @@ def build_webhook_url(request, app_id: str) -> str:
     return path
 
 
+def webhook_base_diagnostics(request) -> dict:
+    """Base pública usada para el webhook y si Meta podrá alcanzarla."""
+    import ipaddress
+    from urllib.parse import urlparse
+
+    configured = getattr(settings, 'PUBLIC_BASE_URL', '').rstrip('/')
+    if configured:
+        base, source = configured, 'PUBLIC_BASE_URL'
+    elif request is not None:
+        base, source = request.build_absolute_uri('/').rstrip('/').replace('http://', 'https://', 1), 'request'
+    else:
+        base, source = '', 'none'
+
+    host = urlparse(base).hostname or ''
+    is_ip = is_private = False
+    try:
+        ip = ipaddress.ip_address(host)
+        is_ip = True
+        is_private = ip.is_private or ip.is_loopback
+    except ValueError:
+        is_private = host in ('localhost',) or host.endswith('.local') or host.endswith('.lan')
+    is_https = base.startswith('https://')
+    issues = []
+    if source != 'PUBLIC_BASE_URL':
+        issues.append('PUBLIC_BASE_URL no está definido: se usa la dirección con la que abriste la web.')
+    if not is_https:
+        issues.append('La URL no usa HTTPS.')
+    if is_ip:
+        issues.append('La URL usa una IP; Meta exige un dominio con certificado válido.')
+    if is_private:
+        issues.append('La dirección es privada (red local); Meta no puede alcanzarla desde Internet.')
+    return {
+        'base_url': base, 'source': source, 'host': host, 'is_https': is_https,
+        'is_ip': is_ip, 'is_private': is_private, 'public_ready': is_https and not is_ip and not is_private,
+        'issues': issues,
+    }
+
+
 class WhatsAppProviderSerializer(serializers.ModelSerializer):
     app_secret = serializers.CharField(write_only=True, required=False, allow_blank=True)
     access_token = serializers.CharField(write_only=True, required=False, allow_blank=True)

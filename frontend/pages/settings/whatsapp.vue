@@ -127,6 +127,7 @@
           </span>
           <div class="ml-auto flex gap-1">
             <UButton size="xs" icon="i-heroicons-signal" color="gray" variant="outline" :loading="busy === `ptest-${p.id}`" @click="testProvider(p)">Probar token</UButton>
+            <UButton size="xs" icon="i-heroicons-shield-check" color="gray" variant="outline" :loading="busy === `wcheck-${p.id}`" @click="checkWebhook(p)">Probar webhook</UButton>
             <UButton size="xs" icon="i-heroicons-pencil" color="gray" variant="ghost" aria-label="Editar conexión" @click="openProvider(p)" />
             <UButton size="xs" icon="i-heroicons-trash" color="red" variant="ghost" aria-label="Eliminar conexión" @click="removeProvider(p)" />
           </div>
@@ -327,11 +328,106 @@
 
     <!-- ═══════════════ GUÍA ═══════════════ -->
     <div v-if="tab === 3" class="space-y-4">
-      <div class="flex gap-3 rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">
-        <UIcon name="i-heroicons-lock-closed" class="w-5 h-5 flex-shrink-0 mt-0.5" />
-        <p><strong>Requisito:</strong> Meta solo entrega mensajes a una URL HTTPS pública con certificado válido (Let's Encrypt u otro).
-          Una IP privada o un certificado autofirmado no funcionan. Define <code>PUBLIC_BASE_URL=https://tu-dominio</code> en el <code>.env</code> del servidor.</p>
-      </div>
+      <!-- Webhook de ESTA instalación -->
+      <section class="rounded-2xl border border-gray-200 bg-white overflow-hidden">
+        <header class="flex flex-wrap items-center gap-3 px-5 py-4 border-b border-gray-100">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+            <UIcon name="i-heroicons-globe-alt" class="w-5 h-5" />
+          </div>
+          <div class="min-w-0 flex-1">
+            <h2 class="font-semibold text-gray-900">Webhook de este servidor</h2>
+            <p class="text-xs text-gray-500">Esto es lo que debes pegar en Meta → WhatsApp → Configuración → Webhook</p>
+          </div>
+          <span v-if="webhookInfo" class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium"
+                :class="webhookInfo.public_ready ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'">
+            <span class="w-2 h-2 rounded-full" :class="webhookInfo.public_ready ? 'bg-emerald-500' : 'bg-amber-500'" />
+            {{ webhookInfo.public_ready ? 'Dirección pública válida' : 'No alcanzable por Meta' }}
+          </span>
+        </header>
+
+        <div class="p-5 space-y-4">
+          <div v-if="!webhookInfo" class="h-24 rounded-xl bg-gray-100 animate-pulse" />
+          <template v-else>
+            <!-- Con conexiones: URL exacta por App -->
+            <div v-for="p in webhookInfo.providers" :key="p.id" class="rounded-xl bg-gray-900 text-gray-100 p-4 space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-sm font-semibold text-white">{{ p.name }} <span class="text-xs font-normal text-gray-400 font-mono">· App {{ p.app_id }}</span></p>
+                <span class="text-[11px]" :class="p.webhook_verified ? 'text-emerald-300' : 'text-amber-300'">
+                  {{ p.webhook_verified ? '✓ Verificado por Meta' : 'Pendiente de verificar en Meta' }}
+                </span>
+              </div>
+              <div v-for="f in [
+                { label: 'URL de devolución de llamada', value: p.webhook_url },
+                { label: 'Token de verificación', value: p.verify_token },
+                { label: 'Campo a suscribir', value: 'messages' },
+              ]" :key="f.label" class="flex items-center gap-2">
+                <span class="text-[10px] uppercase tracking-wide text-gray-400 w-44 flex-shrink-0">{{ f.label }}</span>
+                <code class="flex-1 text-xs break-all text-emerald-300">{{ f.value }}</code>
+                <UButton size="2xs" color="gray" variant="ghost" icon="i-heroicons-clipboard-document" class="text-gray-300 hover:text-white"
+                         :aria-label="`Copiar ${f.label}`" @click="copy(f.value)" />
+              </div>
+              <div class="flex flex-wrap items-center gap-2 pt-1">
+                <UButton size="xs" color="white" variant="solid" icon="i-heroicons-shield-check" :loading="busy === `wcheck-${p.id}`" @click="checkWebhook(p)">
+                  Probar que Meta pueda llegar
+                </UButton>
+                <p v-if="webhookChecks[p.id]" class="text-xs" :class="webhookChecks[p.id].ok ? 'text-emerald-300' : 'text-red-300'">
+                  {{ webhookChecks[p.id].message }}
+                </p>
+              </div>
+            </div>
+
+            <!-- Sin conexiones: plantilla de la URL -->
+            <div v-if="!webhookInfo.providers.length" class="rounded-xl bg-gray-900 text-gray-100 p-4 space-y-2">
+              <p class="text-[10px] uppercase tracking-wide text-gray-400">URL de devolución de llamada</p>
+              <code class="block text-xs break-all text-emerald-300">{{ webhookInfo.url_template }}</code>
+              <p class="text-xs text-gray-400"><code class="text-amber-300">{APP_ID}</code> se reemplaza por el ID de tu App de Meta. El token de verificación se genera al conectar la App.</p>
+              <UButton size="xs" color="white" icon="i-heroicons-plus" @click="openProvider()">Conectar App de Meta para obtener la URL completa</UButton>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div class="rounded-xl border border-gray-200 p-3">
+                <p class="text-gray-500">Dominio usado</p>
+                <p class="font-mono font-medium text-gray-900 break-all">{{ webhookInfo.base_url || '—' }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-3">
+                <p class="text-gray-500">Origen</p>
+                <p class="font-medium text-gray-900">{{ webhookInfo.source === 'PUBLIC_BASE_URL' ? 'PUBLIC_BASE_URL del .env' : 'Dirección con la que abriste la web' }}</p>
+              </div>
+              <div class="rounded-xl border border-gray-200 p-3">
+                <p class="text-gray-500">HTTPS / dominio público</p>
+                <p class="font-medium" :class="webhookInfo.public_ready ? 'text-emerald-700' : 'text-amber-700'">
+                  {{ webhookInfo.is_https ? 'HTTPS' : 'Sin HTTPS' }} · {{ webhookInfo.is_ip ? 'IP' : 'Dominio' }}{{ webhookInfo.is_private ? ' privado' : '' }}
+                </p>
+              </div>
+            </div>
+
+            <div v-if="webhookInfo.issues.length" class="flex gap-2 rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900">
+              <UIcon name="i-heroicons-exclamation-triangle" class="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <div class="space-y-1">
+                <p v-for="i in webhookInfo.issues" :key="i">{{ i }}</p>
+                <p>Solución: publica el servidor con un dominio (ej. <code>omni.tuempresa.com</code>) apuntando a su IP pública, instala un certificado válido
+                  (Let's Encrypt), abre el puerto 443 y define <code>PUBLIC_BASE_URL=https://omni.tuempresa.com</code> en el <code>.env</code>. Luego redespliega.</p>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <!-- Cómo funciona por instalación -->
+      <section class="rounded-2xl border border-gray-200 bg-white p-5">
+        <h2 class="font-semibold text-gray-900 flex items-center gap-2">
+          <UIcon name="i-heroicons-server-stack" class="w-5 h-5 text-emerald-600" /> ¿Cómo funcionan los webhooks en cada instalación?
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3 text-sm text-gray-600">
+          <div v-for="w in webhookFaq" :key="w.title" class="flex gap-3">
+            <UIcon :name="w.icon" class="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p class="font-medium text-gray-900">{{ w.title }}</p>
+              <p class="text-xs mt-0.5 leading-relaxed">{{ w.text }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
       <ol class="relative border-l-2 border-emerald-100 ml-4 space-y-6">
         <li v-for="(step, i) in guide" :key="i" class="pl-8 relative">
           <span class="absolute -left-[17px] top-0 w-8 h-8 rounded-full bg-emerald-600 text-white text-sm font-bold flex items-center justify-center ring-4 ring-white">{{ i + 1 }}</span>
@@ -788,7 +884,8 @@ async function regenerateToken(p: any) {
   try {
     const updated: any = await http.post(`/messaging/whatsapp/providers/${p.id}/regenerate-verify-token/`)
     Object.assign(p, updated)
-    toast.add({ title: 'Token regenerado', color: 'green' })
+    loadWebhookInfo()
+    toast.add({ title: 'Token regenerado', description: 'Actualízalo también en Meta.', color: 'green' })
   } catch (e) { apiError(e) }
   finally { busy.value = '' }
 }
@@ -982,7 +1079,41 @@ async function removeTemplate(row: any) {
 }
 
 // ── Guía (basada en el flujo de OmniLeads / Meta Cloud API) ───────────────
-const guide = [
+// ── Webhook de esta instalación ───────────────────────────────────────────
+const webhookInfo = ref<any>(null)
+const webhookChecks = reactive<Record<number, { ok: boolean, message: string }>>({})
+
+async function loadWebhookInfo() {
+  try { webhookInfo.value = await http.get('/messaging/whatsapp/providers/webhook-info/') }
+  catch (e) { apiError(e, 'No se pudo obtener la URL del webhook') }
+}
+
+async function checkWebhook(p: any) {
+  busy.value = `wcheck-${p.id}`
+  try {
+    const r: any = await http.post(`/messaging/whatsapp/providers/${p.id}/check-webhook/`)
+    webhookChecks[p.id] = { ok: r.ok, message: r.message }
+    toast.add({ title: r.ok ? 'Webhook accesible' : 'El webhook no es accesible', description: r.message, color: r.ok ? 'green' : 'red', timeout: 8000 })
+  } catch (e) { apiError(e, 'No se pudo probar el webhook') }
+  finally { busy.value = '' }
+}
+
+const webhookFaq = [
+  { icon: 'i-heroicons-server', title: 'Cada servidor tiene su propia URL',
+    text: 'La URL es https://<dominio de ese servidor>/api/messaging/webhooks/meta/<APP_ID>/. Se arma con PUBLIC_BASE_URL del .env de cada instalación, así que dos servidores nunca comparten URL.' },
+  { icon: 'i-heroicons-key', title: 'El token de verificación es único',
+    text: 'Se genera al azar al conectar cada App de Meta y solo existe en ese servidor. Puedes regenerarlo; después debes actualizarlo en Meta.' },
+  { icon: 'i-heroicons-cube-transparent', title: 'Una App de Meta por instalación',
+    text: 'Meta permite una sola URL de webhook por App. Si el mismo cliente o App se usa en dos servidores, solo uno recibirá los mensajes: usa una App distinta para cada instalación (o cliente).' },
+  { icon: 'i-heroicons-arrows-right-left', title: 'Varias Apps en un mismo servidor',
+    text: 'Un servidor puede atender varias Apps: el APP_ID en la URL identifica cuál es. Cada App tiene su propio token, firma y números.' },
+  { icon: 'i-heroicons-shield-check', title: 'Seguridad',
+    text: 'Cada evento se valida con la firma X-Hub-Signature-256 usando el App Secret; los eventos sin firma válida se rechazan.' },
+  { icon: 'i-heroicons-arrow-path-rounded-square', title: 'Si cambias de dominio o servidor',
+    text: 'Actualiza PUBLIC_BASE_URL, redespliega y cambia la URL en Meta. En una reinstalación, el token de verificación cambia si la base de datos es nueva.' },
+]
+
+const guide = computed(() => [
   {
     title: 'Cuenta de Meta Business verificada',
     items: [
@@ -1021,9 +1152,11 @@ const guide = [
   {
     title: 'Webhook',
     items: [
-      'WhatsApp → Configuración → Webhook → Editar.',
-      'URL de devolución de llamada: la Callback URL del proveedor. Token de verificación: el Verify token del proveedor.',
-      'Al guardar, Meta llama a la URL y el proveedor pasa a "Webhook verificado".',
+      'En developers.facebook.com → tu App → WhatsApp → Configuración → Webhook → Editar.',
+      `URL de devolución de llamada: ${webhookInfo.value?.providers?.[0]?.webhook_url || webhookInfo.value?.url_template || 'la del recuadro "Webhook de este servidor"'}`,
+      `Token de verificación: ${webhookInfo.value?.providers?.[0]?.verify_token || 'se genera al conectar la App (ver recuadro superior)'}`,
+      'Antes de guardar en Meta usa "Probar que Meta pueda llegar": si falla, Meta también fallará.',
+      'Al guardar, Meta llama a la URL y la conexión pasa a "Webhook verificado".',
       'En "Campos del webhook" suscribe el campo "messages".',
       'En cada línea usa "Suscribir webhook" (se hace automáticamente al crearla).',
     ],
@@ -1036,14 +1169,18 @@ const guide = [
       'Responde desde tu teléfono: el chat aparecerá en la Bandeja omnicanal y en el panel del agente.',
     ],
   },
-]
+])
 
 onMounted(() => {
   loadProviders()
   loadLines()
   loadTemplates()  // necesarias para el resumen y el estado de la conexión
   loadCampaigns()
+  loadWebhookInfo()
 })
+
+// Mantener la URL/token del webhook al día cuando cambian las conexiones
+watch(providers, () => { loadWebhookInfo() })
 </script>
 
 <style scoped>

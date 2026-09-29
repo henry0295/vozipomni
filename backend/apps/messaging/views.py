@@ -608,6 +608,61 @@ class WhatsAppProviderViewSet(viewsets.ModelViewSet):
             return _api_error(e)
         return Response(numbers)
 
+    @action(detail=False, methods=['get'], url_path='webhook-info')
+    def webhook_info(self, request):
+        """
+        Webhook de ESTA instalación (cada servidor tiene el suyo):
+          {base_url}/api/messaging/webhooks/meta/{APP_ID}/
+        base_url sale de PUBLIC_BASE_URL (.env) o, si no existe, del host con el que se abrió la web.
+        """
+        from .serializers import build_webhook_url, webhook_base_diagnostics
+        info = webhook_base_diagnostics(request)
+        info['path_template'] = '/api/messaging/webhooks/meta/{APP_ID}/'
+        info['url_template'] = build_webhook_url(request, '{APP_ID}')
+        info['providers'] = [{
+            'id': p.id, 'name': p.name, 'app_id': p.app_id,
+            'webhook_url': build_webhook_url(request, p.app_id),
+            'verify_token': p.verify_token, 'webhook_verified': p.webhook_verified,
+            'last_webhook_at': p.last_webhook_at,
+        } for p in WhatsAppProvider.objects.order_by('name')]
+        return Response(info)
+
+    @action(detail=True, methods=['post'], url_path='check-webhook')
+    def check_webhook(self, request, pk=None):
+        """
+        Simula la verificación de Meta llamando a la URL pública del webhook con HTTPS estricto.
+        La prueba sale desde este servidor: confirma DNS, certificado y proxy, aunque no
+        garantiza que el firewall acepte tráfico entrante desde Internet.
+        """
+        import secrets
+        import requests
+        from .serializers import build_webhook_url
+        provider = self.get_object()
+        url = build_webhook_url(request, provider.app_id)
+        if not url.startswith('https://'):
+            return Response({'ok': False, 'stage': 'https',
+                             'message': 'La URL no usa HTTPS. Meta la rechazará.', 'url': url})
+        challenge = secrets.token_hex(8)
+        params = {'hub.mode': 'subscribe', 'hub.verify_token': provider.verify_token, 'hub.challenge': challenge}
+        try:
+            resp = requests.get(url, params=params, timeout=10, verify=True, allow_redirects=False)
+        except requests.exceptions.SSLError as e:
+            return Response({'ok': False, 'stage': 'ssl', 'url': url,
+                             'message': 'El certificado SSL no es válido (autofirmado, vencido o de otro dominio). '
+                                        'Meta no entregará mensajes.', 'detail': str(e)[:300]})
+        except requests.exceptions.ConnectionError as e:
+            return Response({'ok': False, 'stage': 'connection', 'url': url,
+                             'message': 'No se pudo conectar a la URL (DNS, puerto 443 o firewall).', 'detail': str(e)[:300]})
+        except requests.exceptions.Timeout:
+            return Response({'ok': False, 'stage': 'timeout', 'url': url, 'message': 'La URL no respondió en 10 s.'})
+        if resp.status_code == 200 and resp.text.strip() == challenge:
+            return Response({'ok': True, 'stage': 'done', 'url': url,
+                             'message': 'La URL responde correctamente con HTTPS válido. Ya puedes verificarla en Meta.'})
+        return Response({'ok': False, 'stage': 'response', 'url': url,
+                         'message': f'La URL respondió HTTP {resp.status_code} en lugar del desafío esperado. '
+                                    'Revisa que el dominio apunte a este servidor y que nginx enrute /api/.',
+                         'detail': resp.text[:200]})
+
 
 class WhatsAppLineViewSet(viewsets.ModelViewSet):
     queryset = WhatsAppLine.objects.select_related('provider', 'channel', 'default_campaign')
