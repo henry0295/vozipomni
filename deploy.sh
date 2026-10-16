@@ -13,6 +13,11 @@
 # Reinstalar desde cero (borra volúmenes, .env, credenciales):
 #   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- --clean X.X.X.X
 #
+# Con dominio (OPCIONAL) y certificado Let's Encrypt:
+#   sudo bash deploy.sh X.X.X.X --domain pbx.ejemplo.com --email admin@ejemplo.com
+#   (Sin --domain se usa certificado autofirmado para la IP, ideal para on-premise.
+#    El dominio queda guardado en .env; para quitarlo: --domain none)
+#
 # Alternativas:
 #   export VOZIPOMNI_IPV4=X.X.X.X
 #   curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo -E bash
@@ -23,6 +28,8 @@
 # Variables opcionales:
 #   VOZIPOMNI_IPV4  — IP privada del servidor / IP de la NIC (REQUERIDO, o pasar como argumento $1)
 #   NAT_IPV4        — IP pública real si el servidor está detrás de NAT (o pasar con --nat)
+#   VOZIPOMNI_DOMAIN  — Dominio público para Let's Encrypt (opcional, o pasar con --domain)
+#   LETSENCRYPT_EMAIL — Email para avisos de Let's Encrypt (opcional, o pasar con --email)
 #   TZ              — Zona horaria (default: America/Bogota)
 #   INSTALL_DIR     — Directorio de instalación (default: /opt/vozipomni)
 #   BRANCH          — Rama Git a desplegar (default: main)
@@ -81,10 +88,15 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-# ─── Parsear argumentos (--clean, --update, --nat, IP) ─────────────────────
+# ─── Parsear argumentos (--clean, --update, --nat, --domain, --email, IP) ──
 CLEAN_INSTALL=false
 UPDATE_ONLY=false
 NEXT_IS_NAT=false
+NEXT_IS_DOMAIN=false
+NEXT_IS_EMAIL=false
+# Dominio opcional (Let's Encrypt). También se acepta por variable de entorno.
+VOZIPOMNI_DOMAIN="${VOZIPOMNI_DOMAIN:-}"
+LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 # Argumentos originales: permiten relanzar el deploy.sh nuevo tras el git pull del update
 ORIG_ARGS=("$@")
 for arg in "$@"; do
@@ -98,25 +110,42 @@ for arg in "$@"; do
         --nat|-n)
             NEXT_IS_NAT=true
             ;;
+        --domain)
+            NEXT_IS_DOMAIN=true
+            ;;
+        --email)
+            NEXT_IS_EMAIL=true
+            ;;
         --help|-h)
-            echo "Uso: deploy.sh [--clean|--update] <IP_PRIVADA> [--nat <IP_PUBLICA>]"
+            echo "Uso: deploy.sh [--clean|--update] <IP_PRIVADA> [--nat <IP_PUBLICA>] [--domain <DOMINIO> [--email <EMAIL>]]"
             echo ""
-            echo "  IP_PRIVADA   IP del servidor / IP de la NIC (requerido)"
-            echo "  --nat IP     IP pública real (cuando el servidor está detrás de NAT)"
-            echo "  --clean      Borrar instalación existente (volúmenes, .env, credenciales)"
-            echo "  --update     Actualizar instalación existente sin borrar datos"
-            echo "  --help       Mostrar esta ayuda"
+            echo "  IP_PRIVADA      IP del servidor / IP de la NIC (requerido)"
+            echo "  --nat IP        IP pública real (cuando el servidor está detrás de NAT)"
+            echo "  --domain FQDN   Dominio público (opcional): obtiene certificado Let's Encrypt."
+            echo "                  Sin dominio se usa certificado autofirmado para la IP (on-premise)."
+            echo "                  Queda guardado en .env; use '--domain none' para quitarlo."
+            echo "  --email EMAIL   Email para avisos de Let's Encrypt (opcional, recomendado)"
+            echo "  --clean         Borrar instalación existente (volúmenes, .env, credenciales)"
+            echo "  --update        Actualizar instalación existente sin borrar datos"
+            echo "  --help          Mostrar esta ayuda"
             echo ""
             echo "Ejemplos:"
             echo "  sudo bash deploy.sh 190.159.139.176                       # IP pública directa"
             echo "  sudo bash deploy.sh 192.168.101.228 --nat 190.159.139.176 # Servidor NAT"
             echo "  sudo bash deploy.sh --update 192.168.101.228 --nat 190.159.139.176"
+            echo "  sudo bash deploy.sh 190.159.139.176 --domain pbx.ejemplo.com --email admin@ejemplo.com"
             exit 0
             ;;
         *)
             if [ "$NEXT_IS_NAT" = true ]; then
                 export NAT_IPV4="$arg"
                 NEXT_IS_NAT=false
+            elif [ "$NEXT_IS_DOMAIN" = true ]; then
+                VOZIPOMNI_DOMAIN="$arg"
+                NEXT_IS_DOMAIN=false
+            elif [ "$NEXT_IS_EMAIL" = true ]; then
+                LETSENCRYPT_EMAIL="$arg"
+                NEXT_IS_EMAIL=false
             # Si parece una IP, usarla como VOZIPOMNI_IPV4
             elif [[ "$arg" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
                 export VOZIPOMNI_IPV4="$arg"
@@ -132,6 +161,11 @@ TZ="${TZ:-America/Bogota}"
 COMPOSE_CMD=""
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 FRESH_ENV=false
+# Dominio / Let's Encrypt (solo se usan si hay dominio; sin dominio el flujo no cambia)
+DOMAIN_REMOVED=false
+LETSENCRYPT_OK=false
+LETSENCRYPT_DIR="${LETSENCRYPT_DIR:-/etc/letsencrypt}"
+CERTBOT_BIN=""
 
 # ─── Funciones ───────────────────────────────────────────────────────────────
 log_info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
@@ -401,7 +435,104 @@ check_prerequisites() {
 
     log_success "IP del servidor: $VOZIPOMNI_IPV4"
     [ -n "${NAT_IPV4:-}" ] && log_info "NAT IP: $NAT_IPV4"
+    resolve_domain_config
     log_success "Zona horaria: $TZ"
+}
+
+# ─── 1.1. Dominio opcional (Let's Encrypt) ──────────────────────────────────
+# Lee KEY del .env sin hacer source (no ejecuta su contenido). Vacío si no existe.
+env_file_value() {
+    local key="$1" file="${2:-$INSTALL_DIR/.env}"
+    [ -f "$file" ] || return 0
+    grep "^${key}=" "$file" 2>/dev/null | tail -1 | cut -d= -f2- || true
+}
+
+# Fija KEY=VALUE en el .env (reemplaza la línea o la agrega)
+set_env_value() {
+    local key="$1" value="$2" file="$INSTALL_DIR/.env"
+    [ -f "$file" ] || return 0
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$file"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$file"
+    fi
+}
+
+# Determina el dominio a usar. Prioridad: --domain / VOZIPOMNI_DOMAIN > dominio guardado en .env.
+# Nunca aborta: un dominio o email inválido se ignora con una advertencia.
+resolve_domain_config() {
+    local domain email
+    domain=$(printf '%s' "${VOZIPOMNI_DOMAIN:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+    domain="${domain%.}"
+    email=$(printf '%s' "${LETSENCRYPT_EMAIL:-}" | tr -d '[:space:]')
+
+    # --domain none: quitar el dominio guardado y volver al certificado autofirmado
+    if [ "$domain" = "none" ]; then
+        VOZIPOMNI_DOMAIN=""
+        LETSENCRYPT_EMAIL=""
+        DOMAIN_REMOVED=true
+        log_info "Dominio deshabilitado (--domain none): se usará certificado autofirmado para la IP"
+        return 0
+    fi
+
+    if [ -n "$domain" ] && ! [[ "$domain" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]]; then
+        log_warning "Dominio inválido '$domain': se ignora (se usará el dominio guardado en .env, si existe)"
+        domain=""
+    fi
+
+    # Sin --domain: reutilizar el dominio guardado en .env (no aplica en --clean, que borra .env)
+    if [ -z "$domain" ] && [ "$CLEAN_INSTALL" != true ]; then
+        domain=$(env_file_value VOZIPOMNI_DOMAIN)
+        if [ -n "$domain" ]; then
+            if [[ "$domain" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]]; then
+                log_info "Usando dominio guardado en .env: $domain"
+            else
+                log_warning "Dominio guardado en .env inválido ('$domain'): se ignora"
+                domain=""
+            fi
+        fi
+    fi
+    if [ -n "$domain" ] && [ -z "$email" ] && [ "$CLEAN_INSTALL" != true ]; then
+        email=$(env_file_value LETSENCRYPT_EMAIL)
+    fi
+
+    VOZIPOMNI_DOMAIN="$domain"
+    LETSENCRYPT_EMAIL=""
+    # Sin dominio: flujo on-premise de siempre (autofirmado para la IP)
+    [ -n "$domain" ] || return 0
+
+    if [ -n "$email" ]; then
+        if [[ "$email" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+            LETSENCRYPT_EMAIL="$email"
+        else
+            log_warning "Email inválido '$email': se ignora"
+        fi
+    fi
+    log_success "Dominio: $VOZIPOMNI_DOMAIN (Let's Encrypt)"
+    [ -z "$LETSENCRYPT_EMAIL" ] && log_warning "Sin --email: Let's Encrypt no podrá avisar de vencimientos"
+    return 0
+}
+
+# Valores de ALLOWED_HOSTS / CORS_ORIGINS. Sin dominio son exactamente los de siempre.
+env_allowed_hosts() {
+    echo "${VOZIPOMNI_DOMAIN:+${VOZIPOMNI_DOMAIN},}$VOZIPOMNI_IPV4,localhost,127.0.0.1"
+}
+env_cors_origins() {
+    echo "${VOZIPOMNI_DOMAIN:+https://${VOZIPOMNI_DOMAIN},http://${VOZIPOMNI_DOMAIN},}http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4"
+}
+
+# Guarda (o quita con --domain none) el dominio en .env para próximas ejecuciones
+persist_domain_env() {
+    local env_file="$INSTALL_DIR/.env"
+    [ -f "$env_file" ] || return 0
+    if [ -n "${VOZIPOMNI_DOMAIN:-}" ]; then
+        set_env_value VOZIPOMNI_DOMAIN "$VOZIPOMNI_DOMAIN"
+        [ -n "${LETSENCRYPT_EMAIL:-}" ] && set_env_value LETSENCRYPT_EMAIL "$LETSENCRYPT_EMAIL"
+        chmod 600 "$env_file"
+    elif [ "$DOMAIN_REMOVED" = true ]; then
+        sed -i '/^VOZIPOMNI_DOMAIN=/d;/^LETSENCRYPT_EMAIL=/d' "$env_file"
+    fi
+    return 0
 }
 
 # ─── 2. Preparar sistema ────────────────────────────────────────────────────
@@ -807,7 +938,11 @@ generate_env() {
     elif [ -f "$INSTALL_DIR/.env" ]; then
         log_info "Archivo .env existente encontrado, reutilizando credenciales..."
         # Extraer credenciales del .env existente
+        # (el dominio ya se resolvió en check_prerequisites: el source no debe pisarlo)
+        local _domain="${VOZIPOMNI_DOMAIN:-}" _le_email="${LETSENCRYPT_EMAIL:-}"
         source "$INSTALL_DIR/.env" 2>/dev/null || true
+        VOZIPOMNI_DOMAIN="$_domain"
+        LETSENCRYPT_EMAIL="$_le_email"
         DB_PASSWORD="${POSTGRES_PASSWORD:-}"
         REDIS_PASSWORD="${REDIS_PASSWORD:-}"
         SECRET_KEY="${SECRET_KEY:-}"
@@ -822,15 +957,16 @@ generate_env() {
         else
             # Solo actualizar la IP si cambió
             sed -i "s|^VOZIPOMNI_IPV4=.*|VOZIPOMNI_IPV4=$VOZIPOMNI_IPV4|" "$INSTALL_DIR/.env"
-            sed -i "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=$VOZIPOMNI_IPV4,localhost,127.0.0.1|" "$INSTALL_DIR/.env"
-            sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4|" "$INSTALL_DIR/.env"
+            sed -i "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=$(env_allowed_hosts)|" "$INSTALL_DIR/.env"
+            sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$(env_cors_origins)|" "$INSTALL_DIR/.env"
+            persist_domain_env
 
             # Actualizar backend/.env con credenciales existentes y nueva IP
             cat > "$INSTALL_DIR/backend/.env" <<EOF
 SECRET_KEY=$SECRET_KEY
 DEBUG=False
-ALLOWED_HOSTS=$VOZIPOMNI_IPV4,localhost,127.0.0.1
-CORS_ALLOWED_ORIGINS=http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4
+ALLOWED_HOSTS=$(env_allowed_hosts)
+CORS_ALLOWED_ORIGINS=$(env_cors_origins)
 DB_NAME=vozipomni
 DB_USER=vozipomni_user
 DB_PASSWORD=$DB_PASSWORD
@@ -889,8 +1025,8 @@ REDIS_PASSWORD=$REDIS_PASSWORD
 
 SECRET_KEY=$SECRET_KEY
 DEBUG=False
-ALLOWED_HOSTS=$VOZIPOMNI_IPV4,localhost,127.0.0.1
-CORS_ORIGINS=http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4
+ALLOWED_HOSTS=$(env_allowed_hosts)
+CORS_ORIGINS=$(env_cors_origins)
 GUNICORN_WORKERS=4
 GUNICORN_TIMEOUT=120
 
@@ -917,13 +1053,14 @@ NGINX_HTTPS_PORT=443
 EOF
 
     chmod 600 "$INSTALL_DIR/.env"
+    persist_domain_env
 
     # Backend .env
     cat > "$INSTALL_DIR/backend/.env" <<EOF
 SECRET_KEY=$SECRET_KEY
 DEBUG=False
-ALLOWED_HOSTS=$VOZIPOMNI_IPV4,localhost,127.0.0.1
-CORS_ORIGINS=http://$VOZIPOMNI_IPV4,https://$VOZIPOMNI_IPV4
+ALLOWED_HOSTS=$(env_allowed_hosts)
+CORS_ORIGINS=$(env_cors_origins)
 DB_NAME=vozipomni
 DB_USER=vozipomni_user
 DB_PASSWORD=$DB_PASSWORD
@@ -942,7 +1079,9 @@ CELERY_BROKER_URL=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/0
 CELERY_RESULT_BACKEND=redis://:$REDIS_PASSWORD@$VOZIPOMNI_IPV4:6379/1
 EOF
 
-    # Guardar credenciales
+    # Guardar credenciales (con dominio se muestra https://dominio; sin dominio, la IP como siempre)
+    local web_base="http://$VOZIPOMNI_IPV4"
+    [ -n "${VOZIPOMNI_DOMAIN:-}" ] && web_base="https://$VOZIPOMNI_DOMAIN"
     cat > "$INSTALL_DIR/credentials.txt" <<EOF
 ════════════════════════════════════════════════════════════
          VoziPOmni Contact Center — Credenciales
@@ -950,9 +1089,9 @@ EOF
 Fecha: $(date)
 Servidor: $VOZIPOMNI_IPV4
 
-WEB:          http://$VOZIPOMNI_IPV4
-Admin Django: http://$VOZIPOMNI_IPV4/admin
-API REST:     http://$VOZIPOMNI_IPV4/api
+WEB:          $web_base
+Admin Django: $web_base/admin
+API REST:     $web_base/api
 
 Usuario: admin
 Password: $ADMIN_PASSWORD
@@ -1173,6 +1312,281 @@ FAIL2BAN_JAIL
     fi
 }
 
+# ─── 6.4. Let's Encrypt (solo si hay dominio) ──────────────────────────────
+# Todas estas funciones devuelven 0/1 y nunca abortan: ante cualquier fallo el
+# deploy continúa con el certificado autofirmado de siempre.
+
+# 0 si el certificado es autofirmado (emisor == sujeto)
+cert_is_self_signed() {
+    local cert="$1" subject issuer
+    subject=$(openssl x509 -noout -subject -nameopt RFC2253 -in "$cert" 2>/dev/null) || return 0
+    issuer=$(openssl x509 -noout -issuer -nameopt RFC2253 -in "$cert" 2>/dev/null) || return 0
+    [ "${subject#*=}" = "${issuer#*=}" ]
+}
+
+# 0 si el certificado es válido >1 día, NO es autofirmado y cubre el dominio
+cert_valid_for_domain() {
+    local cert="$1" domain="$2" text
+    [ -s "$cert" ] || return 1
+    openssl x509 -checkend 86400 -noout -in "$cert" >/dev/null 2>&1 || return 1
+    cert_is_self_signed "$cert" && return 1
+    text=$(openssl x509 -noout -text -in "$cert" 2>/dev/null) || return 1
+    printf '%s\n' "$text" | grep -Eq "DNS:${domain//./\\.}(,|[[:space:]]|$)"
+}
+
+# Instala certbot si falta y deja su ruta en CERTBOT_BIN
+install_certbot() {
+    if command -v certbot &>/dev/null; then
+        CERTBOT_BIN="$(command -v certbot)"
+        return 0
+    fi
+    if [ -x /opt/certbot/bin/certbot ]; then
+        CERTBOT_BIN=/opt/certbot/bin/certbot
+        return 0
+    fi
+
+    log_info "Instalando certbot..."
+    local distro_id="" major=""
+    if [ -f /etc/os-release ]; then
+        distro_id=$(. /etc/os-release && echo "${ID:-}") || distro_id=""
+        major=$(. /etc/os-release && echo "${VERSION_ID%%.*}") || major=""
+    fi
+
+    if command -v apt-get &>/dev/null; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y certbot 2>/dev/null \
+            || { DEBIAN_FRONTEND=noninteractive apt-get update -y 2>/dev/null \
+                 && DEBIAN_FRONTEND=noninteractive apt-get install -y certbot 2>/dev/null; } || true
+    elif command -v dnf &>/dev/null; then
+        if [ "$distro_id" != "amzn" ] && ! rpm -q epel-release &>/dev/null; then
+            # Rocky/Alma traen epel-release en extras; RHEL necesita el RPM de Fedora
+            dnf install -y epel-release 2>/dev/null \
+                || dnf install -y "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${major}.noarch.rpm" 2>/dev/null || true
+        fi
+        dnf install -y certbot 2>/dev/null || true
+    elif command -v yum &>/dev/null; then
+        if ! rpm -q epel-release &>/dev/null; then
+            yum install -y epel-release 2>/dev/null || true
+        fi
+        yum install -y certbot 2>/dev/null || true
+    fi
+
+    if command -v certbot &>/dev/null; then
+        CERTBOT_BIN="$(command -v certbot)"
+        return 0
+    fi
+
+    # Respaldo (p.ej. Amazon Linux 2023 sin paquete certbot): entorno virtual de Python
+    if command -v python3 &>/dev/null; then
+        log_info "certbot no está en los repositorios; instalando con pip en /opt/certbot..."
+        if python3 -m venv /opt/certbot 2>/dev/null \
+            && /opt/certbot/bin/pip install -q --upgrade pip 2>/dev/null \
+            && /opt/certbot/bin/pip install -q certbot 2>/dev/null \
+            && [ -x /opt/certbot/bin/certbot ]; then
+            CERTBOT_BIN=/opt/certbot/bin/certbot
+            return 0
+        fi
+    fi
+
+    log_warning "No se pudo instalar certbot"
+    return 1
+}
+
+# 0 si el dominio resuelve (registro A) a una IP de este servidor
+domain_points_here() {
+    local domain="$1" resolved="" public_ip="" ip candidate
+    if command -v getent &>/dev/null; then
+        resolved=$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1}' | sort -u) || resolved=""
+    fi
+    if [ -z "$resolved" ] && command -v dig &>/dev/null; then
+        resolved=$(dig +short A "$domain" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+){3}$' | sort -u) || resolved=""
+    fi
+    if [ -z "$resolved" ] && command -v host &>/dev/null; then
+        resolved=$(host -t A "$domain" 2>/dev/null | awk '/has address/ {print $NF}' | sort -u) || resolved=""
+    fi
+    if [ -z "$resolved" ]; then
+        log_warning "El dominio $domain no resuelve en DNS (falta el registro A)"
+        return 1
+    fi
+
+    # IPs aceptadas: --nat, la IP del servidor y la IP pública detectada
+    public_ip=$(curl -s --max-time 5 https://checkip.amazonaws.com 2>/dev/null | tr -d '[:space:]') || public_ip=""
+    for ip in $resolved; do
+        for candidate in "${NAT_IPV4:-}" "${VOZIPOMNI_IPV4:-}" "$public_ip"; do
+            if [ -n "$candidate" ] && [ "$ip" = "$candidate" ]; then
+                log_success "DNS correcto: $domain → $ip"
+                return 0
+            fi
+        done
+    done
+    log_warning "El dominio $domain apunta a: $(echo $resolved | tr ' ' ',') — no coincide con este servidor"
+    log_warning "  IPs esperadas: ${NAT_IPV4:-}${NAT_IPV4:+,}${VOZIPOMNI_IPV4:-}${public_ip:+,}${public_ip}"
+    return 1
+}
+
+# 0 si el contenedor nginx está corriendo
+nginx_container_running() {
+    command -v docker &>/dev/null || return 1
+    local names
+    names=$(docker ps --format '{{.Names}}' 2>/dev/null) || return 1
+    printf '%s\n' "$names" | grep -qx vozipomni_nginx
+}
+
+# Copia el certificado de Let's Encrypt a los nombres que espera nginx
+copy_letsencrypt_cert() {
+    local domain="$1" ssl_dir="$2" live="$LETSENCRYPT_DIR/live/$1"
+    [ -s "$live/fullchain.pem" ] && [ -s "$live/privkey.pem" ] || return 1
+    cp -L "$live/fullchain.pem" "$ssl_dir/vozipomni.crt.tmp" 2>/dev/null || return 1
+    cp -L "$live/privkey.pem" "$ssl_dir/vozipomni.key.tmp" 2>/dev/null || { rm -f "$ssl_dir/vozipomni.crt.tmp"; return 1; }
+    chmod 644 "$ssl_dir/vozipomni.crt.tmp" && chmod 600 "$ssl_dir/vozipomni.key.tmp" || return 1
+    mv -f "$ssl_dir/vozipomni.key.tmp" "$ssl_dir/vozipomni.key" && mv -f "$ssl_dir/vozipomni.crt.tmp" "$ssl_dir/vozipomni.crt" || return 1
+    return 0
+}
+
+# Ganchos de renovación + temporizador (idempotente). Los ganchos leen el dominio
+# del .env en cada renovación: si se quita el dominio, dejan de actuar.
+install_renewal_hooks() {
+    local hooks="$LETSENCRYPT_DIR/renewal-hooks" env_file="$INSTALL_DIR/.env"
+    local ssl_dir="$INSTALL_DIR/docker/nginx/ssl"
+    mkdir -p "$hooks/pre" "$hooks/post" "$hooks/deploy" 2>/dev/null || { log_warning "No se pudieron crear los ganchos de renovación"; return 1; }
+
+    # pre: libera el puerto 80 (renovación standalone) deteniendo nginx
+    {
+        echo '#!/bin/sh'
+        echo '# Generado por deploy.sh de VoziPOmni'
+        echo "ENV_FILE='$env_file'"
+        cat <<'HOOK'
+grep -q '^VOZIPOMNI_DOMAIN=..*' "$ENV_FILE" 2>/dev/null || exit 0
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx vozipomni_nginx; then
+    docker stop vozipomni_nginx >/dev/null 2>&1 && touch /run/vozipomni-nginx-stopped-by-certbot
+fi
+exit 0
+HOOK
+    } > "$hooks/pre/vozipomni.sh" 2>/dev/null || return 1
+
+    # deploy: copia el certificado renovado y recarga nginx
+    {
+        echo '#!/bin/sh'
+        echo '# Generado por deploy.sh de VoziPOmni'
+        echo "ENV_FILE='$env_file'"
+        echo "SSL_DIR='$ssl_dir'"
+        cat <<'HOOK'
+DOMAIN=$(grep '^VOZIPOMNI_DOMAIN=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2-)
+[ -n "$DOMAIN" ] || exit 0
+[ "$(basename "${RENEWED_LINEAGE:-}")" = "$DOMAIN" ] || exit 0
+cp -L "$RENEWED_LINEAGE/fullchain.pem" "$SSL_DIR/vozipomni.crt" || exit 1
+cp -L "$RENEWED_LINEAGE/privkey.pem" "$SSL_DIR/vozipomni.key" || exit 1
+chmod 644 "$SSL_DIR/vozipomni.crt"
+chmod 600 "$SSL_DIR/vozipomni.key"
+docker exec vozipomni_nginx nginx -s reload >/dev/null 2>&1 || true
+exit 0
+HOOK
+    } > "$hooks/deploy/vozipomni.sh" 2>/dev/null || return 1
+
+    # post: vuelve a arrancar nginx si el gancho pre lo detuvo
+    cat > "$hooks/post/vozipomni.sh" 2>/dev/null <<'HOOK' || return 1
+#!/bin/sh
+# Generado por deploy.sh de VoziPOmni
+if [ -f /run/vozipomni-nginx-stopped-by-certbot ]; then
+    rm -f /run/vozipomni-nginx-stopped-by-certbot
+    docker start vozipomni_nginx >/dev/null 2>&1 || true
+fi
+exit 0
+HOOK
+    chmod 755 "$hooks/pre/vozipomni.sh" "$hooks/deploy/vozipomni.sh" "$hooks/post/vozipomni.sh" 2>/dev/null || true
+
+    # Temporizador de renovación: el del paquete, o cron como respaldo
+    local timer=""
+    for timer in certbot-renew.timer certbot.timer; do
+        if systemctl cat "$timer" >/dev/null 2>&1; then
+            if systemctl enable --now "$timer" >/dev/null 2>&1; then
+                log_success "Renovación automática activa ($timer)"
+                return 0
+            fi
+        fi
+    done
+    if [ -d /etc/cron.d ]; then
+        printf '%s\n' "# Generado por deploy.sh de VoziPOmni: renovación de Let's Encrypt" \
+            "17 3,15 * * * root ${CERTBOT_BIN:-certbot} renew -q" > /etc/cron.d/vozipomni-certbot 2>/dev/null \
+            && chmod 644 /etc/cron.d/vozipomni-certbot 2>/dev/null \
+            && { log_success "Renovación automática activa (cron: /etc/cron.d/vozipomni-certbot)"; return 0; }
+    fi
+    log_warning "No se pudo programar la renovación automática. Programe: ${CERTBOT_BIN:-certbot} renew -q"
+    return 1
+}
+
+# Obtiene (o reutiliza) el certificado Let's Encrypt del dominio y lo deja en ssl_dir.
+# 0 = certificado válido instalado; 1 = usar autofirmado (ya se advirtió el motivo).
+setup_letsencrypt_cert() {
+    local ssl_dir="$1" domain="${VOZIPOMNI_DOMAIN:-}" live
+    [ -n "$domain" ] || return 1
+    live="$LETSENCRYPT_DIR/live/$domain"
+    log_info "Configurando certificado Let's Encrypt para $domain..."
+
+    # 1) Ya hay un certificado vigente en /etc/letsencrypt: solo copiarlo
+    if cert_valid_for_domain "$live/fullchain.pem" "$domain"; then
+        if copy_letsencrypt_cert "$domain" "$ssl_dir"; then
+            log_success "Certificado Let's Encrypt vigente reutilizado ($live)"
+            install_certbot >/dev/null 2>&1 || true
+            install_renewal_hooks || true
+            return 0
+        fi
+    fi
+    # 2) El certificado de nginx ya es válido para el dominio (p.ej. copiado a mano)
+    if cert_valid_for_domain "$ssl_dir/vozipomni.crt" "$domain" && [ -s "$ssl_dir/vozipomni.key" ]; then
+        log_success "Certificado válido para $domain encontrado, reutilizando..."
+        if install_certbot; then install_renewal_hooks || true; fi
+        return 0
+    fi
+
+    # 3) Solicitar uno nuevo
+    if ! install_certbot; then
+        log_warning "Sin certbot no se puede obtener el certificado de $domain"
+        return 1
+    fi
+    if ! domain_points_here "$domain"; then
+        log_warning "Corrija el registro DNS A de $domain y vuelva a ejecutar deploy.sh"
+        return 1
+    fi
+
+    local args=(certonly --standalone --non-interactive --agree-tos --preferred-challenges http
+                --cert-name "$domain" -d "$domain" --keep-until-expiring)
+    if [ -n "${LETSENCRYPT_EMAIL:-}" ]; then
+        args+=(--email "$LETSENCRYPT_EMAIL")
+    else
+        log_warning "Registrando en Let's Encrypt sin email (no recibirá avisos de vencimiento)"
+        args+=(--register-unsafely-without-email)
+    fi
+
+    # El modo standalone necesita el puerto 80: detener nginx unos segundos si está corriendo
+    local nginx_stopped=false rc=0
+    if nginx_container_running; then
+        log_info "Deteniendo vozipomni_nginx temporalmente (puerto 80)..."
+        if docker stop vozipomni_nginx >/dev/null 2>&1; then
+            nginx_stopped=true
+        else
+            log_warning "No se pudo detener vozipomni_nginx; certbot podría no acceder al puerto 80"
+        fi
+    fi
+
+    "$CERTBOT_BIN" "${args[@]}" || rc=$?
+
+    if [ "$nginx_stopped" = true ]; then
+        docker start vozipomni_nginx >/dev/null 2>&1 || log_warning "No se pudo volver a arrancar vozipomni_nginx"
+    fi
+
+    if [ "$rc" -ne 0 ]; then
+        log_warning "certbot falló (código $rc). Verifique que el puerto 80 sea accesible desde Internet"
+        return 1
+    fi
+    if ! copy_letsencrypt_cert "$domain" "$ssl_dir"; then
+        log_warning "No se encontró el certificado emitido en $live"
+        return 1
+    fi
+    log_success "✓ Certificado Let's Encrypt obtenido para $domain"
+    install_renewal_hooks || true
+    return 0
+}
+
 # ─── 6.5. Configuración Automática de HTTPS ────────────────────────────────
 setup_https_automatic() {
     log_info "Configurando HTTPS automáticamente..."
@@ -1181,11 +1595,27 @@ setup_https_automatic() {
     # Crear directorio SSL
     local SSL_DIR="$INSTALL_DIR/docker/nginx/ssl"
     mkdir -p "$SSL_DIR"
-    
+
+    # Usar la IP del sistema
+    local SERVER_IP="${VOZIPOMNI_IPV4:-127.0.0.1}"
+
+    # Con dominio: intentar Let's Encrypt. Si falla, se sigue con el autofirmado de siempre.
+    LETSENCRYPT_OK=false
+    if [ -n "${VOZIPOMNI_DOMAIN:-}" ]; then
+        if setup_letsencrypt_cert "$SSL_DIR"; then
+            LETSENCRYPT_OK=true
+        else
+            log_warning "No se obtuvo certificado para ${VOZIPOMNI_DOMAIN}: se usará certificado autofirmado para la IP ${SERVER_IP}"
+        fi
+    fi
+
+    if [ "$LETSENCRYPT_OK" != true ]; then
     # Verificar si ya existen certificados válidos
     if [ -f "$SSL_DIR/vozipomni.crt" ] && [ -f "$SSL_DIR/vozipomni.key" ]; then
         log_info "Certificados SSL ya existen, verificando validez..."
-        if openssl x509 -checkend 86400 -noout -in "$SSL_DIR/vozipomni.crt" 2>/dev/null; then
+        if [ "$DOMAIN_REMOVED" = true ] && ! cert_is_self_signed "$SSL_DIR/vozipomni.crt"; then
+            log_info "Dominio quitado: reemplazando el certificado del dominio por uno autofirmado..."
+        elif openssl x509 -checkend 86400 -noout -in "$SSL_DIR/vozipomni.crt" 2>/dev/null; then
             log_success "Certificados SSL válidos encontrados, reutilizando..."
             return 0
         else
@@ -1195,9 +1625,6 @@ setup_https_automatic() {
     
     # Generar certificados autofirmados
     log_info "Generando certificados SSL autofirmados (válidos 365 días)..."
-    
-    # Usar la IP del sistema
-    local SERVER_IP="${VOZIPOMNI_IPV4:-127.0.0.1}"
     
     # Generar certificado con OpenSSL
     if command -v openssl &>/dev/null; then
@@ -1226,6 +1653,7 @@ setup_https_automatic() {
         log_error "OpenSSL no está instalado (debió instalarse con las dependencias base)"
         return 1
     fi
+    fi  # fin del bloque autofirmado (LETSENCRYPT_OK != true)
     
     # Aplicar configuración HTTPS a nginx
     log_info "Configurando Nginx para HTTPS..."
@@ -1261,6 +1689,10 @@ setup_https_automatic() {
     fi
     
     log_success "HTTPS configurado correctamente"
+    if [ "$LETSENCRYPT_OK" = true ]; then
+        log_success "Certificado Let's Encrypt válido: https://${VOZIPOMNI_DOMAIN}"
+        return 0
+    fi
     log_info ""
     log_info "╔════════════════════════════════════════════════════════════╗"
     log_info "║  ⚠️  CERTIFICADO AUTOFIRMADO                               ║"
@@ -1766,6 +2198,15 @@ update_production() {
             fi
             log_success "NAT_IPV4=${NAT_IPV4} guardado en .env"
         fi
+        # Dominio: solo si hay uno (pasado o guardado) o se quitó con --domain none
+        if [ -n "${VOZIPOMNI_DOMAIN:-}" ] || [ "$DOMAIN_REMOVED" = true ]; then
+            persist_domain_env
+            if [ -n "${VOZIPOMNI_IPV4:-}" ]; then
+                sed -i "s|^ALLOWED_HOSTS=.*|ALLOWED_HOSTS=$(env_allowed_hosts)|" "$INSTALL_DIR/.env"
+                sed -i "s|^CORS_ORIGINS=.*|CORS_ORIGINS=$(env_cors_origins)|" "$INSTALL_DIR/.env"
+            fi
+            log_success "Dominio en .env: ${VOZIPOMNI_DOMAIN:-(ninguno)}"
+        fi
     fi
 
     # 2. Actualizar código
@@ -1786,6 +2227,15 @@ update_production() {
         log_info "deploy.sh cambió con la actualización; relanzando la versión nueva..."
         trap - ERR
         exec env VOZIPOMNI_DEPLOY_REEXEC=1 bash "$INSTALL_DIR/deploy.sh" "${ORIG_ARGS[@]}"
+    fi
+
+    # 2b. Certificado del dominio (solo con dominio o --domain none; nunca aborta el update)
+    if [ -n "${VOZIPOMNI_DOMAIN:-}" ] || [ "$DOMAIN_REMOVED" = true ]; then
+        setup_https_automatic || log_warning "No se pudo actualizar el certificado SSL; se mantiene el actual"
+        cd "$INSTALL_DIR"
+        if nginx_container_running; then
+            docker exec vozipomni_nginx nginx -s reload >/dev/null 2>&1 || true
+        fi
     fi
 
     # 3. Reconstruir imágenes con el nuevo código
@@ -1932,7 +2382,11 @@ PYEOF
     echo -e "${GREEN}Servicios activos:${NC}"
     $COMPOSE_CMD -f docker-compose.prod.yml ps --format 'table {{.Name}}\t{{.Status}}'
     echo ""
-    echo -e "Accede a: ${GREEN}http://$VOZIPOMNI_IPV4${NC}  (o https si tienes SSL)"
+    if [ "$LETSENCRYPT_OK" = true ]; then
+        echo -e "Accede a: ${GREEN}https://$VOZIPOMNI_DOMAIN${NC}"
+    else
+        echo -e "Accede a: ${GREEN}http://$VOZIPOMNI_IPV4${NC}  (o https si tienes SSL)"
+    fi
 }
 
 # ─── 10. Mostrar resultado ──────────────────────────────────────────────────
@@ -1944,17 +2398,30 @@ show_result() {
     echo -e "${GREEN}║                                                            ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
+    # Con certificado Let's Encrypt se muestra el dominio; si no, las URLs por IP de siempre
+    local web_base="http://$VOZIPOMNI_IPV4"
     echo -e "${BLUE}Accede a tu Contact Center:${NC}"
-    echo -e "  → ${GREEN}http://$VOZIPOMNI_IPV4${NC}"
-    echo ""
-    echo -e "${YELLOW}⚠️  IMPORTANTE - Seguridad:${NC}"
-    echo -e "  El sistema está usando HTTP (inseguro)"
-    echo -e "  Las contraseñas se transmiten sin cifrar"
-    echo ""
-    echo -e "${BLUE}🔐 Habilitar HTTPS (Recomendado):${NC}"
-    echo -e "  ${GREEN}cd $INSTALL_DIR && chmod +x quick-https.sh && ./quick-https.sh $VOZIPOMNI_IPV4${NC}"
-    echo -e "  Después acceder a: ${GREEN}https://$VOZIPOMNI_IPV4${NC}"
-    echo ""
+    if [ "$LETSENCRYPT_OK" = true ]; then
+        web_base="https://$VOZIPOMNI_DOMAIN"
+        echo -e "  → ${GREEN}https://$VOZIPOMNI_DOMAIN${NC}  (certificado Let's Encrypt válido)"
+        echo ""
+    else
+        echo -e "  → ${GREEN}http://$VOZIPOMNI_IPV4${NC}"
+        echo ""
+        if [ -n "${VOZIPOMNI_DOMAIN:-}" ]; then
+            echo -e "${YELLOW}⚠️  No se obtuvo certificado Let's Encrypt para $VOZIPOMNI_DOMAIN (se usa autofirmado).${NC}"
+            echo -e "  Revise el DNS y el puerto 80, y vuelva a ejecutar deploy.sh"
+            echo ""
+        fi
+        echo -e "${YELLOW}⚠️  IMPORTANTE - Seguridad:${NC}"
+        echo -e "  El sistema está usando HTTP (inseguro)"
+        echo -e "  Las contraseñas se transmiten sin cifrar"
+        echo ""
+        echo -e "${BLUE}🔐 Habilitar HTTPS (Recomendado):${NC}"
+        echo -e "  ${GREEN}cd $INSTALL_DIR && chmod +x quick-https.sh && ./quick-https.sh $VOZIPOMNI_IPV4${NC}"
+        echo -e "  Después acceder a: ${GREEN}https://$VOZIPOMNI_IPV4${NC}"
+        echo ""
+    fi
     echo -e "${BLUE}Credenciales:${NC}"
     echo -e "  Usuario:    ${GREEN}admin${NC}"
     echo -e "  Contraseña: ${GREEN}${ADMIN_PASSWORD}${NC}"
@@ -1962,9 +2429,9 @@ show_result() {
     echo -e "${BLUE}Credenciales completas:${NC} ${GREEN}$INSTALL_DIR/credentials.txt${NC}"
     echo ""
     echo -e "${BLUE}URLs del sistema:${NC}"
-    echo -e "  Web:       ${GREEN}http://$VOZIPOMNI_IPV4${NC}"
-    echo -e "  Admin:     ${GREEN}http://$VOZIPOMNI_IPV4/admin${NC}"
-    echo -e "  API Docs:  ${GREEN}http://$VOZIPOMNI_IPV4/api/docs/${NC}"
+    echo -e "  Web:       ${GREEN}$web_base${NC}"
+    echo -e "  Admin:     ${GREEN}$web_base/admin${NC}"
+    echo -e "  API Docs:  ${GREEN}$web_base/api/docs/${NC}"
     echo -e "  Métricas:  ${GREEN}http://$VOZIPOMNI_IPV4:8000/metrics${NC}"
     echo ""
     echo -e "${BLUE}Comandos útiles:${NC}"
