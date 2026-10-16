@@ -471,6 +471,134 @@ DAEMON
     log_success "Sistema preparado"
 }
 
+# ─── 1.5. Instalar dependencias base del sistema ────────────────────────────
+# Instala de una sola vez todas las herramientas que usa este script y que pueden
+# faltar en imágenes mínimas (Rocky/Alma/RHEL 9 minimal, Amazon Linux 2023,
+# Debian/Ubuntu cloud, openSUSE). Solo instala lo que falta (idempotente).
+install_base_dependencies() {
+    log_info "Verificando dependencias base del sistema..."
+
+    local DISTRO_ID="unknown" PKG_MGR=""
+    if [ -f /etc/os-release ]; then
+        DISTRO_ID=$(. /etc/os-release && echo "${ID:-unknown}")
+    fi
+
+    if command -v dnf &>/dev/null; then
+        PKG_MGR="dnf"
+    elif command -v yum &>/dev/null; then
+        PKG_MGR="yum"
+    elif command -v apt-get &>/dev/null; then
+        PKG_MGR="apt-get"
+    elif command -v zypper &>/dev/null; then
+        PKG_MGR="zypper"
+    else
+        log_warning "Gestor de paquetes no soportado para dependencias base (distribución: $DISTRO_ID)"
+        log_warning "Asegúrese de tener instalados: git curl openssl gpg sed gawk grep procps util-linux ca-certificates"
+        return 0
+    fi
+
+    # Binario requerido → paquete por gestor (formato: "binario:rpm:deb:suse")
+    # Solo se instala el paquete si el binario no existe. Así no se toca curl-minimal
+    # ni coreutils-single en RHEL minimal (instalar curl/coreutils completos crea conflictos).
+    local required_map=(
+        "git:git:git:git"
+        "curl:curl:curl:curl"
+        "openssl:openssl:openssl:openssl"
+        "gpg:gnupg2:gnupg:gpg2"
+        "sed:sed:sed:sed"
+        "awk:gawk:gawk:gawk"
+        "grep:grep:grep:grep"
+        "sysctl:procps-ng:procps:procps"
+        "dmesg:util-linux:util-linux:util-linux"
+    )
+    # Opcionales: si fallan no se aborta el deploy
+    local optional_map=(
+        "iptables:iptables:iptables:iptables"
+    )
+    if [ "$PKG_MGR" = "apt-get" ]; then
+        required_map+=("lsb_release::lsb-release:")
+    fi
+
+    local idx=1
+    case "$PKG_MGR" in
+        dnf|yum) idx=1 ;;
+        apt-get) idx=2 ;;
+        zypper)  idx=3 ;;
+    esac
+
+    local required_pkgs=() optional_pkgs=() parts=() entry bin pkg
+    for entry in "${required_map[@]}"; do
+        IFS=':' read -r -a parts <<< "$entry"
+        bin="${parts[0]}"; pkg="${parts[$idx]:-}"
+        if [ -n "$pkg" ] && ! command -v "$bin" &>/dev/null; then
+            required_pkgs+=("$pkg")
+        fi
+    done
+    for entry in "${optional_map[@]}"; do
+        IFS=':' read -r -a parts <<< "$entry"
+        bin="${parts[0]}"; pkg="${parts[$idx]:-}"
+        if [ -n "$pkg" ] && ! command -v "$bin" &>/dev/null; then
+            optional_pkgs+=("$pkg")
+        fi
+    done
+
+    # Certificados raíz (necesarios para curl/git por HTTPS)
+    if [ ! -s /etc/pki/tls/certs/ca-bundle.crt ] && [ ! -s /etc/ssl/certs/ca-certificates.crt ] \
+        && [ ! -s /etc/ssl/ca-bundle.pem ]; then
+        required_pkgs+=("ca-certificates")
+    fi
+
+    # Plugin config-manager (lo usa la instalación de Docker para agregar el repo)
+    if [ "$PKG_MGR" = "dnf" ] && ! dnf config-manager --help &>/dev/null; then
+        optional_pkgs+=("dnf-plugins-core")
+    elif [ "$PKG_MGR" = "yum" ] && ! command -v yum-config-manager &>/dev/null; then
+        optional_pkgs+=("yum-utils")
+    fi
+
+    if [ ${#required_pkgs[@]} -eq 0 ] && [ ${#optional_pkgs[@]} -eq 0 ]; then
+        log_success "Dependencias base ya instaladas"
+        return 0
+    fi
+
+    # Comando de instalación no interactivo según el gestor
+    local install_cmd=()
+    case "$PKG_MGR" in
+        dnf)     install_cmd=(dnf install -y) ;;
+        yum)     install_cmd=(yum install -y) ;;
+        apt-get) install_cmd=(apt-get install -y) ;;
+        zypper)  install_cmd=(zypper --non-interactive install) ;;
+    esac
+    if [ "$PKG_MGR" = "apt-get" ]; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -y
+    fi
+
+    # ${arr[@]+...} evita "unbound variable" con arrays vacíos en bash < 4.4 (set -u)
+    log_info "Instalando dependencias base: ${required_pkgs[*]+${required_pkgs[*]}} ${optional_pkgs[*]+${optional_pkgs[*]}}"
+    if [ ${#required_pkgs[@]} -gt 0 ]; then
+        "${install_cmd[@]}" "${required_pkgs[@]}"
+    fi
+    for pkg in ${optional_pkgs[@]+"${optional_pkgs[@]}"}; do
+        "${install_cmd[@]}" "$pkg" || log_warning "No se pudo instalar $pkg (opcional, continuando)"
+    done
+
+    # Verificar que lo requerido quedó instalado
+    local missing=()
+    for entry in "${required_map[@]}"; do
+        IFS=':' read -r -a parts <<< "$entry"
+        bin="${parts[0]}"; pkg="${parts[$idx]:-}"
+        if [ -n "$pkg" ] && ! command -v "$bin" &>/dev/null; then
+            missing+=("$bin")
+        fi
+    done
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_error "No se pudieron instalar: ${missing[*]}. Instálelos manualmente y reintente."
+        exit 1
+    fi
+
+    log_success "Dependencias base instaladas"
+}
+
 # ─── 3. Instalar Docker (soporte universal de distribuciones) ────────────────
 install_docker() {
     if command -v docker &>/dev/null; then
@@ -924,11 +1052,13 @@ configure_fail2ban() {
     if ! command -v fail2ban-client &>/dev/null; then
         log_info "Instalando fail2ban..."
         if [ -f /etc/debian_version ]; then
-            apt-get update -qq && apt-get install -y fail2ban 2>/dev/null || true
+            DEBIAN_FRONTEND=noninteractive apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y fail2ban 2>/dev/null || true
         elif [ -f /etc/redhat-release ]; then
             # En RHEL-like fail2ban suele estar en EPEL
             if command -v dnf &>/dev/null; then
-                dnf install -y epel-release 2>/dev/null || true
+                # Rocky/Alma traen epel-release en extras; RHEL necesita el RPM de Fedora
+                dnf install -y epel-release 2>/dev/null || \
+                    dnf install -y "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(. /etc/os-release && echo "${VERSION_ID%%.*}").noarch.rpm" 2>/dev/null || true
                 dnf makecache -q 2>/dev/null || true
                 dnf install -y fail2ban 2>/dev/null || true
             elif command -v yum &>/dev/null; then
@@ -1034,19 +1164,9 @@ setup_https_automatic() {
             return 1
         fi
     else
-        log_error "OpenSSL no está instalado. Instalando..."
-        if [ -f /etc/debian_version ]; then
-            apt-get update && apt-get install -y openssl
-        elif [ -f /etc/redhat-release ]; then
-            yum install -y openssl || dnf install -y openssl
-        else
-            log_error "No se pudo instalar OpenSSL automáticamente"
-            return 1
-        fi
-        
-        # Reintentar generación
-        setup_https_automatic
-        return $?
+        # openssl se instala en install_base_dependencies; no debería llegar aquí
+        log_error "OpenSSL no está instalado (debió instalarse con las dependencias base)"
+        return 1
     fi
     
     # Aplicar configuración HTTPS a nginx
@@ -1789,11 +1909,14 @@ main() {
     # Modo actualización: flujo corto sin borrar datos
     if [ "$UPDATE_ONLY" = true ]; then
         check_prerequisites
+        install_base_dependencies
         update_production
         exit 0
     fi
 
     check_prerequisites
+    echo ""
+    install_base_dependencies
     echo ""
     prepare_system
     echo ""
