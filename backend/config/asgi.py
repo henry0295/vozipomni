@@ -1,5 +1,5 @@
 """
-ASGI config for VoziPOmni project.
+ASGI config for VozipCX project.
 Exposes the ASGI callable as a module-level variable named ``application``.
 """
 

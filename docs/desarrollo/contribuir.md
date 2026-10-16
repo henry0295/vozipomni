@@ -1,6 +1,6 @@
 # Contribuir
 
-Esta guía reúne las reglas prácticas para aportar código a VozipOmni: cómo trabajar con ramas, cómo escribir los mensajes de commit según el estilo que ya usa el repositorio, qué convenciones seguir en backend, frontend y telefonía, las reglas de seguridad que no se negocian, la lista de revisión de un pull request y cómo se despliega un cambio una vez fusionado. La organización del código está en [Estructura del código](./estructura-del-codigo.md) y la arquitectura en [Arquitectura](../general/arquitectura.md).
+Esta guía reúne las reglas prácticas para aportar código a VozipCX: cómo trabajar con ramas, cómo escribir los mensajes de commit según el estilo que ya usa el repositorio, qué convenciones seguir en backend, frontend y telefonía, las reglas de seguridad que no se negocian, la lista de revisión de un pull request y cómo se despliega un cambio una vez fusionado. La organización del código está en [Estructura del código](./estructura-del-codigo.md) y la arquitectura en [Arquitectura](../general/arquitectura.md).
 
 ## Ramas
 

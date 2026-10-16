@@ -1,4 +1,4 @@
-# WebSocket Server Dedicado para VozipOmni
+# WebSocket Server Dedicado para VozipCX
 # Tareas asíncronas, notificaciones en tiempo real, aprovisionamiento Asterisk
 
 import asyncio

@@ -1,7 +1,7 @@
 FROM debian:bullseye-slim
 
-LABEL maintainer="VoziPOmni Team"
-LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center (Compilación desde fuente)"
+LABEL maintainer="VozipCX Team"
+LABEL description="Asterisk 21 LTS para VozipCX Contact Center (Compilación desde fuente)"
 
 ENV ASTERISK_VERSION=certified-21.0-cert1
 

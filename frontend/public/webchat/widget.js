@@ -1,5 +1,5 @@
 /*!
- * VozipOmni — widget de chat web
+ * VozipCX — widget de chat web
  * Uso: <script src="https://TU-DOMINIO/webchat/widget.js" data-key="CLAVE" data-api="https://TU-DOMINIO/api/messaging/webchat/public" async></script>
  *
  * - Sin dependencias; los estilos van aislados en un Shadow DOM.
@@ -18,7 +18,7 @@
   if (!script) return;
   var KEY = script.getAttribute('data-key');
   var API = (script.getAttribute('data-api') || script.src.replace(/\/webchat\/widget\.js.*$/, '/api/messaging/webchat/public')).replace(/\/$/, '');
-  if (!KEY) { console.warn('[VozipOmni] Falta data-key en el script del chat'); return; }
+  if (!KEY) { console.warn('[VozipCX] Falta data-key en el script del chat'); return; }
 
   var STORE = 'vozip_webchat_' + KEY;
   var state = { cfg: null, token: null, name: '', open: false, lastId: 0, unread: 0, timer: null, sending: false, ids: {} };
@@ -285,7 +285,7 @@
 
   function init() {
     get('/config/').then(function (cfg) { state.cfg = cfg; build(cfg); })
-      .catch(function (e) { console.warn('[VozipOmni] Chat no disponible:', e.message); });
+      .catch(function (e) { console.warn('[VozipCX] Chat no disponible:', e.message); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

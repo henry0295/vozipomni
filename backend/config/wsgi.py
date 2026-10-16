@@ -1,5 +1,5 @@
 """
-WSGI config for VoziPOmni project.
+WSGI config for VozipCX project.
 """
 
 import os

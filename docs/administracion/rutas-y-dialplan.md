@@ -1,6 +1,6 @@
 # Rutas y dialplan
 
-Este manual explica cómo decide Asterisk por dónde sale una llamada marcada por un agente (rutas salientes), a dónde va una llamada que entra por un DID (rutas entrantes) y cómo se usan los destinos personalizados. También muestra el dialplan que genera VozipOmni y cómo se aplica. Se basa en `frontend/pages/outbound-routes/index.vue`, `frontend/pages/inbound-routes/index.vue`, `frontend/pages/custom-destinations/index.vue`, los modelos `OutboundRoute`, `InboundRoute` y `CustomDestination` de `backend/apps/telephony/models.py`, `backend/apps/telephony/asterisk_config.py`, `backend/apps/telephony/security.py`, `backend/apps/telephony/signals.py` y `docker/asterisk/configs/extensions.conf`.
+Este manual explica cómo decide Asterisk por dónde sale una llamada marcada por un agente (rutas salientes), a dónde va una llamada que entra por un DID (rutas entrantes) y cómo se usan los destinos personalizados. También muestra el dialplan que genera VozipCX y cómo se aplica. Se basa en `frontend/pages/outbound-routes/index.vue`, `frontend/pages/inbound-routes/index.vue`, `frontend/pages/custom-destinations/index.vue`, los modelos `OutboundRoute`, `InboundRoute` y `CustomDestination` de `backend/apps/telephony/models.py`, `backend/apps/telephony/asterisk_config.py`, `backend/apps/telephony/security.py`, `backend/apps/telephony/signals.py` y `docker/asterisk/configs/extensions.conf`.
 
 El dialplan tiene una parte estática (`extensions.conf`) y una dinámica (`/var/lib/asterisk/dynamic/extensions_dynamic.conf`), que el backend regenera desde la base de datos. Las rutas salientes se escriben en el contexto `[from-internal]`, que es donde entran las llamadas de agentes y extensiones. Las rutas entrantes se escriben en `[from-pstn]`, que es el contexto por defecto de las troncales.
 
@@ -140,7 +140,7 @@ Un destino personalizado es un punto del dialplan (context, extension, priority)
 
 Tenlo en cuenta:
 
-- El contexto indicado debe existir en Asterisk; VozipOmni no lo crea.
+- El contexto indicado debe existir en Asterisk; VozipCX no lo crea.
 - Según el código revisado, el destino de fallo se guarda pero no se usa en el dialplan generado.
 - El `Goto` se resuelve al generar el dialplan. Guardar un destino personalizado no regenera el dialplan; si cambias su context, extension o priority, guarda de nuevo la ruta o el IVR que lo usa, o ejecuta `generate_asterisk_config`.
 

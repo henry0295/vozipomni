@@ -22,7 +22,7 @@ def health_check(request):
     return JsonResponse({
         'status': 'healthy' if healthy else 'unhealthy',
         'timestamp': timezone.now().isoformat(),
-        'service': 'VoziPOmni Backend',
+        'service': 'VozipCX Backend',
         'checks': checks,
     }, status=200 if healthy else 503)
 

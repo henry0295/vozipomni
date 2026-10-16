@@ -43,7 +43,7 @@ const Layout = ({ children }) => {
         <div className="sidebar-header">
           <div className="logo">
             <span className="logo-icon">🎯</span>
-            {isSidebarOpen && <h1>VoziPOmni</h1>}
+            {isSidebarOpen && <h1>VozipCX</h1>}
           </div>
           <button 
             className="toggle-btn" 

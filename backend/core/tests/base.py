@@ -1,5 +1,5 @@
 """
-Base test classes for VoziPOmni Contact Center tests.
+Base test classes for VozipCX Contact Center tests.
 
 This module provides base test classes that encapsulate common patterns:
 - APITestCase: Base class for API endpoint testing

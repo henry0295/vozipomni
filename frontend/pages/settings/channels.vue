@@ -259,7 +259,7 @@
 <script setup lang="ts">
 import { channelMeta } from '~/utils/channels'
 
-useHead({ title: 'Canales digitales - VozipOmni' })
+useHead({ title: 'Canales digitales - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()

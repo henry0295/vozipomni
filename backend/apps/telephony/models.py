@@ -144,13 +144,13 @@ class SIPTrunk(models.Model):
     port = models.IntegerField(default=5060, verbose_name='Puerto', validators=[validate_port_number])
     protocol = models.CharField(max_length=10, choices=PROTOCOL_CHOICES, default='udp', verbose_name='Protocolo')
     
-    # Autenticación Saliente (desde VoziPOmni hacia el proveedor)
+    # Autenticación Saliente (desde VozipCX hacia el proveedor)
     outbound_auth_username = models.CharField(max_length=100, blank=True, verbose_name='Usuario Saliente')
     outbound_auth_password = models.CharField(max_length=100, blank=True, verbose_name='Contraseña Saliente')
     from_user = models.CharField(max_length=100, blank=True, verbose_name='From User')
     from_domain = models.CharField(max_length=200, blank=True, verbose_name='From Domain')
     
-    # Autenticación Entrante (desde el proveedor hacia VoziPOmni)
+    # Autenticación Entrante (desde el proveedor hacia VozipCX)
     inbound_auth_username = models.CharField(max_length=100, blank=True, verbose_name='Usuario Entrante')
     inbound_auth_password = models.CharField(max_length=100, blank=True, verbose_name='Contraseña Entrante')
     

@@ -13,7 +13,7 @@
 // Global app setup
 useHead({
   titleTemplate: (titleChunk) => {
-    return titleChunk ? `${titleChunk} - VozipOmni` : 'VozipOmni - Contact Center'
+    return titleChunk ? `${titleChunk} - VozipCX` : 'VozipCX - Contact Center'
   }
 })
 </script>

@@ -1,6 +1,6 @@
 #!/bin/sh
 # ============================================================================
-# VoziPOmni - Asterisk Container Entrypoint
+# VozipCX - Asterisk Container Entrypoint
 # ============================================================================
 
 set -e
@@ -9,7 +9,7 @@ CONFIG_DIR="/etc/asterisk"
 DYNAMIC_DIR="/var/lib/asterisk/dynamic"
 KEYS_DIR="${CONFIG_DIR}/keys"
 
-echo "=== VoziPOmni Asterisk Entrypoint ==="
+echo "=== VozipCX Asterisk Entrypoint ==="
 
 # -------------------------------------------------------
 # 0. Crear directorios necesarios
@@ -52,7 +52,7 @@ fi
 for conf in pjsip_extensions.conf pjsip_wizard.conf extensions_dynamic.conf \
             queues_dynamic.conf pjsip_agents.conf; do
     if [ ! -f "${DYNAMIC_DIR}/${conf}" ]; then
-        echo "; Placeholder — gestionado por VoziPOmni backend" \
+        echo "; Placeholder — gestionado por VozipCX backend" \
             > "${DYNAMIC_DIR}/${conf}"
         echo "  [entrypoint] Creado ${DYNAMIC_DIR}/${conf} (placeholder)"
     fi
@@ -170,7 +170,7 @@ if [ ! -f "${KEYS_DIR}/asterisk.pem" ]; then
         -newkey rsa:2048 \
         -keyout "${KEYS_DIR}/asterisk.key" \
         -out    "${KEYS_DIR}/asterisk.pem" \
-        -subj   "/CN=vozipomni-asterisk/O=VoziPOmni/C=CO" \
+        -subj   "/CN=vozipomni-asterisk/O=VozipCX/C=CO" \
         2>/dev/null
     cat "${KEYS_DIR}/asterisk.key" "${KEYS_DIR}/asterisk.pem" \
         > "${KEYS_DIR}/asterisk-combined.pem"

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== VoziPOmni Kamailio Entrypoint ==="
+echo "=== VozipCX Kamailio Entrypoint ==="
 
 # ── 1. Certificados TLS ───────────────────────────────────────────────────
 # IMPORTANTE: kamailio.cfg usa tls.cfg que referencia archivos SEPARADOS
@@ -12,7 +12,7 @@ if [ ! -f /etc/kamailio/kamailio-selfsigned.pem ] || [ ! -f /etc/kamailio/kamail
         -keyout /etc/kamailio/kamailio-selfsigned.key \
         -out /etc/kamailio/kamailio-selfsigned.pem \
         -days 3650 -nodes \
-        -subj "/C=CO/ST=Bogota/L=Bogota/O=VoziPOmni/CN=kamailio" 2>/dev/null
+        -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipCX/CN=kamailio" 2>/dev/null
     chmod 600 /etc/kamailio/kamailio-selfsigned.key
     chmod 644 /etc/kamailio/kamailio-selfsigned.pem
     echo "  [entrypoint] Certificados TLS creados"

@@ -1,6 +1,6 @@
-# Arquitectura de VozipOmni
+# Arquitectura de VozipCX
 
-Este documento describe los componentes de VozipOmni en producción, qué responsabilidad tiene cada uno y cómo fluyen la señalización, el audio y los eventos entre ellos. Está basado en `docker-compose.prod.yml`, `docker/nginx/default.https.conf`, `docker/kamailio/kamailio.cfg`, `docker/asterisk/configs/`, `backend/apps/telephony/ami_cdr_listener.py`, `backend/apps/telephony/webrtc_views.py` y `frontend/composables/useWebRTC.ts`.
+Este documento describe los componentes de VozipCX en producción, qué responsabilidad tiene cada uno y cómo fluyen la señalización, el audio y los eventos entre ellos. Está basado en `docker-compose.prod.yml`, `docker/nginx/default.https.conf`, `docker/kamailio/kamailio.cfg`, `docker/asterisk/configs/`, `backend/apps/telephony/ami_cdr_listener.py`, `backend/apps/telephony/webrtc_views.py` y `frontend/composables/useWebRTC.ts`.
 
 ## Vista general
 

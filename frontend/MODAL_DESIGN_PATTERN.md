@@ -1,6 +1,6 @@
 # Patrón de Diseño para Modales de Creación/Edición
 
-Este documento define el patrón estándar para todos los formularios de creación y edición en VozipOmni.
+Este documento define el patrón estándar para todos los formularios de creación y edición en VozipCX.
 
 ## ✨ Características del Patrón
 

@@ -424,6 +424,6 @@ const changeAvatar = () => {
 
 // Metadata de la página
 useHead({
-  title: 'Mi Perfil - VozipOmni'
+  title: 'Mi Perfil - VozipCX'
 })
 </script>

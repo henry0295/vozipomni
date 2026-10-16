@@ -1,6 +1,6 @@
 # Manual del supervisor
 
-Este manual explica las tareas diarias del supervisor en VozipOmni: seguir la operación en vivo, leer el estado de los agentes y las colas, escuchar, susurrar o entrar a una llamada, forzar pausas o desconexiones, evaluar la calidad, auditar las gestiones y revisar los reportes. Se basa en `frontend/pages/supervisor/index.vue`, `backend/apps/api/supervisor_viewsets.py`, el contexto `[from-spy]` de `docker/asterisk/configs/extensions.conf`, `frontend/pages/quality/index.vue`, `frontend/pages/audit/index.vue`, `frontend/pages/settings/security.vue`, `frontend/pages/dashboard.vue`, `frontend/pages/reports/index.vue` y `frontend/utils/navigation.ts`.
+Este manual explica las tareas diarias del supervisor en VozipCX: seguir la operación en vivo, leer el estado de los agentes y las colas, escuchar, susurrar o entrar a una llamada, forzar pausas o desconexiones, evaluar la calidad, auditar las gestiones y revisar los reportes. Se basa en `frontend/pages/supervisor/index.vue`, `backend/apps/api/supervisor_viewsets.py`, el contexto `[from-spy]` de `docker/asterisk/configs/extensions.conf`, `frontend/pages/quality/index.vue`, `frontend/pages/audit/index.vue`, `frontend/pages/settings/security.vue`, `frontend/pages/dashboard.vue`, `frontend/pages/reports/index.vue` y `frontend/utils/navigation.ts`.
 
 El rol **Supervisor** entra por defecto al **Monitor en vivo** (ruta `/supervisor`). La consola de agente (`/agent/console`) es exclusiva del rol Agente: un supervisor que la abre es redirigido al Dashboard.
 

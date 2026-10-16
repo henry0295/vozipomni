@@ -1,6 +1,6 @@
 # Estructura del código
 
-Este documento recorre el repositorio de VozipOmni carpeta por carpeta y explica para qué sirve cada directorio y archivo importante, de modo que un desarrollador nuevo sepa dónde buscar antes de cambiar algo. También clasifica los scripts de la raíz: cuál es el vigente para instalar y actualizar, cuáles son utilidades de operación y cuáles parecen legados, indicando en cada caso la evidencia encontrada. La relación entre los servicios en ejecución está en [Arquitectura](../general/arquitectura.md).
+Este documento recorre el repositorio de VozipCX carpeta por carpeta y explica para qué sirve cada directorio y archivo importante, de modo que un desarrollador nuevo sepa dónde buscar antes de cambiar algo. También clasifica los scripts de la raíz: cuál es el vigente para instalar y actualizar, cuáles son utilidades de operación y cuáles parecen legados, indicando en cada caso la evidencia encontrada. La relación entre los servicios en ejecución está en [Arquitectura](../general/arquitectura.md).
 
 ## Vista general
 

@@ -27,13 +27,13 @@ if [ ! -f "$SSL_CERT" ] || [ ! -f "$SSL_KEY" ]; then
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
         -keyout "$SSL_KEY" \
         -out    "$SSL_CERT" \
-        -subj   "/C=CO/ST=Bogota/L=Bogota/O=VoziPOmni/CN=${SERVER_IP}" \
+        -subj   "/C=CO/ST=Bogota/L=Bogota/O=VozipCX/CN=${SERVER_IP}" \
         -addext "subjectAltName=IP:${SERVER_IP},DNS:localhost" \
         2>/dev/null || \
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
         -keyout "$SSL_KEY" \
         -out    "$SSL_CERT" \
-        -subj   "/C=CO/ST=Bogota/L=Bogota/O=VoziPOmni/CN=${SERVER_IP}" \
+        -subj   "/C=CO/ST=Bogota/L=Bogota/O=VozipCX/CN=${SERVER_IP}" \
         2>/dev/null
 
     if [ -f "$SSL_CERT" ] && [ -f "$SSL_KEY" ]; then

@@ -33,6 +33,6 @@ if settings.DEBUG:
         urlpatterns = [path('__debug__/', include(debug_toolbar.urls))] + urlpatterns
 
 # Personalizaci\u00f3n del admin
-admin.site.site_header = "VoziPOmni Contact Center"
-admin.site.site_title = "VoziPOmni Admin"
+admin.site.site_header = "VozipCX Contact Center"
+admin.site.site_title = "VozipCX Admin"
 admin.site.index_title = "Panel de Administración"

@@ -1,13 +1,13 @@
 # Manual del agente
 
-Este manual explica el trabajo diario del agente en la **Consola de Agente** de VozipOmni: cómo entrar, cómo está organizada la pantalla, cómo cambiar de estado y tomar pausas, cómo hacer y recibir llamadas, cómo calificar cada llamada, y cómo usar las pestañas de campaña, marcador, contactos y chats. Al final hay una sección de problemas frecuentes. Se basa en `frontend/pages/agent/console.vue`, los componentes `AgentSoftphone.vue`, `AgentStatusPanel.vue`, `AgentCallDisposition.vue`, `AgentCampaignsPanel.vue`, `AgentDialerPanel.vue`, `AgentContactsList.vue`, `AgentWhatsAppPanel.vue`, el store `frontend/stores/agent.ts` y el composable `frontend/composables/useWebRTC.ts`.
+Este manual explica el trabajo diario del agente en la **Consola de Agente** de VozipCX: cómo entrar, cómo está organizada la pantalla, cómo cambiar de estado y tomar pausas, cómo hacer y recibir llamadas, cómo calificar cada llamada, y cómo usar las pestañas de campaña, marcador, contactos y chats. Al final hay una sección de problemas frecuentes. Se basa en `frontend/pages/agent/console.vue`, los componentes `AgentSoftphone.vue`, `AgentStatusPanel.vue`, `AgentCallDisposition.vue`, `AgentCampaignsPanel.vue`, `AgentDialerPanel.vue`, `AgentContactsList.vue`, `AgentWhatsAppPanel.vue`, el store `frontend/stores/agent.ts` y el composable `frontend/composables/useWebRTC.ts`.
 
 La consola funciona en el navegador. No hay que instalar un softphone: el teléfono va integrado en la página (WebRTC). Solo necesitas un navegador actualizado (Chrome, Edge o Firefox), diadema con micrófono y la dirección HTTPS de la plataforma.
 
 ## Entrar a la consola
 
-1. Abre la dirección de VozipOmni que te dio tu supervisor (siempre con `https://`).
-2. En la pantalla **VozipOmni / Inicia sesión en tu cuenta** escribe **Usuario** y **Contraseña** y haz clic en **Iniciar sesión**. Si olvidaste la contraseña usa el enlace **Recuperar**.
+1. Abre la dirección de VozipCX que te dio tu supervisor (siempre con `https://`).
+2. En la pantalla **VozipCX / Inicia sesión en tu cuenta** escribe **Usuario** y **Contraseña** y haz clic en **Iniciar sesión**. Si olvidaste la contraseña usa el enlace **Recuperar**.
 3. Con rol Agente, el sistema te lleva directo a la **Consola de Agente** (ruta `/agent/console`). Los agentes no ven el menú lateral ni otros módulos.
 4. El navegador pide permiso para usar el micrófono. Acepta: sin él no puedes hablar.
 5. Si tu usuario tiene un solo perfil de agente, la sesión de agente se inicia sola. Si tiene varios, aparece la tarjeta **Iniciar Sesión de Agente**: elige tu perfil en **Seleccionar agente** (se ve el nombre y la extensión, por ejemplo "Ext: 101") y haz clic en **Iniciar Sesión**.
@@ -168,7 +168,7 @@ La tarjeta **Chats** reúne WhatsApp, email, chat web y redes. Arriba ves los me
 
 ## Cerrar sesión
 
-Haz clic en **Cerrar Sesión** (arriba a la derecha) y confirma "¿Está seguro que desea cerrar la sesión de agente?". La consola desconecta el teléfono, cierra la sesión de agente (sales de las colas y quedas **Desconectado**) y cierra tu sesión en VozipOmni. Vuelves a la pantalla de ingreso.
+Haz clic en **Cerrar Sesión** (arriba a la derecha) y confirma "¿Está seguro que desea cerrar la sesión de agente?". La consola desconecta el teléfono, cierra la sesión de agente (sales de las colas y quedas **Desconectado**) y cierra tu sesión en VozipCX. Vuelves a la pantalla de ingreso.
 
 Cierra siempre con este botón antes de irte. Cerrar la pestaña desconecta el teléfono, pero puede dejarte como conectado en los tableros del supervisor.
 

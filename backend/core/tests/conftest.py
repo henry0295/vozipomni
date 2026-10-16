@@ -1,5 +1,5 @@
 """
-Shared pytest fixtures and configuration for VoziPOmni Contact Center tests.
+Shared pytest fixtures and configuration for VozipCX Contact Center tests.
 
 This module provides reusable fixtures for:
 - Database access

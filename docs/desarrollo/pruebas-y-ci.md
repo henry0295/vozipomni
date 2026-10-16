@@ -1,6 +1,6 @@
 # Pruebas y CI
 
-Este documento reúne lo que existe hoy en VozipOmni para verificar cambios: las pruebas del backend y su configuración de pytest, la prueba de carga con k6, el flujo de integración continua en `.github/workflows/ci.yml`, cómo ejecutar cada verificación en local y qué problemas se detectaron al leer esos archivos. Termina con sugerencias para ampliar la cobertura. No se ejecutó la suite durante la redacción; lo que se afirma sale de leer el código y la configuración.
+Este documento reúne lo que existe hoy en VozipCX para verificar cambios: las pruebas del backend y su configuración de pytest, la prueba de carga con k6, el flujo de integración continua en `.github/workflows/ci.yml`, cómo ejecutar cada verificación en local y qué problemas se detectaron al leer esos archivos. Termina con sugerencias para ampliar la cobertura. No se ejecutó la suite durante la redacción; lo que se afirma sale de leer el código y la configuración.
 
 ## Qué hay
 

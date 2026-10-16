@@ -1,5 +1,5 @@
 """
-Core test utilities and fixtures for VoziPOmni Contact Center.
+Core test utilities and fixtures for VozipCX Contact Center.
 
 This package provides shared test infrastructure including:
 - Base test classes for common patterns

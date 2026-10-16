@@ -107,7 +107,7 @@
 <script setup lang="ts">
 import { CHANNEL_FILTER_OPTIONS, channelMeta } from '~/utils/channels'
 
-useHead({ title: 'Respuestas rápidas y etiquetas - VozipOmni' })
+useHead({ title: 'Respuestas rápidas y etiquetas - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()

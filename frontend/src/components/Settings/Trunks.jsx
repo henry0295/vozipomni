@@ -490,7 +490,7 @@ const Trunks = () => {
                       <option value="custom">⚙️ Personalizado (configuración manual)</option>
                     </select>
                     <small>
-                      {formData.trunk_type === 'nat_provider' && 'Para proveedores SIP cuando VoziPOmni está detrás de NAT'}
+                      {formData.trunk_type === 'nat_provider' && 'Para proveedores SIP cuando VozipCX está detrás de NAT'}
                       {formData.trunk_type === 'no_nat_provider' && 'Para proveedores SIP con IP pública directa'}
                       {formData.trunk_type === 'pbx_lan' && 'Para conectar con PBX/Asterisk en red local'}
                       {formData.trunk_type === 'corporate' && 'Para vínculos corporativos sin autenticación'}
@@ -960,7 +960,7 @@ const Trunks = () => {
 
                   <div className="form-section">
                     <h4>Configuración NAT</h4>
-                    <p className="help-text">Configurar solo si VoziPOmni está detrás de NAT/Firewall</p>
+                    <p className="help-text">Configurar solo si VozipCX está detrás de NAT/Firewall</p>
                     
                     <div className="form-group">
                       <label>Redes Locales</label>

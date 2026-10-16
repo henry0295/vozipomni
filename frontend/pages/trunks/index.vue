@@ -282,7 +282,7 @@
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
                 <div class="flex items-center space-x-2">
                   <UIcon name="i-heroicons-arrow-up-right" class="text-blue-500" />
-                  <h4 class="font-medium text-gray-800">Autenticación Saliente (VozipOmni → Proveedor)</h4>
+                  <h4 class="font-medium text-gray-800">Autenticación Saliente (VozipCX → Proveedor)</h4>
                 </div>
 
                 <div class="flex items-center space-x-4">
@@ -339,7 +339,7 @@
               <div class="border border-gray-200 rounded-lg p-4 space-y-4">
                 <div class="flex items-center space-x-2">
                   <UIcon name="i-heroicons-arrow-down-left" class="text-green-500" />
-                  <h4 class="font-medium text-gray-800">Autenticación Entrante (Proveedor → VozipOmni)</h4>
+                  <h4 class="font-medium text-gray-800">Autenticación Entrante (Proveedor → VozipCX)</h4>
                 </div>
 
                 <div class="flex items-center space-x-4">
@@ -420,7 +420,7 @@
                     <UInput v-model="form.caller_id" placeholder="+573001234567" />
                   </UFormGroup>
                   <UFormGroup label="Nombre Caller ID">
-                    <UInput v-model="form.caller_id_name" placeholder="VozipOmni" />
+                    <UInput v-model="form.caller_id_name" placeholder="VozipCX" />
                   </UFormGroup>
                 </div>
               </div>
@@ -727,12 +727,12 @@ const trunkTypeLabels: Record<string, string> = {
 
 const typeDescriptions: Record<string, { text: string; icon: string; color: string }> = {
   nat_provider: {
-    text: '✅ RECOMENDADO si VozipOmni está en una red LAN (IP privada como 192.168.x.x o 10.x.x.x). Usa trunk-nat-transport (puerto UDP 5162). Incluye external_media_address para NAT traversal. Si tienes IP privada y usas otro tipo, las llamadas conectan PERO SIN AUDIO.',
+    text: '✅ RECOMENDADO si VozipCX está en una red LAN (IP privada como 192.168.x.x o 10.x.x.x). Usa trunk-nat-transport (puerto UDP 5162). Incluye external_media_address para NAT traversal. Si tienes IP privada y usas otro tipo, las llamadas conectan PERO SIN AUDIO.',
     icon: 'i-heroicons-cloud',
     color: 'blue'
   },
   no_nat_provider: {
-    text: '⚠️ Solo si VozipOmni tiene IP pública DIRECTA (VPS con IP pública). Si tienes IP privada (192.168.x/10.x) usa "Proveedor con NAT". Puerto UDP 5161.',
+    text: '⚠️ Solo si VozipCX tiene IP pública DIRECTA (VPS con IP pública). Si tienes IP privada (192.168.x/10.x) usa "Proveedor con NAT". Puerto UDP 5161.',
     icon: 'i-heroicons-globe-alt',
     color: 'sky'
   },
@@ -1193,6 +1193,6 @@ onUnmounted(() => {
 })
 
 useHead({
-  title: 'Troncales SIP - VozipOmni'
+  title: 'Troncales SIP - VozipCX'
 })
 </script>

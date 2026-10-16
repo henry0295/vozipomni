@@ -1,9 +1,9 @@
 # Webhooks
 
-VozipOmni maneja dos tipos de webhook:
+VozipCX maneja dos tipos de webhook:
 
-1. Entrantes: Meta (WhatsApp Cloud API, Facebook Messenger e Instagram) llama a VozipOmni para entregar mensajes y estados.
-2. Salientes: VozipOmni llama a URLs externas configuradas en `/api/webhooks/` cuando ocurren eventos del contact center.
+1. Entrantes: Meta (WhatsApp Cloud API, Facebook Messenger e Instagram) llama a VozipCX para entregar mensajes y estados.
+2. Salientes: VozipCX llama a URLs externas configuradas en `/api/webhooks/` cuando ocurren eventos del contact center.
 
 No hay webhooks entrantes de correo: el correo se lee por IMAP (ver cuentas de correo en [mensajeria.md](./mensajeria.md)). Tampoco hay otros webhooks entrantes (proveedores SMS, CRM u otros) en las rutas del backend.
 

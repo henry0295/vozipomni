@@ -160,7 +160,7 @@
 </template>
 
 <script setup lang="ts">
-useHead({ title: 'Seguridad y antifraude - VozipOmni' })
+useHead({ title: 'Seguridad y antifraude - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()
@@ -198,7 +198,7 @@ const eventColumns = [
 ]
 const networkProtections = [
   'Kamailio solo acepta llamadas y registros desde el WebSocket de la plataforma, Asterisk o este servidor; cualquier otra IP recibe 403 y queda bloqueada 1 hora.',
-  'El WebSocket SIP exige un ticket firmado de una sesión activa: sin usuario en VozipOmni no se puede registrar ni marcar.',
+  'El WebSocket SIP exige un ticket firmado de una sesión activa: sin usuario en VozipCX no se puede registrar ni marcar.',
   'Escáneres SIP conocidos (sipvicious, sipcli…) e inundaciones de peticiones se bloquean automáticamente.',
   'TURN con credenciales temporales por agente; solo retransmite audio hacia este servidor.',
 ]

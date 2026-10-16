@@ -1,6 +1,6 @@
 #!/bin/bash
 ################################################################################
-# VoziPOmni Contact Center — Deploy Script
+# VozipCX Contact Center — Deploy Script
 # Version: 3.0.0
 #
 # Uso rápido (una línea, recomendado):
@@ -413,7 +413,7 @@ banner() {
     echo ""
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
-    echo -e "${BLUE}║        VoziPOmni Contact Center — Deploy v3.0.0            ║${NC}"
+    echo -e "${BLUE}║        VozipCX Contact Center — Deploy v3.0.0              ║${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
     echo -e "${BLUE}║   Django · Nuxt 3 · Asterisk · Kamailio · RTPEngine        ║${NC}"
     echo -e "${BLUE}║                                                            ║${NC}"
@@ -578,7 +578,7 @@ prepare_system() {
     # Persistir
     mkdir -p /etc/sysctl.d
     cat > /etc/sysctl.d/10-vozipomni.conf <<'SYSCTL'
-# VoziPOmni: Silenciar kernel + optimizaciones VoIP
+# VozipCX: Silenciar kernel + optimizaciones VoIP
 kernel.printk = 1 4 1 7
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
@@ -1039,7 +1039,7 @@ EOF
     TURN_SECRET=$(openssl rand -base64 48 | tr -d "=+/" | cut -c1-32)
 
     cat > "$INSTALL_DIR/.env" <<EOF
-# VoziPOmni — Producción (Generado: $(date))
+# VozipCX — Producción (Generado: $(date))
 # network_mode: host → todos los hosts apuntan a VOZIPOMNI_IPV4
 
 VOZIPOMNI_IPV4=$VOZIPOMNI_IPV4
@@ -1074,7 +1074,7 @@ KAMAILIO_TRUST_LAN=0
 
 NUXT_PUBLIC_API_BASE=/api
 NUXT_PUBLIC_WS_BASE=/ws
-NUXT_PUBLIC_APP_NAME=VozipOmni
+NUXT_PUBLIC_APP_NAME=VozipCX
 
 WS_PORT=8765
 NGINX_HTTP_PORT=80
@@ -1113,7 +1113,7 @@ EOF
     [ -n "${VOZIPOMNI_DOMAIN:-}" ] && web_base="https://$VOZIPOMNI_DOMAIN"
     cat > "$INSTALL_DIR/credentials.txt" <<EOF
 ════════════════════════════════════════════════════════════
-         VoziPOmni Contact Center — Credenciales
+         VozipCX Contact Center — Credenciales
 ════════════════════════════════════════════════════════════
 Fecha: $(date)
 Servidor: $VOZIPOMNI_IPV4
@@ -1524,7 +1524,7 @@ install_renewal_hooks() {
     # deploy: copia el certificado renovado y recarga nginx (reload no corta conexiones)
     {
         echo '#!/bin/sh'
-        echo '# Generado por deploy.sh de VoziPOmni'
+        echo '# Generado por deploy.sh de VozipCX'
         echo "ENV_FILE='$env_file'"
         echo "SSL_DIR='$ssl_dir'"
         cat <<'HOOK'
@@ -1554,7 +1554,7 @@ HOOK
         fi
     done
     if [ -d /etc/cron.d ]; then
-        printf '%s\n' "# Generado por deploy.sh de VoziPOmni: renovación de Let's Encrypt" \
+        printf '%s\n' "# Generado por deploy.sh de VozipCX: renovación de Let's Encrypt" \
             "17 3,15 * * * root ${CERTBOT_BIN:-certbot} renew -q" > /etc/cron.d/vozipomni-certbot 2>/dev/null \
             && chmod 644 /etc/cron.d/vozipomni-certbot 2>/dev/null \
             && { log_success "Renovación automática activa (cron: /etc/cron.d/vozipomni-certbot)"; return 0; }
@@ -1705,7 +1705,7 @@ setup_https_automatic() {
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
             -keyout "$SSL_DIR/vozipomni.key" \
             -out "$SSL_DIR/vozipomni.crt" \
-            -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipOmni/OU=IT/CN=${SERVER_IP}" \
+            -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipCX/OU=IT/CN=${SERVER_IP}" \
             -addext "subjectAltName=IP:${SERVER_IP},DNS:localhost,DNS:vozipomni.local" \
             2>/dev/null
         
@@ -1832,7 +1832,7 @@ deploy_services() {
     if [ ! -f "$INIT_SQL" ]; then
         mkdir -p "$(dirname "$INIT_SQL")"
         cat > "$INIT_SQL" <<'INITSQL'
--- Inicialización de la base de datos VoziPOmni
+-- Inicialización de la base de datos VozipCX
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 SET timezone = 'America/Bogota';
@@ -1910,7 +1910,7 @@ wait_for_env() {
     local WAIT_INTERVAL=10
     local elapsed=0
 
-    log_info "Esperando que VoziPOmni esté listo (máx ${WAIT_TIMEOUT}s)..."
+    log_info "Esperando que VozipCX esté listo (máx ${WAIT_TIMEOUT}s)..."
     echo ""
 
     while [ $elapsed -lt $WAIT_TIMEOUT ]; do
@@ -2079,7 +2079,7 @@ apply_v3_improvements() {
             cat >> "$INSTALL_DIR/.env" <<ENVCONFIG
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Mejoras v3.0.0 - VoziPOmni Contact Center
+# Mejoras v3.0.0 - VozipCX Contact Center
 # ═══════════════════════════════════════════════════════════════════════════
 
 # Encriptación de contraseñas SIP
@@ -2473,7 +2473,7 @@ show_result() {
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║                                                            ║${NC}"
-    echo -e "${GREEN}║       ¡Despliegue de VoziPOmni v3.0.0 completado!        ║${NC}"
+    echo -e "${GREEN}║       ¡Despliegue de VozipCX v3.0.0 completado!          ║${NC}"
     echo -e "${GREEN}║                                                            ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""

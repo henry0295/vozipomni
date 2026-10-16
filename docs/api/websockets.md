@@ -1,6 +1,6 @@
 # WebSockets (tiempo real)
 
-VozipOmni tiene dos servicios WebSocket:
+VozipCX tiene dos servicios WebSocket:
 
 1. Django Channels, servido por Daphne detrás de nginx en `wss://<IP_DEL_SERVIDOR>/ws/...`. Es el que usa el frontend (consola del agente, dashboard, supervisión y bandeja omnicanal).
 2. Un servidor aiohttp independiente (`websocket_server/server.py`) en el puerto `WS_PORT` (8765 por defecto) con ruta `/ws`. El frontend no lo usa; reenvía mensajes de canales pub/sub de Redis.
@@ -266,7 +266,7 @@ Autenticación:
 
 - Con `?token=<TOKEN>`: valida la firma HS256 con `SECRET_KEY` y la expiración (mismo token de simplejwt). Si falla, acepta el handshake, envía `{"action": "error", "message": "Token inválido o expirado"}` y cierra.
 - Sin token: solo se aceptan conexiones desde `127.0.0.1` o `::1`; las demás reciben `{"action": "error", "message": "Token requerido"}` y se cierran.
-- Lee `role` del token con valor por defecto `agent`. El token de VozipOmni no incluye `role`, así que todos quedan como `agent`; el rol no se usa para filtrar.
+- Lee `role` del token con valor por defecto `agent`. El token de VozipCX no incluye `role`, así que todos quedan como `agent`; el rol no se usa para filtrar.
 
 Parámetros opcionales: `type` (`browser` por defecto o `asterisk`) e `id` (identificador del cliente).
 

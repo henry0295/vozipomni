@@ -133,7 +133,7 @@
 </template>
 
 <script setup lang="ts">
-useHead({ title: 'Envíos masivos - VozipOmni' })
+useHead({ title: 'Envíos masivos - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()

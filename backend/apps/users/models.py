@@ -11,7 +11,7 @@ class VozipOmniUserManager(UserManager):
 
 class User(AbstractUser):
     """
-    Usuario extendido para VoziPOmni
+    Usuario extendido para VozipCX
     """
     ROLE_CHOICES = [
         ('admin', 'Administrador'),

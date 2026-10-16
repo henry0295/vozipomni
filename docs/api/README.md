@@ -1,6 +1,6 @@
-# API REST de VozipOmni
+# API REST de VozipCX
 
-VozipOmni expone una API REST construida con Django REST Framework (DRF). La usa el frontend Nuxt y se puede usar desde integraciones propias. Este documento resume las convenciones comunes (autenticación, formato, paginación, filtros, errores, límites de peticiones y roles) y enlaza la referencia de cada grupo de endpoints.
+VozipCX expone una API REST construida con Django REST Framework (DRF). La usa el frontend Nuxt y se puede usar desde integraciones propias. Este documento resume las convenciones comunes (autenticación, formato, paginación, filtros, errores, límites de peticiones y roles) y enlaza la referencia de cada grupo de endpoints.
 
 Todo lo aquí descrito sale del código de `backend/config/urls.py`, `backend/apps/api/urls.py`, `backend/apps/telephony/urls.py` y `backend/config/settings.py`. Solo se documentan rutas que existen.
 
@@ -23,7 +23,7 @@ drf-spectacular está instalado y expuesto en `backend/config/urls.py`:
 | `GET /api/schema/` | Esquema OpenAPI 3 (YAML por defecto; `?format=json` para JSON). |
 | `GET /api/docs/` | Swagger UI sobre el esquema anterior. |
 
-`SPECTACULAR_SETTINGS` define título `VoziPOmni Contact Center API`, versión `1.0.0` y `COMPONENT_SPLIT_REQUEST: True`. No sobrescribe `SERVE_PERMISSIONS`, así que con el valor por defecto de drf-spectacular el esquema y Swagger se sirven sin autenticación. Para probar endpoints protegidos desde Swagger use el botón "Authorize" con `Bearer <TOKEN>`.
+`SPECTACULAR_SETTINGS` define título `VozipCX Contact Center API`, versión `1.0.0` y `COMPONENT_SPLIT_REQUEST: True`. No sobrescribe `SERVE_PERMISSIONS`, así que con el valor por defecto de drf-spectacular el esquema y Swagger se sirven sin autenticación. Para probar endpoints protegidos desde Swagger use el botón "Authorize" con `Bearer <TOKEN>`.
 
 El esquema se genera automáticamente y en varios endpoints personalizados (acciones `@action` y `APIView`) no describe el cuerpo ni la respuesta real. Esta documentación es la referencia para esos casos.
 
@@ -155,7 +155,7 @@ curl -s https://<IP_DEL_SERVIDOR>/api/health/
 {
   "status": "healthy",
   "timestamp": "2025-03-10T14:25:00.123456-05:00",
-  "service": "VoziPOmni Backend",
+  "service": "VozipCX Backend",
   "checks": {"database": "ok", "redis": "ok"}
 }
 ```

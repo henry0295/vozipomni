@@ -1,5 +1,5 @@
 """
-Validadores personalizados para VoziPOmni
+Validadores personalizados para VozipCX
 """
 import re
 from django.core.exceptions import ValidationError

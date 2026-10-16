@@ -111,7 +111,7 @@ const IVR = () => {
                 <textarea
                   value={formData.welcome_message}
                   onChange={(e) => setFormData({...formData, welcome_message: e.target.value})}
-                  placeholder="Ej: Bienvenido a VoziPOmni. Presione 1 para ventas, 2 para soporte..."
+                  placeholder="Ej: Bienvenido a VozipCX. Presione 1 para ventas, 2 para soporte..."
                   rows="3"
                   required
                 />

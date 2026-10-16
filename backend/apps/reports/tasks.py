@@ -150,7 +150,7 @@ def _email_report(report):
         return
     try:
         msg = EmailMessage(
-            subject=f"VozipOmni — {report.name}",
+            subject=f"VozipCX — {report.name}",
             body=f"Adjunto el reporte programado «{report.name}».",
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],

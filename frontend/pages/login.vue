@@ -4,7 +4,7 @@
       <template #header>
         <div class="text-center">
           <UIcon name="i-heroicons-phone" class="h-12 w-12 text-sky-500 mx-auto mb-4" />
-          <h1 class="text-2xl font-bold text-gray-900">VozipOmni</h1>
+          <h1 class="text-2xl font-bold text-gray-900">VozipCX</h1>
           <p class="text-gray-600 mt-2">Inicia sesión en tu cuenta</p>
         </div>
       </template>

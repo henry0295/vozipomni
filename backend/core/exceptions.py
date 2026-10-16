@@ -1,12 +1,12 @@
 """
-Custom exceptions for VoziPOmni
+Custom exceptions for VozipCX
 """
 
 
 # ============= Base Exceptions =============
 
 class VoziPOmniException(Exception):
-    """Base exception for all VoziPOmni errors"""
+    """Base exception for all VozipCX errors"""
     default_message = "An error occurred"
     
     def __init__(self, message=None, **kwargs):

@@ -1,6 +1,6 @@
 # IVR
 
-Este manual explica cómo crear menús de voz interactivos (IVR) en VozipOmni: qué audios usa, cómo se asigna cada tecla a un destino, cómo funcionan el tiempo de espera, las opciones inválidas y sus reintentos, y qué dialplan genera. Se basa en `frontend/pages/ivr/index.vue`, el modelo `IVR` de `backend/apps/telephony/models.py`, el `IVRSerializer` de `backend/apps/telephony/serializers.py`, el `IVRViewSet` (catálogo y carga de audios) de `backend/apps/telephony/views.py` y la sección de IVR de `generate_extensions_conf()` en `backend/apps/telephony/asterisk_config.py`.
+Este manual explica cómo crear menús de voz interactivos (IVR) en VozipCX: qué audios usa, cómo se asigna cada tecla a un destino, cómo funcionan el tiempo de espera, las opciones inválidas y sus reintentos, y qué dialplan genera. Se basa en `frontend/pages/ivr/index.vue`, el modelo `IVR` de `backend/apps/telephony/models.py`, el `IVRSerializer` de `backend/apps/telephony/serializers.py`, el `IVRViewSet` (catálogo y carga de audios) de `backend/apps/telephony/views.py` y la sección de IVR de `generate_extensions_conf()` en `backend/apps/telephony/asterisk_config.py`.
 
 Cada IVR activo se escribe en `extensions_dynamic.conf` como un contexto propio `[ivr-<extensión>]`. Las llamadas llegan a él desde una ruta entrante, otro IVR o un destino de timeout o inválido con tipo **IVR**. Aparte existe el IVR estático 9000 de `extensions.conf`, al que caen las llamadas entrantes sin ruta DID; ese no se administra desde esta pantalla.
 

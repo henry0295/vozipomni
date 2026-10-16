@@ -355,7 +355,7 @@ Acciones:
   "providers": [
     {
       "id": 1,
-      "name": "App VozipOmni",
+      "name": "App VozipCX",
       "app_id": "<APP_ID>",
       "webhook_url": "https://omni.example.com/api/webhooks/whatsapp/<APP_ID>/",
       "verify_token": "<VERIFY_TOKEN>",
@@ -407,7 +407,7 @@ Campos: `id`, `line`, `line_name`, `meta_id`, `name`, `language`, `category`, `s
   "category": "UTILITY",
   "header_text": "Confirmación",
   "body_text": "Hola {{1}}, tu cita es el {{2}}.",
-  "footer_text": "VozipOmni",
+  "footer_text": "VozipCX",
   "body_examples": ["Andrés", "15 de marzo"]
 }
 ```

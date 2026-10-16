@@ -1,7 +1,7 @@
 FROM debian:bullseye-slim
 
-LABEL maintainer="VoziPOmni Team"
-LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center"
+LABEL maintainer="VozipCX Team"
+LABEL description="Asterisk 21 LTS para VozipCX Contact Center"
 
 # Instalar dependencias
 RUN apt-get update && apt-get install -y \

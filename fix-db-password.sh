@@ -9,7 +9,7 @@
 set -e
 
 echo "═════════════════════════════════════════════════"
-echo "  Fix PostgreSQL Password - VoziPOmni v3.0.0"
+echo "  Fix PostgreSQL Password - VozipCX v3.0.0"
 echo "═════════════════════════════════════════════════"
 echo ""
 

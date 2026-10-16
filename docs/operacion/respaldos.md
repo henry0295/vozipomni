@@ -1,6 +1,6 @@
 # Respaldos
 
-Este documento explica qué datos de VozipOmni hay que respaldar, cómo usar `backup-production.sh`, cómo hacer respaldos y restauraciones manuales de PostgreSQL y de los volúmenes, y cómo recuperar la plataforma en un servidor nuevo. Incluye recomendaciones de retención.
+Este documento explica qué datos de VozipCX hay que respaldar, cómo usar `backup-production.sh`, cómo hacer respaldos y restauraciones manuales de PostgreSQL y de los volúmenes, y cómo recuperar la plataforma en un servidor nuevo. Incluye recomendaciones de retención.
 
 Los comandos asumen la instalación en `/opt/vozipomni` y el directorio de respaldos por defecto `/var/backups/vozipomni`. Ejecútelos como root.
 

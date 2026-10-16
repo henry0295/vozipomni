@@ -34,7 +34,7 @@ const Login = ({ onLogin }) => {
         maxWidth: '400px'
       }}>
         <h1 style={{ textAlign: 'center', marginBottom: '2rem', color: '#333' }}>
-          VoziPOmni
+          VozipCX
         </h1>
         <form onSubmit={handleSubmit}>
           <div style={{ marginBottom: '1.5rem' }}>

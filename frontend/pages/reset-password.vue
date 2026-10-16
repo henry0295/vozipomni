@@ -46,7 +46,7 @@
 <script setup lang="ts">
 // Sin middleware guest: el enlace del correo debe funcionar aunque haya una sesión abierta
 definePageMeta({ layout: 'auth' })
-useHead({ title: 'Nueva contraseña - VozipOmni' })
+useHead({ title: 'Nueva contraseña - VozipCX' })
 
 const route = useRoute()
 const http = useHttp()

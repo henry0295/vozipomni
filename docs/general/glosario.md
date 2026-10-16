@@ -1,22 +1,22 @@
 # Glosario
 
-Este glosario reúne los términos de telefonía y de contact center que aparecen en la interfaz y en la documentación de VozipOmni, y las fórmulas exactas de los indicadores (KPIs) tal como las calcula `backend/apps/reports/analytics.py`. Úselo como referencia cuando un reporte muestre un valor que no esperaba.
+Este glosario reúne los términos de telefonía y de contact center que aparecen en la interfaz y en la documentación de VozipCX, y las fórmulas exactas de los indicadores (KPIs) tal como las calcula `backend/apps/reports/analytics.py`. Úselo como referencia cuando un reporte muestre un valor que no esperaba.
 
 ## Telefonía
 
-| Término | Significado en VozipOmni |
+| Término | Significado en VozipCX |
 |---|---|
 | SIP | Protocolo de señalización de voz sobre IP. Establece, modifica y termina las llamadas. |
 | PJSIP | Pila SIP de Asterisk (`chan_pjsip`). Los agentes, Kamailio y las troncales se definen como endpoints PJSIP. |
 | PJSIP Wizard | Formato abreviado de Asterisk (`type=wizard`) con el que el backend genera las troncales en `pjsip_wizard.conf`. |
-| Troncal SIP | Conexión con un proveedor de telefonía o una PBX. En VozipOmni llega directo a Asterisk por el puerto 5161 (sin NAT) o 5162 (con NAT). |
+| Troncal SIP | Conexión con un proveedor de telefonía o una PBX. En VozipCX llega directo a Asterisk por el puerto 5161 (sin NAT) o 5162 (con NAT). |
 | DID | Número telefónico entrante. Cada ruta entrante asocia un DID a un destino (extensión, cola, IVR o buzón) en el contexto `from-pstn`. |
 | Ruta saliente | Patrón de marcación (por ejemplo `_3XXXXXXXXX`) que decide por qué troncal sale una llamada y cómo se transforma el número (prefijo, dígitos antepuestos, prefijo de caller ID). |
 | Dialplan | Lógica de enrutamiento de Asterisk (`extensions.conf` y `extensions_dynamic.conf`), organizada en contextos como `from-internal`, `from-pstn`, `outbound-queue` y `from-spy`. |
 | Extensión | Número interno de un agente o recurso. Kamailio trata como extensión cualquier número de 6 dígitos o menos. |
 | AMI | Asterisk Manager Interface, puerto TCP 5038. El backend, el listener de eventos y el marcador la usan para originar llamadas, recargar configuración y recibir eventos. No debe exponerse a Internet. |
 | CDR | Registro de detalle de la llamada. Asterisk lo emite por AMI al finalizar y el listener lo convierte en un registro `Call`. |
-| WebRTC | Tecnología del navegador para audio en tiempo real. El softphone de VozipOmni (JsSIP) la usa; exige HTTPS para acceder al micrófono. |
+| WebRTC | Tecnología del navegador para audio en tiempo real. El softphone de VozipCX (JsSIP) la usa; exige HTTPS para acceder al micrófono. |
 | WSS | WebSocket sobre TLS. El softphone envía SIP por `wss://<servidor>/sip/ws`. |
 | STUN | Protocolo para que el navegador descubra su IP pública. Se usan `stun.l.google.com:19302` y `stun1.l.google.com:19302`. |
 | TURN | Retransmisión de audio cuando no hay conexión directa (NAT o firewall estricto). Lo presta coturn en el puerto 3478 con credenciales temporales firmadas por el backend. |

@@ -1,4 +1,4 @@
-# Generated manually for VoziPOmni
+# Generated manually for VozipCX
 
 from django.db import migrations, models
 import django.contrib.auth.models

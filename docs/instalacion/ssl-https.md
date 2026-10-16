@@ -1,6 +1,6 @@
 # Certificados SSL y HTTPS
 
-Este documento explica cómo VozipOmni maneja los certificados TLS: dónde están, cómo los genera la instalación, cómo decide nginx entre HTTP y HTTPS y cómo reemplazar el certificado autofirmado por uno de confianza (Let's Encrypt o de una CA propia). Se basa en `deploy.sh`, `docker/nginx/Dockerfile.prod`, `docker/nginx/nginx-ssl-switch.sh`, `docker/nginx/default.https.conf` y `generate-dev-ssl.sh`.
+Este documento explica cómo VozipCX maneja los certificados TLS: dónde están, cómo los genera la instalación, cómo decide nginx entre HTTP y HTTPS y cómo reemplazar el certificado autofirmado por uno de confianza (Let's Encrypt o de una CA propia). Se basa en `deploy.sh`, `docker/nginx/Dockerfile.prod`, `docker/nginx/nginx-ssl-switch.sh`, `docker/nginx/default.https.conf` y `generate-dev-ssl.sh`.
 
 ## Por qué HTTPS es obligatorio
 

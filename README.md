@@ -1,4 +1,4 @@
-# VoziPOmni Contact Center
+# VozipCX Contact Center
 
 ![Version](https://img.shields.io/badge/version-2.0.0-brightgreen.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -139,7 +139,7 @@ Plataforma de Contact Center omnicanal con arquitectura moderna basada en Django
 
 ## 🚀 Despliegue Rápido (Una Línea)
 
-Para desplegar VoziPOmni en cualquier servidor Linux con un solo comando:
+Para desplegar VozipCX en cualquier servidor Linux con un solo comando:
 
 ```bash
 curl -sL https://raw.githubusercontent.com/henry0295/vozipomni/main/deploy.sh | sudo bash -s -- X.X.X.X

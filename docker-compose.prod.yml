@@ -1,5 +1,5 @@
 # =============================================================================
-# VoziPOmni Contact Center — Docker Compose PRODUCCION
+# VozipCX Contact Center — Docker Compose PRODUCCION
 # =============================================================================
 # Uso:
 #   cp env.template .env && nano .env    # Configurar VOZIPOMNI_IPV4, etc.
@@ -536,7 +536,7 @@ services:
       NUXT_PORT: "3000"
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api}
       NUXT_PUBLIC_WS_BASE: ${NUXT_PUBLIC_WS_BASE:-/ws}
-      NUXT_PUBLIC_APP_NAME: ${NUXT_PUBLIC_APP_NAME:-VozipOmni}
+      NUXT_PUBLIC_APP_NAME: ${NUXT_PUBLIC_APP_NAME:-VozipCX}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       backend:

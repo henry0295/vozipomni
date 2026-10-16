@@ -1,8 +1,8 @@
 # Dockerfile de producción - Asterisk 21 compilado desde fuente
 FROM debian:bookworm-slim AS builder
 
-LABEL maintainer="VoziPOmni Team"
-LABEL description="Asterisk 21 LTS para VoziPOmni Contact Center"
+LABEL maintainer="VozipCX Team"
+LABEL description="Asterisk 21 LTS para VozipCX Contact Center"
 
 # Dependencias de compilación
 RUN apt-get update && apt-get install -y --no-install-recommends \

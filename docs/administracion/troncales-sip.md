@@ -1,6 +1,6 @@
 # Troncales SIP
 
-Este manual explica cómo conectar VozipOmni con un proveedor de telefonía, una PBX o un enlace corporativo mediante troncales SIP: qué tipo de troncal elegir, qué hace cada campo del formulario, cómo se genera la configuración PJSIP Wizard en Asterisk y cómo revisar el estado de registro. Se basa en `frontend/pages/trunks/index.vue`, el modelo `SIPTrunk` de `backend/apps/telephony/models.py`, `backend/apps/telephony/pjsip_config_generator.py`, el `SIPTrunkSerializer` de `backend/apps/telephony/serializers.py`, el `SIPTrunkViewSet` de `backend/apps/telephony/views.py` y los transportes de `docker/asterisk/configs/pjsip.conf`.
+Este manual explica cómo conectar VozipCX con un proveedor de telefonía, una PBX o un enlace corporativo mediante troncales SIP: qué tipo de troncal elegir, qué hace cada campo del formulario, cómo se genera la configuración PJSIP Wizard en Asterisk y cómo revisar el estado de registro. Se basa en `frontend/pages/trunks/index.vue`, el modelo `SIPTrunk` de `backend/apps/telephony/models.py`, `backend/apps/telephony/pjsip_config_generator.py`, el `SIPTrunkSerializer` de `backend/apps/telephony/serializers.py`, el `SIPTrunkViewSet` de `backend/apps/telephony/views.py` y los transportes de `docker/asterisk/configs/pjsip.conf`.
 
 Una **troncal** es la conexión SIP por la que salen las llamadas hacia la red pública (rutas salientes) y por la que entran las llamadas a los DIDs (rutas entrantes). Cada troncal activa se escribe como un bloque `type=wizard` en `/var/lib/asterisk/dynamic/pjsip_wizard.conf`. El **nombre** de la troncal es el nombre del endpoint PJSIP, el mismo que aparece en `Dial(PJSIP/<número>@<troncal>)`.
 
@@ -55,8 +55,8 @@ Validaciones del backend (`SIPTrunkSerializer.validate`):
 | From User / From Domain | `from_user`, `from_domain` | `endpoint/from_user` y `endpoint/from_domain`. Si From User queda vacío, se usa el usuario saliente. |
 | Server URI / Client URI | `registration_server_uri`, `registration_client_uri` | `registration/server_uri` y `registration/client_uri`. |
 | Intervalo de reintento / Expiración registro | `registration_retry_interval`, `registration_expiration` | `registration/retry_interval` (60) y `registration/expiration` (3600). |
-| Aceptar autenticación / Usuario y Contraseña Entrante | `accepts_auth`, `inbound_auth_*` | `inbound_auth/*`: el proveedor o la PBX debe autenticarse ante VozipOmni. |
-| Aceptar registros | `accepts_registrations` | `accepts_registrations=yes`: el extremo remoto se registra en VozipOmni. |
+| Aceptar autenticación / Usuario y Contraseña Entrante | `accepts_auth`, `inbound_auth_*` | `inbound_auth/*`: el proveedor o la PBX debe autenticarse ante VozipCX. |
+| Aceptar registros | `accepts_registrations` | `accepts_registrations=yes`: el extremo remoto se registra en VozipCX. |
 | Códecs | `codec` | `endpoint/allow=!all,<lista>`, en orden de preferencia. El formulario propone `ulaw,alaw`. |
 | Modo DTMF | `dtmf_mode` | `endpoint/dtmf_mode`. `rfc2833` se convierte a `rfc4733`, porque PJSIP no acepta el nombre antiguo. |
 | RTP Simétrico, Forzar RPORT, Reescribir Contact | `rtp_symmetric`, `force_rport`, `rewrite_contact` | Opciones de NAT del endpoint. En PBX en LAN y Corporativa se escriben siempre en `no`. |

@@ -1,6 +1,6 @@
 # Depuración VoIP
 
-Este documento explica cómo capturar y leer tráfico SIP y RTP en VozipOmni: herramientas disponibles en los contenedores, comandos de `voip-debug.sh`, depuración en Asterisk, Kamailio y RTPEngine, cómo es una llamada saliente sana y cómo llevar una captura a Wireshark.
+Este documento explica cómo capturar y leer tráfico SIP y RTP en VozipCX: herramientas disponibles en los contenedores, comandos de `voip-debug.sh`, depuración en Asterisk, Kamailio y RTPEngine, cómo es una llamada saliente sana y cómo llevar una captura a Wireshark.
 
 Los comandos asumen la instalación en `/opt/vozipomni`:
 
@@ -257,7 +257,7 @@ Qué revisar:
 
 Códigos frecuentes:
 
-| Código | Significado habitual en VozipOmni |
+| Código | Significado habitual en VozipCX |
 |---|---|
 | 401 / 407 | Desafío de autenticación. Solo es un problema si se repite tras enviar credenciales |
 | 403 | Credenciales rechazadas por el proveedor, o IP baneada o no confiable en Kamailio |

@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# VoziPOmni - Generador de Certificados SSL para Desarrollo
+# VozipCX - Generador de Certificados SSL para Desarrollo
 # =============================================================================
 # WebRTC REQUIERE HTTPS. Este script genera certificados autofirmados para
 # poder usar el softphone WebRTC durante el desarrollo local.
@@ -37,7 +37,7 @@ prompt = no
 C  = CO
 ST = Bogota
 L  = Bogota
-O  = VozipOmni
+O  = VozipCX
 CN = $IP
 [v3_req]
 keyUsage = keyEncipherment, dataEncipherment

@@ -1,5 +1,5 @@
 """
-VozipOmni — RBAC Permissions
+VozipCX — RBAC Permissions
 Sistema de permisos basado en roles: admin, supervisor, agent, analyst
 
 Jerarquía de roles:

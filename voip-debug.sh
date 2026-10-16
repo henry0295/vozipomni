@@ -1,6 +1,6 @@
 #!/bin/bash
 #============================================================================
-# Herramientas de Debugging VoIP para VoziPOmni
+# Herramientas de Debugging VoIP para VozipCX
 #============================================================================
 # Proporciona comandos útiles para debugging de llamadas SIP/RTP
 # Uso: ./voip-debug.sh [comando]
@@ -42,7 +42,7 @@ function print_error() {
 function show_help() {
     cat << EOF
 ╔════════════════════════════════════════════════════════════╗
-║         VoziPOmni - Herramientas de Debugging VoIP        ║
+║         VozipCX - Herramientas de Debugging VoIP        ║
 ╚════════════════════════════════════════════════════════════╝
 
 USO: $0 [comando] [opciones]

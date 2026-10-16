@@ -1,6 +1,6 @@
 # Requisitos de instalación
 
-Este documento lista lo que necesita el servidor antes de instalar VozipOmni en producción: hardware, sistema operativo, software, red y, de forma opcional, un dominio. Las distribuciones soportadas salen de `deploy.sh` y los recursos, de los límites de `docker-compose.prod.yml`.
+Este documento lista lo que necesita el servidor antes de instalar VozipCX en producción: hardware, sistema operativo, software, red y, de forma opcional, un dominio. Las distribuciones soportadas salen de `deploy.sh` y los recursos, de los límites de `docker-compose.prod.yml`.
 
 ## Hardware
 

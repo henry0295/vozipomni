@@ -1,5 +1,5 @@
 """
-Celery configuration for VoziPOmni
+Celery configuration for VozipCX
 """
 
 import os

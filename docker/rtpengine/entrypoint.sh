@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "=== VoziPOmni RTPEngine Entrypoint ==="
+echo "=== VozipCX RTPEngine Entrypoint ==="
 
 # ── 1. IP de la interfaz de red ────────────────────────────────────────────
 INTERFACE_IP="${VOZIPOMNI_IPV4:-$(hostname -I | awk '{print $1}')}"

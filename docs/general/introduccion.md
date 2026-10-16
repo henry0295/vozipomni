@@ -1,8 +1,8 @@
-# Introducción a VozipOmni
+# Introducción a VozipCX
 
-VozipOmni es una plataforma de contact center omnicanal que se instala en un servidor Linux propio con Docker. Reúne en una sola interfaz web la telefonía (softphone WebRTC en el navegador, colas, IVR, marcador automático), los canales digitales (WhatsApp, correo, chat web, Messenger e Instagram), la supervisión en vivo, la calidad y los reportes. Este documento explica qué hace el sistema, qué roles existen y qué parte de la documentación le sirve a cada perfil.
+VozipCX es una plataforma de contact center omnicanal que se instala en un servidor Linux propio con Docker. Reúne en una sola interfaz web la telefonía (softphone WebRTC en el navegador, colas, IVR, marcador automático), los canales digitales (WhatsApp, correo, chat web, Messenger e Instagram), la supervisión en vivo, la calidad y los reportes. Este documento explica qué hace el sistema, qué roles existen y qué parte de la documentación le sirve a cada perfil.
 
-## Qué es VozipOmni
+## Qué es VozipCX
 
 - Backend en Django 4.2 con Django REST Framework, Channels (Daphne) para tiempo real y Celery (worker + beat) para tareas en segundo plano.
 - Frontend en Nuxt 3 con Nuxt UI.

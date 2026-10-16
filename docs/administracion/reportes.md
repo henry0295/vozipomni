@@ -1,6 +1,6 @@
 # Reportes
 
-Este manual explica las dos pantallas de reportes de VozipOmni: **Reportes y KPIs**, con sus seis pestañas de indicadores, y **Exportar y programar reportes**, donde se descargan datos en Excel o CSV, se generan reportes guardados y se programan envíos por correo. Describe qué muestra cada pestaña, cómo funcionan los filtros y qué datos trae cada exportación. Se basa en `frontend/pages/reports/index.vue`, `frontend/pages/reports/saved.vue`, `backend/apps/reports/analytics.py`, `backend/apps/reports/exporters.py`, `backend/apps/reports/views.py` y `backend/apps/reports/tasks.py`.
+Este manual explica las dos pantallas de reportes de VozipCX: **Reportes y KPIs**, con sus seis pestañas de indicadores, y **Exportar y programar reportes**, donde se descargan datos en Excel o CSV, se generan reportes guardados y se programan envíos por correo. Describe qué muestra cada pestaña, cómo funcionan los filtros y qué datos trae cada exportación. Se basa en `frontend/pages/reports/index.vue`, `frontend/pages/reports/saved.vue`, `backend/apps/reports/analytics.py`, `backend/apps/reports/exporters.py`, `backend/apps/reports/views.py` y `backend/apps/reports/tasks.py`.
 
 Las fórmulas exactas de cada indicador (nivel de servicio, ASA, AHT, ocupación, FCR, conversión, etc.) están en el [Glosario](../general/glosario.md). Este documento no las repite: explica dónde aparecen y cómo leerlas.
 
@@ -143,7 +143,7 @@ La tarea `run_scheduled_reports` corre todos los días a la 1:30 y, para cada re
 | Semanal | Los lunes a la 1:30 | Los 7 días anteriores (lunes a domingo) |
 | Mensual | El día 1 a la 1:30 | Mes anterior |
 
-Cada ejecución queda también en **Generados** con el nombre del reporte y la fecha de inicio. El correo tiene el asunto `VozipOmni — <nombre>` y el archivo adjunto, y se envía solo al usuario que creó el reporte. Requisitos: que ese usuario tenga email en su perfil y que el servidor tenga `EMAIL_HOST` configurado; sin `EMAIL_HOST`, el correo solo se escribe en el log. Si el envío falla, el reporte se genera igual y el error queda en el log del worker.
+Cada ejecución queda también en **Generados** con el nombre del reporte y la fecha de inicio. El correo tiene el asunto `VozipCX — <nombre>` y el archivo adjunto, y se envía solo al usuario que creó el reporte. Requisitos: que ese usuario tenga email en su perfil y que el servidor tenga `EMAIL_HOST` configurado; sin `EMAIL_HOST`, el correo solo se escribe en el log. Si el envío falla, el reporte se genera igual y el error queda en el log del worker.
 
 ## Problemas frecuentes
 

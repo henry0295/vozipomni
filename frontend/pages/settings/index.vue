@@ -16,7 +16,7 @@
 
           <div class="space-y-6">
             <UFormGroup label="Nombre de la Empresa" required>
-              <UInput v-model="settings.companyName" placeholder="VozipOmni" />
+              <UInput v-model="settings.companyName" placeholder="VozipCX" />
             </UFormGroup>
 
             <UFormGroup label="Zona Horaria" required>
@@ -153,7 +153,7 @@ const tabs = [
 ]
 
 const settings = reactive({
-  companyName: 'VozipOmni',
+  companyName: 'VozipCX',
   timezone: 'America/Bogota',
   language: 'es'
 })

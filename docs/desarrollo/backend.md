@@ -1,6 +1,6 @@
 # Backend
 
-Este documento describe cómo está organizado el backend Django de VozipOmni para quien va a modificarlo: puntos clave de `settings.py`, apps y modelos, capa de API y permisos, tareas de Celery y su programación, WebSockets con Channels, el ciclo de vida del listener AMI, las señales que regeneran la configuración de Asterisk y los pasos para agregar un endpoint o una migración. Los servicios en ejecución (Gunicorn, Daphne, worker, beat) se describen en [Arquitectura](../general/arquitectura.md); la referencia de endpoints para consumidores está en [API](../api/README.md).
+Este documento describe cómo está organizado el backend Django de VozipCX para quien va a modificarlo: puntos clave de `settings.py`, apps y modelos, capa de API y permisos, tareas de Celery y su programación, WebSockets con Channels, el ciclo de vida del listener AMI, las señales que regeneran la configuración de Asterisk y los pasos para agregar un endpoint o una migración. Los servicios en ejecución (Gunicorn, Daphne, worker, beat) se describen en [Arquitectura](../general/arquitectura.md); la referencia de endpoints para consumidores está en [API](../api/README.md).
 
 ## Stack
 

@@ -426,8 +426,8 @@ PJSIP_CONFIG_PATH = config('PJSIP_CONFIG_PATH', default=f'{ASTERISK_CONFIG_DIR}/
 
 # API Documentation
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'VoziPOmni Contact Center API',
-    'DESCRIPTION': 'API REST para el sistema de Contact Center VoziPOmni',
+    'TITLE': 'VozipCX Contact Center API',
+    'DESCRIPTION': 'API REST para el sistema de Contact Center VozipCX',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,

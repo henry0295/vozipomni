@@ -103,7 +103,7 @@
 <script setup lang="ts">
 import { CHANNEL_FILTER_OPTIONS, channelMeta } from '~/utils/channels'
 
-useHead({ title: 'Bandeja omnicanal - VozipOmni' })
+useHead({ title: 'Bandeja omnicanal - VozipCX' })
 
 const channelOptions = CHANNEL_FILTER_OPTIONS
 const channelFilter = ref('')

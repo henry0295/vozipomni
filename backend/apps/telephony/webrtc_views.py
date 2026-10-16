@@ -9,7 +9,7 @@ Credenciales para el softphone WebRTC.
       → 204 si el ticket de X-Original-URI es válido, 401 si no.
 
 Así ni la clave TURN ni el acceso al WebSocket SIP quedan expuestos en el JavaScript público:
-sin sesión válida en VozipOmni no se puede registrar una extensión ni marcar.
+sin sesión válida en VozipCX no se puede registrar una extensión ni marcar.
 """
 import base64
 import hashlib

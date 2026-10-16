@@ -22,7 +22,7 @@ Esta carpeta almacena los certificados SSL para HTTPS.
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -keyout vozipomni.key \
   -out vozipomni.crt \
-  -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipOmni/CN=192.168.101.228"
+  -subj "/C=CO/ST=Bogota/L=Bogota/O=VozipCX/CN=192.168.101.228"
 ```
 
 ## Permisos correctos:

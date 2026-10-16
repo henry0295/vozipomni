@@ -9,7 +9,7 @@
             <UIcon name="i-heroicons-chat-bubble-oval-left-ellipsis" class="w-8 h-8" />
           </div>
           <div>
-            <p class="text-xs uppercase tracking-widest text-emerald-100/80">VozipOmni · Canal WhatsApp</p>
+            <p class="text-xs uppercase tracking-widest text-emerald-100/80">VozipCX · Canal WhatsApp</p>
             <h1 class="text-2xl font-bold leading-tight">WhatsApp Business</h1>
             <p class="text-sm text-emerald-50/90 mt-1 max-w-xl">
               Conecta tus números directamente con la Cloud API de Meta, sin intermediarios. Tus agentes atienden desde la bandeja omnicanal.
@@ -633,7 +633,7 @@
 </template>
 
 <script setup lang="ts">
-useHead({ title: 'WhatsApp Business - VozipOmni' })
+useHead({ title: 'WhatsApp Business - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()

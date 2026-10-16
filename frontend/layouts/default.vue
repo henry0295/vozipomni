@@ -8,7 +8,7 @@
           <div class="flex items-center space-x-4">
             <NuxtLink to="/dashboard" class="flex items-center space-x-2">
               <UIcon name="i-heroicons-phone" class="h-8 w-8 text-sky-500" />
-              <span class="text-xl font-bold text-gray-900">VozipOmni</span>
+              <span class="text-xl font-bold text-gray-900">VozipCX</span>
             </NuxtLink>
           </div>
 

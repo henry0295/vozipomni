@@ -1,6 +1,6 @@
 # Marcador
 
-Este documento describe el motor de marcación de VozipOmni (`dialer_engine/dialer.py`) para quien lo va a mantener: cómo recibe órdenes del backend, qué hace cada bucle según el modo de campaña, cómo calcula el ritmo del predictivo, cómo origina llamadas por AMI, cómo interpreta el resultado AMD, cómo aplica la política antifraude antes de marcar y cuándo reencola contactos. Cierra con las variables de entorno y una guía de depuración. La ubicación del marcador en la plataforma está en [Arquitectura](../general/arquitectura.md); el contexto `outbound-queue` del dialplan está en [Telefonía interna](./telefonia-interna.md).
+Este documento describe el motor de marcación de VozipCX (`dialer_engine/dialer.py`) para quien lo va a mantener: cómo recibe órdenes del backend, qué hace cada bucle según el modo de campaña, cómo calcula el ritmo del predictivo, cómo origina llamadas por AMI, cómo interpreta el resultado AMD, cómo aplica la política antifraude antes de marcar y cuándo reencola contactos. Cierra con las variables de entorno y una guía de depuración. La ubicación del marcador en la plataforma está en [Arquitectura](../general/arquitectura.md); el contexto `outbound-queue` del dialplan está en [Telefonía interna](./telefonia-interna.md).
 
 ## Componentes
 

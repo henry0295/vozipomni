@@ -1,6 +1,6 @@
-# VozipOmni Frontend - Nuxt 3
+# VozipCX Frontend - Nuxt 3
 
-Frontend moderno para el sistema de Contact Center VozipOmni, construido con Nuxt 3, Vue 3 y Nuxt UI.
+Frontend moderno para el sistema de Contact Center VozipCX, construido con Nuxt 3, Vue 3 y Nuxt UI.
 
 ## 🚀 Tecnologías
 
@@ -281,4 +281,4 @@ export const useMyStore = defineStore('my-store', {
 
 ## 📄 Licencia
 
-Este proyecto es parte de VozipOmni Contact Center.
+Este proyecto es parte de VozipCX Contact Center.

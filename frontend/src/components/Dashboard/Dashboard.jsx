@@ -4,7 +4,7 @@ import './Dashboard.css'
 const Dashboard = () => {
   return (
     <div className="dashboard-container">
-      <h1>Dashboard VoziPOmni</h1>
+      <h1>Dashboard VozipCX</h1>
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Llamadas Activas</h3>

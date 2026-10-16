@@ -1,6 +1,6 @@
 # Telefonía interna
 
-Este documento baja al nivel del código de la telefonía de VozipOmni: qué archivos de Asterisk genera el backend y cómo los recarga, qué hace cada contexto del dialplan, cómo enruta Kamailio los mensajes SIP de los agentes WebRTC, cómo se protege el WebSocket SIP con un ticket y cómo se emiten las credenciales TURN, y cómo los eventos AMI terminan en registros `Call` y grabaciones vinculadas. La vista de componentes y los diagramas de secuencia están en [Arquitectura](../general/arquitectura.md); aquí se explica qué tocar y qué efectos tiene cada cambio.
+Este documento baja al nivel del código de la telefonía de VozipCX: qué archivos de Asterisk genera el backend y cómo los recarga, qué hace cada contexto del dialplan, cómo enruta Kamailio los mensajes SIP de los agentes WebRTC, cómo se protege el WebSocket SIP con un ticket y cómo se emiten las credenciales TURN, y cómo los eventos AMI terminan en registros `Call` y grabaciones vinculadas. La vista de componentes y los diagramas de secuencia están en [Arquitectura](../general/arquitectura.md); aquí se explica qué tocar y qué efectos tiene cada cambio.
 
 ## Archivos generados en /var/lib/asterisk/dynamic
 

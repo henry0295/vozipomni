@@ -1,6 +1,6 @@
-# Documentación de VozipOmni
+# Documentación de VozipCX
 
-VozipOmni es una plataforma de contact center omnicanal: telefonía WebRTC para agentes, colas ACD, IVR, marcador predictivo y progresivo, campañas, WhatsApp, correo, chat web y redes sociales, grabaciones, calidad, reportes y antifraude. Esta carpeta reúne toda la documentación, separada por público y tarea. Si es la primera vez que la lee, empiece por la [introducción](./general/introduccion.md).
+VozipCX es una plataforma de contact center omnicanal: telefonía WebRTC para agentes, colas ACD, IVR, marcador predictivo y progresivo, campañas, WhatsApp, correo, chat web y redes sociales, grabaciones, calidad, reportes y antifraude. Esta carpeta reúne toda la documentación, separada por público y tarea. Si es la primera vez que la lee, empiece por la [introducción](./general/introduccion.md).
 
 ## Por dónde empezar
 
@@ -19,7 +19,7 @@ VozipOmni es una plataforma de contact center omnicanal: telefonía WebRTC para 
 
 | Documento | Contenido |
 |---|---|
-| [Introducción](./general/introduccion.md) | Qué es VozipOmni, módulos y roles. |
+| [Introducción](./general/introduccion.md) | Qué es VozipCX, módulos y roles. |
 | [Arquitectura](./general/arquitectura.md) | Componentes, diagramas y flujos de registro y llamadas. |
 | [Glosario](./general/glosario.md) | Términos de telefonía y fórmulas de los KPIs. |
 

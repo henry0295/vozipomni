@@ -1,6 +1,6 @@
 # Entorno de desarrollo local
 
-Esta guía explica cómo levantar VozipOmni en una máquina de desarrollo: con el `docker-compose.yml` de desarrollo, o ejecutando el backend (Django) y el frontend (Nuxt) directamente sin Docker. También cubre las variables mínimas, los certificados autofirmados para probar el softphone, cómo crear el primer administrador y qué partes de la telefonía no funcionan igual que en producción. La descripción de los servicios y del flujo de señalización está en [Arquitectura](../general/arquitectura.md); aquí solo se trata lo que cambia en local.
+Esta guía explica cómo levantar VozipCX en una máquina de desarrollo: con el `docker-compose.yml` de desarrollo, o ejecutando el backend (Django) y el frontend (Nuxt) directamente sin Docker. También cubre las variables mínimas, los certificados autofirmados para probar el softphone, cómo crear el primer administrador y qué partes de la telefonía no funcionan igual que en producción. La descripción de los servicios y del flujo de señalización está en [Arquitectura](../general/arquitectura.md); aquí solo se trata lo que cambia en local.
 
 ## Opciones
 

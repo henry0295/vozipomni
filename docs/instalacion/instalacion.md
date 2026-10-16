@@ -1,6 +1,6 @@
 # Instalación en producción
 
-Esta guía explica cómo instalar VozipOmni en un servidor Linux con `deploy.sh`, qué hace el script en cada fase, dónde quedan las credenciales y qué revisar después para dejar el contact center listo para la primera llamada. Antes de empezar revise los [Requisitos](requisitos.md).
+Esta guía explica cómo instalar VozipCX en un servidor Linux con `deploy.sh`, qué hace el script en cada fase, dónde quedan las credenciales y qué revisar después para dejar el contact center listo para la primera llamada. Antes de empezar revise los [Requisitos](requisitos.md).
 
 ## Resumen rápido
 

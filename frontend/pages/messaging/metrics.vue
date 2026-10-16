@@ -91,7 +91,7 @@
 <script setup lang="ts">
 import { CHANNEL_FILTER_OPTIONS, channelMeta, formatSeconds } from '~/utils/channels'
 
-useHead({ title: 'Métricas de chat - VozipOmni' })
+useHead({ title: 'Métricas de chat - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()

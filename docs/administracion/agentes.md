@@ -13,7 +13,7 @@ Un **agente** es un perfil (`Agent`) unido uno a uno a un usuario con rol `agent
 
 1. Entra a **Operación → Agentes** y haz clic en **Nuevo Agente**.
 2. Al abrir el formulario, el sistema propone el siguiente **ID de Agente** (formato `AGT001`, `AGT002`, ...) y la siguiente **Extensión SIP** libre (desde `100` en adelante), y genera una **Contraseña SIP** aleatoria en el navegador.
-3. Pestaña **Usuario**: completa **Nombre**, **Apellido**, **Email**, **Usuario** y **Contraseña** (mínimo 8 caracteres). Estas son las credenciales con las que el agente entra a VozipOmni.
+3. Pestaña **Usuario**: completa **Nombre**, **Apellido**, **Email**, **Usuario** y **Contraseña** (mínimo 8 caracteres). Estas son las credenciales con las que el agente entra a VozipCX.
 4. Pestaña **Agente**: revisa **ID de Agente**, **Extensión SIP** y **Contraseña SIP**. Al escribir un ID o una extensión, el sistema verifica disponibilidad y muestra **OK** o **En uso**. El botón de flechas regenera el valor propuesto.
 5. Pestaña **Configuración**: ajusta **Máx. Llamadas Simultáneas**, **Habilitar WebRTC**, **Auto-respuesta** y **Grabación de llamadas**.
 6. Haz clic en **Crear Agente**. El botón queda deshabilitado mientras falte algún campo; el aviso "Completa los campos requeridos: ..." indica cuáles.
@@ -54,7 +54,7 @@ qualify_frequency=30
 Qué significa:
 
 - La plantilla `webrtc_endpoint` (en `pjsip.conf`) pone el endpoint en el contexto `from-internal`, con códecs `ulaw,alaw`, `direct_media=no` y opciones de NAT. No activa DTLS ni ICE en Asterisk, porque de eso se encargan Kamailio y RTPEngine.
-- El navegador del agente se registra por WSS en Kamailio a través de nginx (el WebSocket exige un ticket firmado que solo entrega una sesión activa de VozipOmni). Las llamadas que el agente marca entran a Asterisk por el endpoint `kamailio-endpoint`, también en `from-internal`.
+- El navegador del agente se registra por WSS en Kamailio a través de nginx (el WebSocket exige un ticket firmado que solo entrega una sesión activa de VozipCX). Las llamadas que el agente marca entran a Asterisk por el endpoint `kamailio-endpoint`, también en `from-internal`.
 - `contact=` es un contacto estático hacia Kamailio: cuando Asterisk marca `PJSIP/101`, envía el INVITE a Kamailio y este lo entrega al navegador. `remove_existing=no` evita que un REGISTER borre ese contacto. `KAMAILIO_HOST` sale de la variable de entorno del mismo nombre (por defecto `kamailio`).
 - Para no duplicar objetos, las extensiones de agentes WebRTC no se escriben en `pjsip_extensions.conf`.
 
@@ -143,7 +143,7 @@ Un agente puede estar en varios grupos. El modelo de campaña tiene un campo "Sk
 |---|---|---|
 | Nombre, Apellido | Usuario | Nombre del usuario; se usa como nombre en el Caller ID interno (`callerid="Nombre Apellido" <ext>`). |
 | Email | Usuario | Correo del usuario; necesario para recuperar la contraseña. |
-| Usuario, Contraseña | Usuario | Credenciales de acceso a VozipOmni. |
+| Usuario, Contraseña | Usuario | Credenciales de acceso a VozipCX. |
 | ID de Agente | Agente | Identificador único del agente (por ejemplo `AGT001`). |
 | Extensión SIP | Agente | Número interno único. Es el nombre del endpoint PJSIP y el usuario de autenticación SIP. |
 | Contraseña SIP | Agente | Clave de autenticación SIP del endpoint. Se genera automáticamente si no se indica. |

@@ -1,6 +1,6 @@
 # Red y puertos
 
-Este documento reúne todos los puertos que usa VozipOmni, cuáles deben quedar expuestos a Internet y cuáles solo en el servidor, cómo configura el firewall `deploy.sh`, cómo instalar detrás de NAT y cómo funcionan `KAMAILIO_TRUST_LAN` y el servidor TURN. Los datos salen de `docker-compose.prod.yml`, `deploy.sh`, `docker/kamailio/kamailio.cfg`, `docker/asterisk/configs/` y `docker/rtpengine/`.
+Este documento reúne todos los puertos que usa VozipCX, cuáles deben quedar expuestos a Internet y cuáles solo en el servidor, cómo configura el firewall `deploy.sh`, cómo instalar detrás de NAT y cómo funcionan `KAMAILIO_TRUST_LAN` y el servidor TURN. Los datos salen de `docker-compose.prod.yml`, `deploy.sh`, `docker/kamailio/kamailio.cfg`, `docker/asterisk/configs/` y `docker/rtpengine/`.
 
 ## Puertos por servicio
 

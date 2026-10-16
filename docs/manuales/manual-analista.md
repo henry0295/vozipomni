@@ -1,6 +1,6 @@
 # Manual del analista
 
-Este manual explica cómo leer los indicadores de **Reportes y KPIs** en VozipOmni: qué mide cada KPI, qué significan sus colores, cómo interpretar la comparación con el período anterior, cómo exportar y programar reportes, y algunas recetas prácticas para el trabajo de análisis. Se basa en `frontend/pages/reports/index.vue`, `frontend/components/ReportKpi.vue`, `frontend/pages/reports/saved.vue`, `backend/apps/reports/analytics.py`, `backend/apps/reports/tasks.py`, `frontend/pages/dashboard.vue` y `frontend/utils/navigation.ts`.
+Este manual explica cómo leer los indicadores de **Reportes y KPIs** en VozipCX: qué mide cada KPI, qué significan sus colores, cómo interpretar la comparación con el período anterior, cómo exportar y programar reportes, y algunas recetas prácticas para el trabajo de análisis. Se basa en `frontend/pages/reports/index.vue`, `frontend/components/ReportKpi.vue`, `frontend/pages/reports/saved.vue`, `backend/apps/reports/analytics.py`, `backend/apps/reports/tasks.py`, `frontend/pages/dashboard.vue` y `frontend/utils/navigation.ts`.
 
 El rol **Analista** entra al **Dashboard** y ve, en solo lectura, **Métricas de chat**, **Campañas**, **Llamadas**, **Evaluaciones**, **Grabaciones**, **KPIs y métricas** y **Exportar / programados**. No puede crear evaluaciones ni cambiar la configuración.
 

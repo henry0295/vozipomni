@@ -1,6 +1,6 @@
 # Variables de entorno
 
-Este documento lista las variables de entorno de VozipOmni en producción, agrupadas por área, con su obligatoriedad, valor por defecto y uso. Se construyó a partir de `docker-compose.prod.yml` (ancla `x-django-env` y cada servicio), `.env.example`, `env.template`, el `.env` que genera `deploy.sh` y `backend/config/settings.py`. No incluye valores reales: nunca copie secretos a documentación, tickets o repositorios.
+Este documento lista las variables de entorno de VozipCX en producción, agrupadas por área, con su obligatoriedad, valor por defecto y uso. Se construyó a partir de `docker-compose.prod.yml` (ancla `x-django-env` y cada servicio), `.env.example`, `env.template`, el `.env` que genera `deploy.sh` y `backend/config/settings.py`. No incluye valores reales: nunca copie secretos a documentación, tickets o repositorios.
 
 ## Cómo se cargan
 
@@ -118,7 +118,7 @@ Reglas prácticas:
 |---|---|---|---|
 | `NUXT_PUBLIC_API_BASE` | No | `/api` | Base de la API (relativa, detrás de nginx). |
 | `NUXT_PUBLIC_WS_BASE` | No | `/ws` | Base de los WebSockets de Channels. |
-| `NUXT_PUBLIC_APP_NAME` | No | `VozipOmni` | Nombre mostrado. |
+| `NUXT_PUBLIC_APP_NAME` | No | `VozipCX` | Nombre mostrado. |
 
 ## Monitoreo
 

@@ -1,5 +1,5 @@
 # =============================================================================
-# VoziPOmni Contact Center — Docker Compose (Desarrollo Local)
+# VozipCX Contact Center — Docker Compose (Desarrollo Local)
 # =============================================================================
 # Uso:
 #   cp env.template .env          # Editar variables
@@ -410,7 +410,7 @@ services:
       NUXT_PORT: "3000"
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api}
       NUXT_PUBLIC_WS_BASE: ${NUXT_PUBLIC_WS_BASE:-/ws}
-      NUXT_PUBLIC_APP_NAME: ${NUXT_PUBLIC_APP_NAME:-VozipOmni}
+      NUXT_PUBLIC_APP_NAME: ${NUXT_PUBLIC_APP_NAME:-VozipCX}
       NUXT_PUBLIC_TURN_SERVER: ${VOZIPOMNI_IPV4:-}
       NUXT_PUBLIC_TURN_USER: ${TURN_USER:-vozipomni}
       NUXT_PUBLIC_TURN_PASSWORD: ${TURN_PASSWORD:-vozipomni2026}

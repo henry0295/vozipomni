@@ -1,6 +1,6 @@
 # Mantenimiento
 
-Esta guía reúne las tareas de mantenimiento de un servidor VozipOmni en producción: rutina diaria, semanal y mensual, control del espacio en disco (sobre todo por las grabaciones), rotación de logs, actualizaciones del sistema operativo, cambio seguro de contraseñas y secretos, limpieza de archivos sueltos en `/opt/vozipomni` y revisión del certificado HTTPS. Se basa en `docker-compose.prod.yml`, `deploy.sh`, `backend/config/recording_config.py`, `backend/apps/recordings/tasks.py`, `backend/config/celery.py`, `backend/config/settings.py`, `docker/asterisk/entrypoint.sh`, `docker/nginx/entrypoint.sh` y `.gitignore`.
+Esta guía reúne las tareas de mantenimiento de un servidor VozipCX en producción: rutina diaria, semanal y mensual, control del espacio en disco (sobre todo por las grabaciones), rotación de logs, actualizaciones del sistema operativo, cambio seguro de contraseñas y secretos, limpieza de archivos sueltos en `/opt/vozipomni` y revisión del certificado HTTPS. Se basa en `docker-compose.prod.yml`, `deploy.sh`, `backend/config/recording_config.py`, `backend/apps/recordings/tasks.py`, `backend/config/celery.py`, `backend/config/settings.py`, `docker/asterisk/entrypoint.sh`, `docker/nginx/entrypoint.sh` y `.gitignore`.
 
 Todos los comandos se ejecutan en el servidor, como root o con `sudo`, desde el directorio de instalación (por defecto `/opt/vozipomni`). Para abreviar se usa:
 
@@ -43,7 +43,7 @@ Antes de cualquier tarea que reinicie servicios, haz un respaldo (ver [Respaldos
 | Vencimiento del certificado | Ver [Certificado HTTPS](#certificado-https). |
 | Prueba de restauración | Restaurar un respaldo en un servidor de pruebas. |
 | Revisión de accesos | Usuarios inactivos en **Usuarios y roles** y agentes retirados en **Agentes**. |
-| Actualización de VozipOmni | Si hay versión nueva, seguir [Actualización](../instalacion/actualizacion.md). |
+| Actualización de VozipCX | Si hay versión nueva, seguir [Actualización](../instalacion/actualizacion.md). |
 
 ## Espacio en disco
 
@@ -143,7 +143,7 @@ Regla sugerida en `/etc/logrotate.d/vozipomni-nginx`:
 5. Si hay kernel nuevo (existe `/var/run/reboot-required` en Debian/Ubuntu), reinicia con `reboot`. Los servicios tienen `restart: unless-stopped` y vuelven solos.
 6. Verifica con `dc ps` que todo esté `healthy`, entra a la web y haz una llamada de prueba desde la consola de agente.
 
-No actualices VozipOmni y el sistema operativo en la misma ventana: si algo falla, no sabrás cuál de los dos lo causó.
+No actualices VozipCX y el sistema operativo en la misma ventana: si algo falla, no sabrás cuál de los dos lo causó.
 
 ## Cambio de contraseñas y secretos
 

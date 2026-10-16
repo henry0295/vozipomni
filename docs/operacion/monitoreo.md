@@ -1,6 +1,6 @@
 # Monitoreo
 
-Este documento reúne lo que un operador necesita para saber si VozipOmni está sano: el endpoint de salud del backend, los healthchecks de Docker, Prometheus y Grafana, los logs que conviene vigilar, las tareas periódicas de Celery y los comandos de Asterisk y Kamailio para revisar el estado de la telefonía.
+Este documento reúne lo que un operador necesita para saber si VozipCX está sano: el endpoint de salud del backend, los healthchecks de Docker, Prometheus y Grafana, los logs que conviene vigilar, las tareas periódicas de Celery y los comandos de Asterisk y Kamailio para revisar el estado de la telefonía.
 
 Los comandos asumen la instalación en `/opt/vozipomni`:
 
@@ -33,7 +33,7 @@ df -h /var/lib/docker /opt/vozipomni
 - HTTP 503 con `"status": "unhealthy"` si alguna falla. El campo `checks` indica cuál (`database` o `redis`).
 
 ```json
-{"status": "healthy", "timestamp": "...", "service": "VoziPOmni Backend", "checks": {"database": "ok", "redis": "ok"}}
+{"status": "healthy", "timestamp": "...", "service": "VozipCX Backend", "checks": {"database": "ok", "redis": "ok"}}
 ```
 
 Desde el servidor, directo a Gunicorn y a Daphne:

@@ -1,5 +1,5 @@
 """
-Configuración de logging estructurado para VoziPOmni
+Configuración de logging estructurado para VozipCX
 """
 import logging
 import json

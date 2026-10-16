@@ -33,7 +33,7 @@
 
 <script setup lang="ts">
 definePageMeta({ layout: 'auth', middleware: ['guest'] })
-useHead({ title: 'Recuperar contraseña - VozipOmni' })
+useHead({ title: 'Recuperar contraseña - VozipCX' })
 
 const http = useHttp()
 const toast = useToast()

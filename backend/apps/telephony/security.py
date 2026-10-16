@@ -219,7 +219,7 @@ def _notify(policy, event, subject, body):
         logger.warning(f"[Seguridad] Alerta sin destinatarios: {subject}")
         return
     try:
-        send_mail(f'[VozipOmni] {subject}', body, settings.DEFAULT_FROM_EMAIL, recipients, fail_silently=False)
+        send_mail(f'[VozipCX] {subject}', body, settings.DEFAULT_FROM_EMAIL, recipients, fail_silently=False)
         event.notified = True
         event.save(update_fields=['notified'])
     except Exception as e:

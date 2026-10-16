@@ -1,6 +1,6 @@
 # Actualización
 
-Esta guía describe cómo actualizar una instalación existente de VozipOmni con `deploy.sh --update`, qué hace el script paso a paso, cómo verificar el resultado y cómo volver a una versión anterior si algo sale mal. El modo update no borra la base de datos, las grabaciones ni el `.env`.
+Esta guía describe cómo actualizar una instalación existente de VozipCX con `deploy.sh --update`, qué hace el script paso a paso, cómo verificar el resultado y cómo volver a una versión anterior si algo sale mal. El modo update no borra la base de datos, las grabaciones ni el `.env`.
 
 ## Comando
 

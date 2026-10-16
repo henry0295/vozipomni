@@ -1,5 +1,5 @@
 """
-VozipOmni Dialer Engine
+VozipCX Dialer Engine
 Motor de discado para campañas: Progresivas, Predictivas, Preview, Call Blasting y Manuales
 Utiliza Asterisk AMI para originar llamadas
 """

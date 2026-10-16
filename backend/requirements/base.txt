@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# VozipOmni — Dependencias BASE (producción + desarrollo)
+# VozipCX — Dependencias BASE (producción + desarrollo)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # Django Core

@@ -16,7 +16,7 @@ const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="navbar-brand">
-        <h2>VoziPOmni</h2>
+        <h2>VozipCX</h2>
       </div>
       <div className="navbar-menu">
         <Link 

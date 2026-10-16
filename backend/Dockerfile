@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
-LABEL maintainer="VoziPOmni Team"
-LABEL description="Backend Django para VoziPOmni Contact Center"
+LABEL maintainer="VozipCX Team"
+LABEL description="Backend Django para VozipCX Contact Center"
 
 # Variables de entorno
 ENV PYTHONUNBUFFERED=1

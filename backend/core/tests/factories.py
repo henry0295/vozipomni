@@ -1,5 +1,5 @@
 """
-Base factory configuration for VoziPOmni Contact Center tests.
+Base factory configuration for VozipCX Contact Center tests.
 
 This module provides:
 - Base factory configuration with Spanish locale
@@ -130,7 +130,7 @@ class AddressMixin:
 
 class SpanishFakerProvider:
     """
-    Custom Faker provider for VoziPOmni-specific data.
+    Custom Faker provider for VozipCX-specific data.
     
     Provides domain-specific fake data generation for contact center
     entities like campaign names, queue names, etc.

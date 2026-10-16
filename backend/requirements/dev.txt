@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# VozipOmni — Dependencias de DESARROLLO (no van a la imagen de producción)
+# VozipCX — Dependencias de DESARROLLO (no van a la imagen de producción)
 # ──────────────────────────────────────────────────────────────────────────────
 -r base.txt
 

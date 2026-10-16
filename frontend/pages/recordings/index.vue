@@ -312,7 +312,7 @@ watch(() => [filters.dateFrom, filters.dateTo, filters.search, filters.agent], (
 
 // Metadata de la página
 useHead({
-  title: 'Grabaciones - VozipOmni'
+  title: 'Grabaciones - VozipCX'
 })
 
 onMounted(() => {

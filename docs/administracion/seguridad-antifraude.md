@@ -102,7 +102,7 @@ La tabla **Eventos de seguridad** muestra **Fecha**, **Evento**, **Número**, **
 
 ## Alertas por correo
 
-La tarea `check_fraud_alerts` corre cada 2 minutos (`CELERY_BEAT_SCHEDULE`, 120 s). En cada ejecución vuelve a publicar la política en Redis, pasa los bloqueos del marcador a la base de datos y evalúa los tres umbrales. Cada tipo de alerta se envía como máximo una vez cada 30 minutos. El correo sale con asunto `[VozipOmni] <tipo de alerta>` e incluye el conteo, el umbral y, según el caso, una muestra de destinos u orígenes. Requiere `EMAIL_HOST` configurado en el servidor: sin él, Django usa el backend de consola y el correo solo se escribe en el log del worker. Si el envío SMTP falla, el evento queda registrado con `notified=False`.
+La tarea `check_fraud_alerts` corre cada 2 minutos (`CELERY_BEAT_SCHEDULE`, 120 s). En cada ejecución vuelve a publicar la política en Redis, pasa los bloqueos del marcador a la base de datos y evalúa los tres umbrales. Cada tipo de alerta se envía como máximo una vez cada 30 minutos. El correo sale con asunto `[VozipCX] <tipo de alerta>` e incluye el conteo, el umbral y, según el caso, una muestra de destinos u orígenes. Requiere `EMAIL_HOST` configurado en el servidor: sin él, Django usa el backend de consola y el correo solo se escribe en el log del worker. Si el envío SMTP falla, el evento queda registrado con `notified=False`.
 
 ## Protecciones de la red SIP
 
@@ -110,7 +110,7 @@ El panel **Protección de la red SIP** resume lo que ya viene activo:
 
 - **Kamailio solo confía en orígenes conocidos.** En `route[REQINIT]` son confiables `127.0.0.1` (nginx, por donde llega todo el WebSocket), la IP del servidor y Asterisk. Cualquier otro origen que intente iniciar un diálogo (INVITE, REGISTER, etc.) recibe `403 Forbidden` y su IP queda en la tabla `ipban` durante 1 hora (`autoexpire=3600`). Las troncales no pasan por Kamailio: llegan directo a Asterisk.
 - **Anti-flood y escáneres.** El módulo `pike` banea 1 hora a una IP no confiable que envíe más de 30 peticiones en 2 segundos. Los User-Agent de escáneres conocidos (`friendly-scanner`, `sipvicious`, `sipcli`, `sipsak` y otros) también se banean 1 hora. En estos casos Kamailio no responde.
-- **Ticket del WebSocket SIP.** El WebSocket de Kamailio escucha solo en `127.0.0.1:8080`. El acceso público es `wss://<dominio>/sip/ws`, y nginx valida con `auth_request` un ticket firmado que entrega `/api/telephony/webrtc-credentials/` a un usuario con sesión activa (vigencia `SIP_WS_TICKET_TTL`, 24 horas por defecto). Sin sesión en VozipOmni no se puede registrar ni marcar.
+- **Ticket del WebSocket SIP.** El WebSocket de Kamailio escucha solo en `127.0.0.1:8080`. El acceso público es `wss://<dominio>/sip/ws`, y nginx valida con `auth_request` un ticket firmado que entrega `/api/telephony/webrtc-credentials/` a un usuario con sesión activa (vigencia `SIP_WS_TICKET_TTL`, 24 horas por defecto). Sin sesión en VozipCX no se puede registrar ni marcar.
 - **TURN temporal.** coturn usa credenciales temporales por agente (`TURN_CREDENTIAL_TTL`, 12 horas por defecto), generadas por el mismo endpoint. La clave TURN no queda en el JavaScript público.
 - **Firewall.** `deploy.sh` abre solo los puertos públicos, cierra 8080/tcp y 5061/tcp, y deniega 5432, 6379 y 5038 desde fuera. Ver [Red y puertos](../instalacion/red-y-puertos.md).
 

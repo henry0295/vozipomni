@@ -1,5 +1,5 @@
 """
-Prometheus metrics for VoziPOmni
+Prometheus metrics for VozipCX
 """
 from prometheus_client import Counter, Histogram, Gauge, Info
 import logging

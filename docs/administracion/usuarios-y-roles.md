@@ -1,6 +1,6 @@
 # Usuarios y roles
 
-Este manual explica cómo el administrador crea, edita, activa y desactiva las cuentas de acceso a VozipOmni, qué ve cada rol en el menú, qué puede hacer cada rol en la API y cómo funcionan el cambio y la recuperación de contraseña. Todo lo descrito corresponde a la página `frontend/pages/users/index.vue`, al menú `frontend/utils/navigation.ts`, a los permisos de `backend/core/permissions.py` y a las vistas de `backend/apps/api/admin_viewsets.py`.
+Este manual explica cómo el administrador crea, edita, activa y desactiva las cuentas de acceso a VozipCX, qué ve cada rol en el menú, qué puede hacer cada rol en la API y cómo funcionan el cambio y la recuperación de contraseña. Todo lo descrito corresponde a la página `frontend/pages/users/index.vue`, al menú `frontend/utils/navigation.ts`, a los permisos de `backend/core/permissions.py` y a las vistas de `backend/apps/api/admin_viewsets.py`.
 
 ## Acceso
 
@@ -108,7 +108,7 @@ Cualquier usuario puede cambiar su clave en **Mi Perfil → Cambiar Contraseña*
 1. En la pantalla de inicio de sesión, el usuario abre `/forgot-password` ("Recuperar contraseña").
 2. Escribe su **Correo o usuario** y hace clic en **Enviar enlace**.
 3. La respuesta es siempre genérica ("Si la cuenta existe, recibirás un correo con instrucciones.") para no revelar qué cuentas existen.
-4. Si la cuenta está activa y tiene correo, el backend envía un mensaje con asunto "VozipOmni — Recuperación de contraseña" y un enlace `FRONTEND_URL/reset-password?uid=...&token=...`.
+4. Si la cuenta está activa y tiene correo, el backend envía un mensaje con asunto "VozipCX — Recuperación de contraseña" y un enlace `FRONTEND_URL/reset-password?uid=...&token=...`.
 5. En `/reset-password` ("Nueva contraseña") el usuario escribe **Nueva contraseña** y **Confirmar contraseña** y hace clic en **Guardar contraseña**.
 6. Al confirmar, el backend guarda la clave y pone en la lista negra todos los refresh tokens del usuario (`OutstandingToken` → `BlacklistedToken`), con lo que las demás sesiones no podrán renovarse. El navegador limpia la sesión local y redirige a `/login`.
 

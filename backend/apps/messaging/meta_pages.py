@@ -250,7 +250,7 @@ def send_page_message(message) -> str:
     local_path = meta.get('local_path')
     if message.message_type in ('image', 'video', 'audio', 'document') and local_path:
         if page.platform == 'instagram':
-            raise WhatsAppAPIError('Instagram solo permite enviar texto desde VozipOmni por ahora.')
+            raise WhatsAppAPIError('Instagram solo permite enviar texto desde VozipCX por ahora.')
         att_type = 'file' if message.message_type == 'document' else message.message_type
         import json
         form = {k: (json.dumps(v) if isinstance(v, dict) else v) for k, v in body.items()}

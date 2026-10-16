@@ -67,7 +67,7 @@ export default defineNuxtConfig({
 
   app: {
     head: {
-      title: 'VozipOmni - Contact Center',
+      title: 'VozipCX - Contact Center',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },

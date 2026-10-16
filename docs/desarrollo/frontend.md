@@ -1,6 +1,6 @@
 # Frontend
 
-Este documento explica cómo está construido el frontend Nuxt 3 de VozipOmni: configuración, layouts, middleware, stores, composables (con énfasis en el cliente HTTP recomendado y en el ciclo de vida del softphone WebRTC), plugins, navegación por rol, convenciones de interfaz con Nuxt UI v2 y los pasos para agregar una página. El papel del frontend dentro de la plataforma y el flujo de señalización del softphone están en [Arquitectura](../general/arquitectura.md).
+Este documento explica cómo está construido el frontend Nuxt 3 de VozipCX: configuración, layouts, middleware, stores, composables (con énfasis en el cliente HTTP recomendado y en el ciclo de vida del softphone WebRTC), plugins, navegación por rol, convenciones de interfaz con Nuxt UI v2 y los pasos para agregar una página. El papel del frontend dentro de la plataforma y el flujo de señalización del softphone están en [Arquitectura](../general/arquitectura.md).
 
 ## Stack y scripts
 
@@ -40,7 +40,7 @@ Si usa un ícono nuevo desde un archivo que el escáner no revisa, o uno interno
 
 ## app.vue y notificaciones
 
-`app.vue` renderiza `<NuxtLayout><NuxtPage /></NuxtLayout>` y un único `<UNotifications />` global, y fija `titleTemplate` a `<título> - VozipOmni`. El comentario del archivo explica el motivo: si el contenedor de notificaciones solo existiera en algunas páginas, los toasts del resto se acumularían y aparecerían juntos al volver a ellas. No agregue otro `<UNotifications />` en layouts ni páginas; use `useToast().add(...)`.
+`app.vue` renderiza `<NuxtLayout><NuxtPage /></NuxtLayout>` y un único `<UNotifications />` global, y fija `titleTemplate` a `<título> - VozipCX`. El comentario del archivo explica el motivo: si el contenedor de notificaciones solo existiera en algunas páginas, los toasts del resto se acumularían y aparecerían juntos al volver a ellas. No agregue otro `<UNotifications />` en layouts ni páginas; use `useToast().add(...)`.
 
 ## Layouts
 

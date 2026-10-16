@@ -1,6 +1,6 @@
 # Solución de problemas
 
-Esta guía recoge los fallos conocidos de VozipOmni en producción, organizados por área. Cada caso sigue el esquema síntoma, causa, verificación y solución. Para capturas SIP detalladas vea [depuración VoIP](depuracion-voip.md).
+Esta guía recoge los fallos conocidos de VozipCX en producción, organizados por área. Cada caso sigue el esquema síntoma, causa, verificación y solución. Para capturas SIP detalladas vea [depuración VoIP](depuracion-voip.md).
 
 Los comandos asumen la instalación en `/opt/vozipomni`:
 

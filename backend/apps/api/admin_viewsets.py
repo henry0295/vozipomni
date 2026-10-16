@@ -508,7 +508,7 @@ class PasswordResetRequestView(APIView):
             link = f"{base}/reset-password?uid={uid}&token={token}"
             try:
                 send_mail(
-                    subject='VozipOmni — Recuperación de contraseña',
+                    subject='VozipCX — Recuperación de contraseña',
                     message=(
                         f"Hola {user.get_full_name() or user.username},\n\n"
                         f"Recibimos una solicitud para restablecer tu contraseña.\n"

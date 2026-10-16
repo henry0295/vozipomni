@@ -510,7 +510,7 @@ class PJSIPConfigGenerator:
             "; " + "="*78,
             "",
             "; Este archivo contiene la configuración de todas las troncales SIP",
-            "; configuradas en VoziPOmni usando PJSIP Wizard de Asterisk",
+            "; configuradas en VozipCX usando PJSIP Wizard de Asterisk",
             "",
             ""
         ]

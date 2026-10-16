@@ -1,5 +1,5 @@
 """
-VoziPOmni Contact Center - Django Backend
+VozipCX Contact Center - Django Backend
 """
 
 # Esto asegura que Celery se cargue cuando Django inicia

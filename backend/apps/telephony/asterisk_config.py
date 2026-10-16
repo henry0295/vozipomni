@@ -442,7 +442,7 @@ class AsteriskConfigGenerator:
         voicemails = Voicemail.objects.filter(is_active=True)
         
         config = [
-            "; voicemail.conf - Generado automáticamente por VoziPOmni",
+            "; voicemail.conf - Generado automáticamente por VozipCX",
             "; NO EDITAR MANUALMENTE",
             "",
             "[general]",
@@ -456,7 +456,7 @@ class AsteriskConfigGenerator:
             "silencethreshold=128",
             "maxlogins=3",
             "emailsubject=Nuevo mensaje de voz de ${VM_CALLERID}",
-            "emailbody=Hola ${VM_NAME},\\n\\nHas recibido un nuevo mensaje de voz de ${VM_CALLERID} con duración ${VM_DUR}.\\n\\nSaludos,\\nVozipOmni",
+            "emailbody=Hola ${VM_NAME},\\n\\nHas recibido un nuevo mensaje de voz de ${VM_CALLERID} con duración ${VM_DUR}.\\n\\nSaludos,\\nVozipCX",
             "",
             "[default]",
         ]
@@ -476,7 +476,7 @@ class AsteriskConfigGenerator:
         moh_classes = MusicOnHold.objects.filter(is_active=True)
         
         config = [
-            "; musiconhold.conf - Generado automáticamente por VoziPOmni",
+            "; musiconhold.conf - Generado automáticamente por VozipCX",
             "; NO EDITAR MANUALMENTE",
             "",
             "[default]",
@@ -505,7 +505,7 @@ class AsteriskConfigGenerator:
         from apps.queues.models import Queue
         
         config = [
-            "; queues_dynamic.conf - Generado automáticamente por VoziPOmni",
+            "; queues_dynamic.conf - Generado automáticamente por VozipCX",
             "; NO EDITAR MANUALMENTE",
             "",
         ]

@@ -1,5 +1,5 @@
 """
-VozipOmni — Supervisor ViewSet
+VozipCX — Supervisor ViewSet
 
 Endpoints exclusivos para supervisores:
   GET  /api/supervisor/dashboard/            → métricas en tiempo real
