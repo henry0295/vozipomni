@@ -497,6 +497,8 @@ services:
       - media_volume:/app/media
       # Sin :ro — el entrypoint genera certificados SSL autofirmados si no existen
       - ./docker/nginx/ssl:/etc/nginx/ssl
+      # Webroot de Let's Encrypt (deploy.sh / certbot escriben los retos HTTP-01)
+      - ./docker/nginx/acme:/var/www/certbot:ro
       - ./logs/nginx:/var/log/nginx
     depends_on:
       backend:

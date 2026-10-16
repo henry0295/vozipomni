@@ -99,7 +99,23 @@ VOZIPOMNI_DOMAIN="${VOZIPOMNI_DOMAIN:-}"
 LETSENCRYPT_EMAIL="${LETSENCRYPT_EMAIL:-}"
 # Argumentos originales: permiten relanzar el deploy.sh nuevo tras el git pull del update
 ORIG_ARGS=("$@")
+# Si una opción que espera valor (--nat/--domain/--email) va seguida de otra
+# opción o queda al final, se avisa y se descarta (antes el valor siguiente
+# caía en la opción equivocada, p.ej. "--domain --email x@y.com").
+warn_missing_value() {
+    local flag=""
+    [ "$NEXT_IS_NAT" = true ] && flag="--nat"
+    [ "$NEXT_IS_DOMAIN" = true ] && flag="--domain"
+    [ "$NEXT_IS_EMAIL" = true ] && flag="--email"
+    if [ -n "$flag" ]; then
+        echo -e "\033[1;33m[WARN]\033[0m Falta el valor después de $flag: se ignora" >&2
+    fi
+    NEXT_IS_NAT=false; NEXT_IS_DOMAIN=false; NEXT_IS_EMAIL=false
+}
 for arg in "$@"; do
+    case "$arg" in
+        -*) warn_missing_value ;;
+    esac
     case "$arg" in
         --clean|-c)
             CLEAN_INSTALL=true
@@ -153,6 +169,7 @@ for arg in "$@"; do
             ;;
     esac
 done
+warn_missing_value
 
 # ─── Variables ───────────────────────────────────────────────────────────────
 INSTALL_DIR="${INSTALL_DIR:-/opt/vozipomni}"
@@ -163,7 +180,11 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 FRESH_ENV=false
 # Dominio / Let's Encrypt (solo se usan si hay dominio; sin dominio el flujo no cambia)
 DOMAIN_REMOVED=false
+PREVIOUS_DOMAIN=""
 LETSENCRYPT_OK=false
+# Webroot ACME: nginx sirve /.well-known/acme-challenge/ desde aquí, así la
+# emisión y la renovación no necesitan detener nginx (no se cortan llamadas).
+ACME_WEBROOT="${INSTALL_DIR:-/opt/vozipomni}/docker/nginx/acme"
 LETSENCRYPT_DIR="${LETSENCRYPT_DIR:-/etc/letsencrypt}"
 CERTBOT_BIN=""
 
@@ -462,6 +483,12 @@ set_env_value() {
 # Nunca aborta: un dominio o email inválido se ignora con una advertencia.
 resolve_domain_config() {
     local domain email
+    # Dominio con el que quedó la instalación anterior: si cambia o se quita,
+    # se borra su certificado para que certbot no siga intentando renovarlo.
+    PREVIOUS_DOMAIN=""
+    if [ "$CLEAN_INSTALL" != true ]; then
+        PREVIOUS_DOMAIN=$(env_file_value VOZIPOMNI_DOMAIN)
+    fi
     domain=$(printf '%s' "${VOZIPOMNI_DOMAIN:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
     domain="${domain%.}"
     email=$(printf '%s' "${LETSENCRYPT_EMAIL:-}" | tr -d '[:space:]')
@@ -502,7 +529,9 @@ resolve_domain_config() {
     [ -n "$domain" ] || return 0
 
     if [ -n "$email" ]; then
-        if [[ "$email" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]]; then
+        # Solo caracteres seguros: el valor se escribe con sed en .env y ese .env
+        # se carga luego con "source" (un & | ; $ ` permitiría inyectar comandos).
+        if [[ "$email" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,63}$ ]]; then
             LETSENCRYPT_EMAIL="$email"
         else
             log_warning "Email inválido '$email': se ignora"
@@ -1442,28 +1471,57 @@ copy_letsencrypt_cert() {
     return 0
 }
 
+# Cambia la renovación del certificado a webroot (nginx sigue sirviendo).
+# Si el certificado se emitió en modo standalone (primera instalación, nginx aún
+# no corría), certbot guardaría "standalone" y en cada renovación habría que
+# detener nginx, cortando las llamadas WebRTC activas.
+use_webroot_for_renewal() {
+    local domain="$1" conf="$LETSENCRYPT_DIR/renewal/$1.conf"
+    [ -f "$conf" ] || return 0
+    if grep -q '^authenticator = webroot' "$conf" && grep -q '^\[\[webroot_map\]\]' "$conf"; then
+        return 0
+    fi
+    cp -p "$conf" "$conf.bak-vozipomni" 2>/dev/null || true
+    # Quitar parámetros de webroot/standalone previos y fijar el autenticador
+    sed -i -e '/^webroot_path = /d' -e '/^\[\[webroot_map\]\]/,$d' "$conf" 2>/dev/null || return 1
+    if grep -q '^authenticator = ' "$conf"; then
+        sed -i "s|^authenticator = .*|authenticator = webroot\nwebroot_path = ${ACME_WEBROOT},|" "$conf" || return 1
+    else
+        sed -i "s|^\[renewalparams\]|[renewalparams]\nauthenticator = webroot\nwebroot_path = ${ACME_WEBROOT},|" "$conf" || return 1
+    fi
+    # [[webroot_map]] es subsección de [renewalparams], que es la última sección del archivo
+    printf '[[webroot_map]]\n%s = %s\n' "$domain" "$ACME_WEBROOT" >> "$conf" || return 1
+    log_success "Renovación de $domain configurada por webroot (sin detener nginx)"
+    return 0
+}
+
+# Borra el certificado de un dominio que ya no se usa (cambio o --domain none),
+# para que la renovación automática no siga fallando con un dominio viejo.
+remove_old_domain_cert() {
+    local old="${PREVIOUS_DOMAIN:-}"
+    [ -n "$old" ] && [ "$old" != "${VOZIPOMNI_DOMAIN:-}" ] || return 0
+    [[ "$old" =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$ ]] || return 0
+    [ -e "$LETSENCRYPT_DIR/renewal/$old.conf" ] || return 0
+    local bin="${CERTBOT_BIN:-$(command -v certbot 2>/dev/null || true)}"
+    if [ -n "$bin" ] && "$bin" delete --non-interactive --cert-name "$old" >/dev/null 2>&1; then
+        log_info "Certificado del dominio anterior ($old) eliminado"
+    else
+        log_warning "No se pudo eliminar el certificado de $old. Hágalo con: certbot delete --cert-name $old"
+    fi
+    return 0
+}
+
 # Ganchos de renovación + temporizador (idempotente). Los ganchos leen el dominio
 # del .env en cada renovación: si se quita el dominio, dejan de actuar.
 install_renewal_hooks() {
     local hooks="$LETSENCRYPT_DIR/renewal-hooks" env_file="$INSTALL_DIR/.env"
     local ssl_dir="$INSTALL_DIR/docker/nginx/ssl"
-    mkdir -p "$hooks/pre" "$hooks/post" "$hooks/deploy" 2>/dev/null || { log_warning "No se pudieron crear los ganchos de renovación"; return 1; }
+    mkdir -p "$hooks/deploy" 2>/dev/null || { log_warning "No se pudieron crear los ganchos de renovación"; return 1; }
 
-    # pre: libera el puerto 80 (renovación standalone) deteniendo nginx
-    {
-        echo '#!/bin/sh'
-        echo '# Generado por deploy.sh de VoziPOmni'
-        echo "ENV_FILE='$env_file'"
-        cat <<'HOOK'
-grep -q '^VOZIPOMNI_DOMAIN=..*' "$ENV_FILE" 2>/dev/null || exit 0
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx vozipomni_nginx; then
-    docker stop vozipomni_nginx >/dev/null 2>&1 && touch /run/vozipomni-nginx-stopped-by-certbot
-fi
-exit 0
-HOOK
-    } > "$hooks/pre/vozipomni.sh" 2>/dev/null || return 1
+    # Versiones anteriores detenían nginx en cada renovación (pre/post): se eliminan
+    rm -f "$hooks/pre/vozipomni.sh" "$hooks/post/vozipomni.sh" 2>/dev/null || true
 
-    # deploy: copia el certificado renovado y recarga nginx
+    # deploy: copia el certificado renovado y recarga nginx (reload no corta conexiones)
     {
         echo '#!/bin/sh'
         echo '# Generado por deploy.sh de VoziPOmni'
@@ -1481,18 +1539,9 @@ docker exec vozipomni_nginx nginx -s reload >/dev/null 2>&1 || true
 exit 0
 HOOK
     } > "$hooks/deploy/vozipomni.sh" 2>/dev/null || return 1
+    chmod 755 "$hooks/deploy/vozipomni.sh" 2>/dev/null || true
 
-    # post: vuelve a arrancar nginx si el gancho pre lo detuvo
-    cat > "$hooks/post/vozipomni.sh" 2>/dev/null <<'HOOK' || return 1
-#!/bin/sh
-# Generado por deploy.sh de VoziPOmni
-if [ -f /run/vozipomni-nginx-stopped-by-certbot ]; then
-    rm -f /run/vozipomni-nginx-stopped-by-certbot
-    docker start vozipomni_nginx >/dev/null 2>&1 || true
-fi
-exit 0
-HOOK
-    chmod 755 "$hooks/pre/vozipomni.sh" "$hooks/deploy/vozipomni.sh" "$hooks/post/vozipomni.sh" 2>/dev/null || true
+    use_webroot_for_renewal "${VOZIPOMNI_DOMAIN:-}" || log_warning "No se pudo pasar la renovación a webroot; revise $LETSENCRYPT_DIR/renewal/${VOZIPOMNI_DOMAIN:-}.conf"
 
     # Temporizador de renovación: el del paquete, o cron como respaldo
     local timer=""
@@ -1548,7 +1597,7 @@ setup_letsencrypt_cert() {
         return 1
     fi
 
-    local args=(certonly --standalone --non-interactive --agree-tos --preferred-challenges http
+    local args=(certonly --non-interactive --agree-tos --preferred-challenges http
                 --cert-name "$domain" -d "$domain" --keep-until-expiring)
     if [ -n "${LETSENCRYPT_EMAIL:-}" ]; then
         args+=(--email "$LETSENCRYPT_EMAIL")
@@ -1557,21 +1606,33 @@ setup_letsencrypt_cert() {
         args+=(--register-unsafely-without-email)
     fi
 
-    # El modo standalone necesita el puerto 80: detener nginx unos segundos si está corriendo
-    local nginx_stopped=false rc=0
+    mkdir -p "$ACME_WEBROOT/.well-known/acme-challenge" 2>/dev/null || true
+    chmod 755 "$ACME_WEBROOT" "$ACME_WEBROOT/.well-known" "$ACME_WEBROOT/.well-known/acme-challenge" 2>/dev/null || true
+
+    local rc=0
     if nginx_container_running; then
-        log_info "Deteniendo vozipomni_nginx temporalmente (puerto 80)..."
-        if docker stop vozipomni_nginx >/dev/null 2>&1; then
-            nginx_stopped=true
-        else
-            log_warning "No se pudo detener vozipomni_nginx; certbot podría no acceder al puerto 80"
+        # nginx ya sirve el puerto 80: webroot, sin detenerlo (no se cortan llamadas)
+        log_info "Solicitando certificado por webroot (nginx sigue en servicio)..."
+        "$CERTBOT_BIN" "${args[@]}" --webroot -w "$ACME_WEBROOT" || rc=$?
+        if [ "$rc" -ne 0 ]; then
+            # El contenedor puede ser de una versión anterior sin la ruta ACME:
+            # solo durante el deploy se acepta detener nginx unos segundos.
+            log_warning "Webroot falló (nginx de una versión anterior sin la ruta ACME?). Reintentando en modo standalone..."
+            rc=0
+            local nginx_stopped=false
+            if docker stop vozipomni_nginx >/dev/null 2>&1; then
+                nginx_stopped=true
+            else
+                log_warning "No se pudo detener vozipomni_nginx; certbot podría no acceder al puerto 80"
+            fi
+            "$CERTBOT_BIN" "${args[@]}" --standalone || rc=$?
+            if [ "$nginx_stopped" = true ]; then
+                docker start vozipomni_nginx >/dev/null 2>&1 || log_warning "No se pudo volver a arrancar vozipomni_nginx"
+            fi
         fi
-    fi
-
-    "$CERTBOT_BIN" "${args[@]}" || rc=$?
-
-    if [ "$nginx_stopped" = true ]; then
-        docker start vozipomni_nginx >/dev/null 2>&1 || log_warning "No se pudo volver a arrancar vozipomni_nginx"
+    else
+        # Primera instalación: nginx aún no corre, el puerto 80 está libre
+        "$CERTBOT_BIN" "${args[@]}" --standalone || rc=$?
     fi
 
     if [ "$rc" -ne 0 ]; then
@@ -1599,6 +1660,13 @@ setup_https_automatic() {
     # Usar la IP del sistema
     local SERVER_IP="${VOZIPOMNI_IPV4:-127.0.0.1}"
 
+    # Webroot ACME montado en nginx (/var/www/certbot); se crea siempre para que
+    # Docker no lo cree como directorio root al montar el volumen.
+    mkdir -p "$ACME_WEBROOT" 2>/dev/null || true
+
+    # Dominio cambiado o quitado: borrar el certificado del dominio anterior
+    remove_old_domain_cert
+
     # Con dominio: intentar Let's Encrypt. Si falla, se sigue con el autofirmado de siempre.
     LETSENCRYPT_OK=false
     if [ -n "${VOZIPOMNI_DOMAIN:-}" ]; then
@@ -1607,6 +1675,12 @@ setup_https_automatic() {
         else
             log_warning "No se obtuvo certificado para ${VOZIPOMNI_DOMAIN}: se usará certificado autofirmado para la IP ${SERVER_IP}"
         fi
+    fi
+
+    # credentials.txt se escribe antes de conocer el resultado: si no hubo
+    # certificado para el dominio, no anunciar https://dominio (no sería válido)
+    if [ -n "${VOZIPOMNI_DOMAIN:-}" ] && [ "$LETSENCRYPT_OK" != true ] && [ -f "$INSTALL_DIR/credentials.txt" ]; then
+        sed -i "s|https://${VOZIPOMNI_DOMAIN}|https://${SERVER_IP}|g" "$INSTALL_DIR/credentials.txt" 2>/dev/null || true
     fi
 
     if [ "$LETSENCRYPT_OK" != true ]; then
@@ -1662,14 +1736,19 @@ setup_https_automatic() {
     local NGINX_HTTPS_CONF="$INSTALL_DIR/docker/nginx/default.https.conf"
     
     if [ -f "$NGINX_HTTPS_CONF" ]; then
-        # Hacer backup de la configuración actual
-        if [ -f "$NGINX_CONF" ]; then
-            cp "$NGINX_CONF" "$NGINX_CONF.backup-$(date +%Y%m%d-%H%M%S)"
+        if [ -f "$NGINX_CONF" ] && [ "$(cksum < "$NGINX_HTTPS_CONF")" = "$(cksum < "$NGINX_CONF")" ]; then
+            # Ya aplicada: no reescribir ni acumular backups en cada --update
+            log_success "✓ Configuración HTTPS de Nginx ya aplicada"
+        else
+            # Hacer backup de la configuración actual
+            if [ -f "$NGINX_CONF" ]; then
+                cp "$NGINX_CONF" "$NGINX_CONF.backup-$(date +%Y%m%d-%H%M%S)"
+            fi
+
+            # Aplicar configuración HTTPS
+            cp "$NGINX_HTTPS_CONF" "$NGINX_CONF"
+            log_success "✓ Configuración HTTPS aplicada a Nginx"
         fi
-        
-        # Aplicar configuración HTTPS
-        cp "$NGINX_HTTPS_CONF" "$NGINX_CONF"
-        log_success "✓ Configuración HTTPS aplicada a Nginx"
     else
         log_warning "Archivo de configuración HTTPS no encontrado, usando configuración por defecto"
     fi

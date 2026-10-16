@@ -26,6 +26,7 @@ credentials.txt
 docker/nginx/ssl/*
 !docker/nginx/ssl/.gitignore
 !docker/nginx/ssl/README.md
+docker/nginx/acme/
 letsencrypt/
 
 # Claves SSH y tokens
