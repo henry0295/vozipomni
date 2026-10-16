@@ -515,6 +515,14 @@ install_base_dependencies() {
     local optional_map=(
         "iptables:iptables:iptables:iptables"
     )
+    # Amazon Linux 2023 empaqueta iptables como iptables-nft
+    local DISTRO_VERSION=""
+    if [ -f /etc/os-release ]; then
+        DISTRO_VERSION=$(. /etc/os-release && echo "${VERSION_ID:-}")
+    fi
+    if [ "$DISTRO_ID" = "amzn" ] && [[ "$DISTRO_VERSION" == 2023* ]]; then
+        optional_map=("iptables:iptables-nft:iptables:iptables")
+    fi
     if [ "$PKG_MGR" = "apt-get" ]; then
         required_map+=("lsb_release::lsb-release:")
     fi
@@ -570,13 +578,15 @@ install_base_dependencies() {
     esac
     if [ "$PKG_MGR" = "apt-get" ]; then
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -y
+        # Si falla, no abortar: la verificación posterior muestra un mensaje claro
+        apt-get update -y || log_warning "apt-get update falló, intentando instalar de todas formas"
     fi
 
     # ${arr[@]+...} evita "unbound variable" con arrays vacíos en bash < 4.4 (set -u)
     log_info "Instalando dependencias base: ${required_pkgs[*]+${required_pkgs[*]}} ${optional_pkgs[*]+${optional_pkgs[*]}}"
     if [ ${#required_pkgs[@]} -gt 0 ]; then
-        "${install_cmd[@]}" "${required_pkgs[@]}"
+        # No abortar aquí (trap ERR): la verificación de abajo reporta qué faltó
+        "${install_cmd[@]}" "${required_pkgs[@]}" || true
     fi
     for pkg in ${optional_pkgs[@]+"${optional_pkgs[@]}"}; do
         "${install_cmd[@]}" "$pkg" || log_warning "No se pudo instalar $pkg (opcional, continuando)"
@@ -1007,35 +1017,73 @@ configure_firewall() {
         # Configurar iptables directamente
         log_info "Configurando iptables..."
         
-        # Permitir tráfico loopback
-        iptables -A INPUT -i lo -j ACCEPT 2>/dev/null || true
+        # Agrega la regla a INPUT solo si no existe (idempotente: sin duplicados al re-ejecutar)
+        ipt_ensure() {
+            iptables -C INPUT "$@" 2>/dev/null || iptables -A INPUT "$@" 2>/dev/null || true
+        }
+
+        # Permitir tráfico loopback (siempre la PRIMERA regla de INPUT)
+        iptables -C INPUT -i lo -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -i lo -j ACCEPT 2>/dev/null || true
         
         # Permitir conexiones establecidas
-        iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+        ipt_ensure -m state --state ESTABLISHED,RELATED -j ACCEPT
         
         # Permitir puertos públicos
-        iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 5060 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p udp --dport 5060 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 3478 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p udp --dport 3478 -j ACCEPT 2>/dev/null || true
-        iptables -A INPUT -p udp --dport 49152:49200 -j ACCEPT 2>/dev/null || true
+        ipt_ensure -p tcp --dport 22 -j ACCEPT
+        ipt_ensure -p tcp --dport 80 -j ACCEPT
+        ipt_ensure -p tcp --dport 443 -j ACCEPT
+        ipt_ensure -p tcp --dport 5060 -j ACCEPT
+        ipt_ensure -p udp --dport 5060 -j ACCEPT
+        ipt_ensure -p tcp --dport 3478 -j ACCEPT
+        ipt_ensure -p udp --dport 3478 -j ACCEPT
+        ipt_ensure -p udp --dport 49152:49200 -j ACCEPT
         
         # RTP
-        iptables -A INPUT -p udp --dport 10000:23100 -j ACCEPT 2>/dev/null || true
+        ipt_ensure -p udp --dport 10000:23100 -j ACCEPT
         
         # BLOQUEAR puertos internos desde externa
-        iptables -A INPUT -p tcp --dport 5432 ! -s 127.0.0.1 -j DROP 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 6379 ! -s 127.0.0.1 -j DROP 2>/dev/null || true
-        iptables -A INPUT -p tcp --dport 5038 ! -s 127.0.0.1 -j DROP 2>/dev/null || true
+        ipt_ensure -p tcp --dport 5432 ! -s 127.0.0.1 -j DROP
+        ipt_ensure -p tcp --dport 6379 ! -s 127.0.0.1 -j DROP
+        ipt_ensure -p tcp --dport 5038 ! -s 127.0.0.1 -j DROP
         
-        # Guardar reglas
-        if command -v netfilter-persistent &>/dev/null; then
-            netfilter-persistent save 2>/dev/null || true
-        elif command -v iptables-save &>/dev/null; then
-            iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+        # Persistir reglas (best effort: un fallo solo advierte, nunca aborta el deploy)
+        if command -v apt-get &>/dev/null; then
+            # Debian/Ubuntu: iptables-persistent restaura /etc/iptables/rules.v4 al arrancar
+            if ! command -v netfilter-persistent &>/dev/null; then
+                echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections 2>/dev/null || true
+                echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | debconf-set-selections 2>/dev/null || true
+                DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent 2>/dev/null \
+                    || log_warning "No se pudo instalar iptables-persistent (las reglas no persistirán tras reiniciar)"
+            fi
+            mkdir -p /etc/iptables 2>/dev/null || true
+            if iptables-save > /etc/iptables/rules.v4 2>/dev/null; then
+                log_success "Reglas iptables guardadas en /etc/iptables/rules.v4"
+            else
+                log_warning "No se pudieron guardar las reglas iptables en /etc/iptables/rules.v4"
+            fi
+        elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+            # RHEL-like (Rocky/Alma/RHEL/Amazon Linux): iptables-services restaura /etc/sysconfig/iptables
+            if [ ! -f /usr/lib/systemd/system/iptables.service ] && [ ! -f /etc/systemd/system/iptables.service ]; then
+                if command -v dnf &>/dev/null; then
+                    dnf install -y iptables-services 2>/dev/null \
+                        || log_warning "No se pudo instalar iptables-services (las reglas no persistirán tras reiniciar)"
+                else
+                    yum install -y iptables-services 2>/dev/null \
+                        || log_warning "No se pudo instalar iptables-services (las reglas no persistirán tras reiniciar)"
+                fi
+            fi
+            mkdir -p /etc/sysconfig 2>/dev/null || true
+            if iptables-save > /etc/sysconfig/iptables 2>/dev/null; then
+                log_success "Reglas iptables guardadas en /etc/sysconfig/iptables"
+                systemctl enable iptables 2>/dev/null \
+                    || log_warning "No se pudo habilitar el servicio iptables (las reglas no persistirán tras reiniciar)"
+            else
+                log_warning "No se pudieron guardar las reglas iptables en /etc/sysconfig/iptables"
+            fi
+        elif command -v netfilter-persistent &>/dev/null; then
+            netfilter-persistent save 2>/dev/null || log_warning "No se pudieron persistir las reglas iptables"
+        else
+            log_warning "No se encontró un mecanismo para persistir iptables (las reglas no persistirán tras reiniciar)"
         fi
         
         log_success "iptables configurado con restricciones de seguridad"
