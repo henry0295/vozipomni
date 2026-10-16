@@ -124,7 +124,7 @@ services:
       resources:
         limits:
           memory: 2G
-          cpus: '2.0'
+          cpus: '${CPU_LIMIT_POSTGRES:-2.0}'
         reservations:
           memory: 512M
 
@@ -151,7 +151,7 @@ services:
       resources:
         limits:
           memory: 1G
-          cpus: '1.0'
+          cpus: '${CPU_LIMIT_REDIS:-1.0}'
         reservations:
           memory: 256M
           cpus: '0.1'
@@ -196,7 +196,7 @@ services:
       resources:
         limits:
           memory: 2G
-          cpus: '2.0'
+          cpus: '${CPU_LIMIT_BACKEND:-2.0}'
         reservations:
           memory: 512M
           cpus: '0.5'
@@ -277,7 +277,7 @@ services:
       resources:
         limits:
           memory: 1G
-          cpus: '2.0'
+          cpus: '${CPU_LIMIT_CELERY:-2.0}'
         reservations:
           memory: 256M
           cpus: '0.5'
@@ -360,7 +360,7 @@ services:
       resources:
         limits:
           memory: 4G
-          cpus: '4.0'
+          cpus: '${CPU_LIMIT_ASTERISK:-4.0}'
         reservations:
           memory: 1G
           cpus: '1.0'

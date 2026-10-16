@@ -1277,10 +1277,31 @@ setup_https_automatic() {
     log_info ""
 }
 
+# ─── 6.9. Ajustar límites de CPU al hardware ────────────────────────────────
+# Docker rechaza crear un contenedor con "cpus" mayor que los CPUs del host
+# ("range of CPUs is from 0.01 to N"). docker-compose.prod.yml lee los límites
+# desde CPU_LIMIT_* en .env; aquí se fijan como min(valor deseado, nproc).
+configure_cpu_limits() {
+    local env_file="$INSTALL_DIR/.env" host_cpus name wanted value
+    [ -f "$env_file" ] || return 0
+    host_cpus=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+    log_info "CPUs disponibles: $host_cpus — ajustando límites de CPU de los contenedores"
+    for pair in CPU_LIMIT_POSTGRES:2.0 CPU_LIMIT_REDIS:1.0 CPU_LIMIT_BACKEND:2.0 \
+                CPU_LIMIT_CELERY:2.0 CPU_LIMIT_ASTERISK:4.0; do
+        name="${pair%%:*}"
+        wanted="${pair#*:}"
+        value=$(awk -v w="$wanted" -v h="$host_cpus" 'BEGIN { printf "%.2f", (w > h ? h : w) }')
+        sed -i "/^${name}=/d" "$env_file"
+        printf '%s=%s\n' "$name" "$value" >> "$env_file"
+    done
+    chmod 600 "$env_file"
+}
+
 # ─── 7. Build & Deploy ──────────────────────────────────────────────────────
 deploy_services() {
     log_info "Desplegando servicios..."
     cd "$INSTALL_DIR"
+    configure_cpu_limits
 
     # Parar servicios anteriores si existen
     $COMPOSE_CMD -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
@@ -1776,6 +1797,7 @@ update_production() {
 
     # 4. Reiniciar servicios con nuevas imágenes (up -d reemplaza solo los cambiados)
     log_info "Reiniciando servicios con nuevas imágenes..."
+    configure_cpu_limits
     $COMPOSE_CMD -f docker-compose.prod.yml up -d --remove-orphans
     log_success "Servicios actualizados"
 
