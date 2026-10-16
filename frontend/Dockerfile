@@ -20,11 +20,11 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install production dependencies only
-RUN npm install --omit=dev
+# Nuxt/Nitro genera un servidor autocontenido en .output (incluye sus
+# propios node_modules), así que no hace falta reinstalar dependencias aquí.
+# Un "npm install --omit=dev" sin lockfile fallaba con
+# "Cannot read properties of null (reading 'edgesOut')" y además
+# ejecutaba el postinstall "nuxt prepare" sin el código fuente.
 
 # Copy built application from builder
 COPY --from=builder /app/.output /app/.output

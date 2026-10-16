@@ -1000,8 +1000,9 @@ configure_firewall() {
         ufw --force enable 2>/dev/null || true
         log_success "Firewall UFW configurado con restricciones de seguridad"
         
-    elif command -v firewall-cmd &>/dev/null; then
-        # Configurar firewalld
+    elif command -v firewall-cmd &>/dev/null && firewall-cmd --state >/dev/null 2>&1; then
+        # Configurar firewalld (solo si el daemon está corriendo; si está instalado
+        # pero detenido, firewall-cmd falla en silencio y no se abriría ningún puerto)
         for port in $PUBLIC_PORTS; do
             firewall-cmd --permanent --add-port="$port" 2>/dev/null || true
         done
@@ -1063,6 +1064,13 @@ configure_firewall() {
             fi
         elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
             # RHEL-like (Rocky/Alma/RHEL/Amazon Linux): iptables-services restaura /etc/sysconfig/iptables
+            # firewalld instalado pero detenido (p.ej. arrastrado por otro paquete) arrancaría
+            # al reiniciar con solo SSH abierto y bloquearía la plataforma: deshabilitarlo.
+            if systemctl is-enabled --quiet firewalld 2>/dev/null; then
+                systemctl disable firewalld 2>/dev/null \
+                    && log_info "firewalld (inactivo) deshabilitado: se usa iptables-services" \
+                    || log_warning "No se pudo deshabilitar firewalld; al reiniciar podría bloquear puertos"
+            fi
             if [ ! -f /usr/lib/systemd/system/iptables.service ] && [ ! -f /etc/systemd/system/iptables.service ]; then
                 if command -v dnf &>/dev/null; then
                     dnf install -y iptables-services 2>/dev/null \
@@ -1108,11 +1116,13 @@ configure_fail2ban() {
                 dnf install -y epel-release 2>/dev/null || \
                     dnf install -y "https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(. /etc/os-release && echo "${VERSION_ID%%.*}").noarch.rpm" 2>/dev/null || true
                 dnf makecache -q 2>/dev/null || true
-                dnf install -y fail2ban 2>/dev/null || true
+                # Solo fail2ban-server: el metapaquete "fail2ban" arrastra firewalld
+                # (lo habilita al arrancar y choca con las reglas iptables ya guardadas)
+                dnf install -y fail2ban-server 2>/dev/null || true
             elif command -v yum &>/dev/null; then
                 yum install -y epel-release 2>/dev/null || true
                 yum makecache -q 2>/dev/null || true
-                yum install -y fail2ban 2>/dev/null || true
+                yum install -y fail2ban-server 2>/dev/null || true
             fi
         else
             log_warning "No se pudo instalar fail2ban automáticamente"
