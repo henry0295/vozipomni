@@ -67,7 +67,7 @@ Esta lista reúne los fallos y limitaciones del código que se detectaron al red
 | El trabajo `backend` instala `requirements.txt` (sin pytest), `pytest.ini` exige `timeout` sin pytest-timeout y cobertura mínima de 80 %. | `.github/workflows/ci.yml`, `backend/pytest.ini` | La etapa de pruebas no puede pasar. |
 | `test_tasks.py` parchea un `DialerService` que ya no existe. | `backend/apps/campaigns/tests/test_tasks.py` | Pruebas desactualizadas. |
 | Indentación dudosa en el trabajo `frontend`, sin `package-lock.json` y sin `vue-tsc` en `devDependencies`. | `.github/workflows/ci.yml`, `frontend/package.json` | El workflow puede ser inválido o poco reproducible. |
-| Varios scripts citados en la documentación están excluidos por `.gitignore` (`prepare-system.sh`, `harden-security.sh`, `security-hardening.sh`, `install-debug-tools.sh`, `diagnostico-extension.sh`, `generate-dev-ssl.ps1`). | `.gitignore` | No llegan a los servidores con `git clone`. |
+| Varios scripts citados en la documentación están excluidos por `.gitignore` (`install-debug-tools.sh`, `diagnostico-extension.sh`, `generate-dev-ssl.ps1`). | `.gitignore` | No llegan a los servidores con `git clone`. |
 | `docker/asterisk/entrypoint.sh` escribe la clave AMI en `manager.conf` dentro del directorio montado del repositorio. | `docker/asterisk/entrypoint.sh` | `git status` muestra el archivo modificado con la clave real; no debe subirse. |
 
 ## Ver también

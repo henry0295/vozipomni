@@ -110,10 +110,6 @@ Todos los contenedores deben estar `running` y los que tienen healthcheck en `he
 8. Revise que la llamada aparezca en Operación > Llamadas y su grabación en Calidad > Grabaciones.
 9. Configure respaldos. Ver [Respaldos](../operacion/respaldos.md).
 
-## Alternativa: `install.sh`
-
-`install.sh` es un instalador interactivo con menú (instalar, actualizar, desinstalar, ver credenciales, ver logs, reiniciar). Si se ejecuta con `VOZIPOMNI_IPV4` definida instala directo. Según la lectura del script, no genera `FIELD_ENCRYPTION_KEY` ni `GRAFANA_PASSWORD`, que `docker-compose.prod.yml` exige, ni certificados SSL, que el contenedor de nginx necesita para arrancar. Por eso el camino recomendado es `deploy.sh`; si usa `install.sh`, agregue esas variables a `.env` y genere los certificados antes de levantar los servicios.
-
 ## Reinstalar desde cero
 
 ```bash

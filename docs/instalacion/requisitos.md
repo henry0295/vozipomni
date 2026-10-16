@@ -1,17 +1,17 @@
 # Requisitos de instalación
 
-Este documento lista lo que necesita el servidor antes de instalar VozipOmni en producción: hardware, sistema operativo, software, red y, de forma opcional, un dominio. Los mínimos y las distribuciones soportadas salen de `deploy.sh`, `prepare-system.sh`, `install.sh` y de los límites de recursos de `docker-compose.prod.yml`.
+Este documento lista lo que necesita el servidor antes de instalar VozipOmni en producción: hardware, sistema operativo, software, red y, de forma opcional, un dominio. Las distribuciones soportadas salen de `deploy.sh` y los recursos, de los límites de `docker-compose.prod.yml`.
 
 ## Hardware
 
-### Mínimos que validan los scripts
+### Mínimos recomendados
 
-| Recurso | Mínimo | Fuente |
-|---|---|---|
-| RAM | 4 GB (advertencia si hay menos) | `prepare-system.sh`, `install.sh` |
-| CPU | 2 núcleos (advertencia si hay menos) | `prepare-system.sh`, `install.sh` |
-| Disco libre en `/` | 20 GB (advertencia) / 40 GB (`install.sh` aborta con menos) | `prepare-system.sh`, `install.sh` |
-| Swap | 2 GB recomendado | `prepare-system.sh` |
+| Recurso | Mínimo |
+|---|---|
+| RAM | 4 GB (8 GB recomendado para producción) |
+| CPU | 2 núcleos (4 recomendado; `deploy.sh` ajusta los límites de CPU de los contenedores a los disponibles) |
+| Disco libre en `/` | 40 GB |
+| Swap | 2 GB recomendado |
 
 `deploy.sh` no valida recursos; conviene revisar estos mínimos antes de ejecutarlo.
 

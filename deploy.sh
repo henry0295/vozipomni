@@ -2413,13 +2413,9 @@ show_result() {
             echo -e "  Revise el DNS y el puerto 80, y vuelva a ejecutar deploy.sh"
             echo ""
         fi
-        echo -e "${YELLOW}⚠️  IMPORTANTE - Seguridad:${NC}"
-        echo -e "  El sistema está usando HTTP (inseguro)"
-        echo -e "  Las contraseñas se transmiten sin cifrar"
-        echo ""
-        echo -e "${BLUE}🔐 Habilitar HTTPS (Recomendado):${NC}"
-        echo -e "  ${GREEN}cd $INSTALL_DIR && chmod +x quick-https.sh && ./quick-https.sh $VOZIPOMNI_IPV4${NC}"
-        echo -e "  Después acceder a: ${GREEN}https://$VOZIPOMNI_IPV4${NC}"
+        echo -e "${YELLOW}⚠️  HTTPS con certificado autofirmado:${NC}"
+        echo -e "  El navegador mostrará una advertencia; acéptela para continuar."
+        echo -e "  Para un certificado válido use un dominio: ${GREEN}sudo bash deploy.sh $VOZIPOMNI_IPV4 --domain su.dominio.com --email admin@su.dominio.com${NC}"
         echo ""
     fi
     echo -e "${BLUE}Credenciales:${NC}"

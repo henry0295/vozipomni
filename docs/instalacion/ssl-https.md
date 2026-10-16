@@ -28,8 +28,6 @@ Asterisk (`/etc/asterisk/keys/`) y Kamailio generan sus propios certificados aut
 2. Si no, genera uno autofirmado RSA 2048 por 365 días con `CN=<IP>` y `subjectAltName=IP:<IP>,DNS:localhost,DNS:vozipomni.local`.
 3. Copia `default.https.conf` sobre `default.prod.conf` y cambia `http://<IP>` por `https://<IP>` (y `ws://` por `wss://`) en `.env`.
 
-El mensaje final del script sugiere `quick-https.sh`, pero ese archivo no existe en el repositorio. No hace falta: HTTPS ya queda activo con el paso anterior.
-
 ## Cómo elige nginx entre HTTP y HTTPS
 
 La imagen (`Dockerfile.prod`) copia `default.prod.conf` (solo HTTP) como configuración activa y `default.https.conf` como `default.https.conf.bak`. Al arrancar, el script `/docker-entrypoint.d/01-ssl-switch.sh`:

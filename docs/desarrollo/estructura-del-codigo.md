@@ -17,7 +17,6 @@ vozipomni/
 ├── logs/               Carpeta montada para logs del backend (solo .gitkeep en el repo)
 ├── docker-compose.yml             Desarrollo (red bridge, puertos publicados)
 ├── docker-compose.prod.yml        Producción (la que usa deploy.sh)
-├── docker-compose.prod.secure.yml Variante alternativa (ver más abajo)
 ├── env.template, .env.example     Plantillas de variables
 └── scripts .sh / .ps1             Instalación, operación y utilidades
 ```
@@ -146,35 +145,18 @@ nginx no publica `websocket_server` y no se encontró uso desde el frontend (ver
 | `voip-debug.sh`, `install-debug-tools.sh` | Diagnóstico SIP/RTP (ver [Depuración VoIP](../operacion/depuracion-voip.md)) |
 | `diagnostico-extension.sh` | Revisión de una extensión; fija la `100` e imprime el secreto SIP, úselo con cuidado |
 | `fix-db-password.sh` | Sincroniza la clave de PostgreSQL; `deploy.sh` lo sugiere cuando falla |
-| `deploy-server.sh` | Reconstruye y reinicia servicios sobre `docker-compose.prod.yml` en una instalación existente. El procedimiento documentado sigue siendo `deploy.sh --update` |
-| `prepare-system.sh` | Ajustes de sistema operativo (sysctl, mensajes del kernel, Docker) |
-| `install.sh` | Instalador interactivo; [Instalación](../instalacion/instalacion.md) explica qué no genera |
-| `harden-security.sh`, `security-hardening.sh` | Endurecimiento (fail2ban, iptables). Se solapan; `harden-security.sh` además rota secretos en `.env.production` |
-| `verify-production.sh` | Verificación de configuración antes de desplegar (según su cabecera) |
 | `generate-dev-ssl.ps1`, `generate-dev-ssl.sh` | Certificados autofirmados para desarrollo |
-| `quickstart.sh`, `init.sh` | Arranque local con Docker Desktop e inicialización |
 
-### Legados (con evidencia)
-
-| Script o archivo | Evidencia |
-|---|---|
-| `deploy-simple.sh` | Su cabecera documenta `./deploy.sh -i`, `-u`, `-c` y `DOCKER_ENGINE_IPV4`; el `deploy.sh` actual recibe la IP como argumento o `VOZIPOMNI_IPV4` y usa `--update`/`--clean` |
-| `apply-improvements.sh` | Exige `docker-compose.yml` (desarrollo) en el directorio actual; `docs/CHANGELOG.md` menciona un `apply-improvements.ps1` que no existe en el repositorio |
-| `quick-deploy.sh` | Exige `docker-compose.yml` (desarrollo), no el compose de producción |
-| `deploy-frontend.sh` | Trabaja sobre `docker-compose.yml` y lo respalda como `docker-compose.yml.backup` |
-| `deploy-frontend-production.sh` | Ejecuta `docker-compose stop frontend_dev frontend` sin `-f`, es decir, contra `docker-compose.yml` |
-| `docker-compose.prod.secure.yml` | Ni `deploy.sh` ni la CI lo usan (la CI valida `docker-compose.prod.yml`) |
-
-Antes de borrar alguno, confirme con el equipo que ningún servidor lo invoque desde cron o procedimientos propios.
+Los instaladores y scripts de despliegue antiguos (`install.sh`, `init.sh`, `quickstart.sh`, `quick-deploy.sh`, `deploy-simple.sh`, `deploy-server.sh`, `deploy-frontend*.sh`, `prepare-system.sh`, `harden-security.sh`, `security-hardening.sh`, `apply-improvements.sh`, `verify-production.sh`) y `docker-compose.prod.secure.yml` se eliminaron: `deploy.sh` cubre instalación, preparación del sistema, endurecimiento (firewall, fail2ban) y actualización.
 
 ### Scripts que no están versionados
 
-`.gitignore` ignora `/*.sh` salvo una lista de excepciones, y también `*.ps1`. Según `git ls-files`, estos archivos existen en algunas copias de trabajo pero no en el repositorio, así que no llegan a un servidor con `git clone` ni con `deploy.sh --update`:
+`.gitignore` ignora `/*.sh` salvo una lista de excepciones, y también `*.ps1`. Estos archivos existen en algunas copias de trabajo pero no en el repositorio, así que no llegan a un servidor con `git clone` ni con `deploy.sh --update`:
 
-- `prepare-system.sh`, `harden-security.sh`, `security-hardening.sh`, `install-debug-tools.sh`, `diagnostico-extension.sh`
+- `install-debug-tools.sh`, `diagnostico-extension.sh`
 - `generate-dev-ssl.ps1` (sí está versionado `generate-dev-ssl.sh`)
 
-Varios documentos y el `README.md` los mencionan. Si un script debe distribuirse, agréguelo a las excepciones `!<script>.sh` de `.gitignore`. La lista de excepciones incluye además `update-production.sh`, que no existe en el repositorio.
+Si un script debe distribuirse, agréguelo a las excepciones `!<script>.sh` de `.gitignore`.
 
 ## Configuración y secretos
 

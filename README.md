@@ -193,31 +193,9 @@ El script usa `set -Eeuo pipefail` con `trap ERR` para capturar errores. Si algo
 
 ---
 
-## 📦 Instalación Interactiva
+## 📦 Sistemas Operativos Soportados
 
-Para una instalación guiada con menú interactivo:
-
-```bash
-curl -o install.sh -L "https://raw.githubusercontent.com/VOZIP/vozipomni/main/install.sh"
-chmod +x install.sh
-sudo bash install.sh
-```
-
-El menú ofrece:
-
-| Opción | Descripción |
-|--------|-------------|
-| 1 | Instalar VoziPOmni (completa) |
-| 2 | Actualizar VoziPOmni (preserva datos) |
-| 3 | Desinstalar VoziPOmni |
-| 4 | Ver credenciales |
-| 5 | Ver logs |
-| 6 | Reiniciar servicios |
-| 7 | Salir |
-
-> Si la variable `VOZIPOMNI_IPV4` está definida, el instalador omite el menú y ejecuta la instalación directamente.
-
-### Sistemas Operativos Soportados
+`deploy.sh` es el único instalador: instala por sí mismo las dependencias del sistema, Docker y prepara el kernel.
 
 Compatible con **cualquier distribución Linux** moderna. Detección automática de:
 
@@ -316,8 +294,9 @@ docker compose exec backend python manage.py createsuperuser
 ```
 vozipomni/
 ├── deploy.sh                    # Despliegue en una línea (set -Eeuo pipefail, trap ERR)
-├── install.sh                   # Instalación interactiva con menú
-├── prepare-system.sh            # Preparación universal del sistema operativo
+├── fix-db-password.sh           # Resincroniza la contraseña de PostgreSQL con .env
+├── backup-production.sh         # Respaldo de base de datos y archivos
+├── voip-debug.sh                # Diagnóstico SIP/RTP
 ├── env.template                 # Template centralizado de variables .env
 ├── docker-compose.yml           # Desarrollo (bridge network, port mappings)
 ├── docker-compose.prod.yml      # Producción (network_mode: host, healthchecks)
@@ -339,8 +318,6 @@ vozipomni/
 | Archivo | Descripción |
 |---------|-------------|
 | `deploy.sh` | Despliegue automatizado con polling HTTP, manejo de errores y detección de compose |
-| `install.sh` | Instalador interactivo v2.0 con menú (instalar, actualizar, desinstalar) |
-| `prepare-system.sh` | Preparación del kernel (silencia mensajes veth/bridge), sysctl VoIP, Docker daemon |
 | `env.template` | Template de todas las variables de entorno con valores por defecto |
 | `docker-compose.yml` | Desarrollo: bridge network, YAML anchors, healthchecks, resource limits |
 | `docker-compose.prod.yml` | Producción: `network_mode: host` en todos los servicios para rendimiento VoIP |
@@ -737,7 +714,7 @@ Recomendaciones para producción:
 
 ### Mensajes del kernel inundan la consola (veth/bridge)
 
-Esto ocurre cuando Docker crea interfaces de red y el kernel imprime mensajes en la consola. Se soluciona automáticamente con `prepare-system.sh`, pero si persiste:
+Esto ocurre cuando Docker crea interfaces de red y el kernel imprime mensajes en la consola. `deploy.sh` lo soluciona automáticamente al preparar el sistema, pero si persiste:
 
 ```bash
 # Silenciar mensajes del kernel
