@@ -76,8 +76,11 @@ logs/
 !README.md
 !INSTALACION_RAPIDA.md
 !CORRECCIONES_SEGURIDAD_2026.md
-/docs/
-!/docs/CHANGELOG.md
+# Documentación del proyecto: se versiona todo docs/ en Markdown
+!/docs/**/*.md
+# Capturas SIP/RTP de diagnóstico: contienen números reales, no se versionan
+/docs/traza/
+*.pcap
 
 
 # Scripts raíz - ignorar (se mantienen solo los esenciales)
