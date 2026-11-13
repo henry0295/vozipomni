@@ -4,7 +4,7 @@ Endpoints para consultar, reproducir, descargar y borrar grabaciones de llamadas
 
 Código fuente:
 
-- `backend/apps/api/viewsets.py`: `RecordingViewSet` en `/api/recordings/`.
+- `backend/apps/api/viewsets/recordings.py`: `RecordingViewSet` en `/api/recordings/`.
 - `backend/apps/api/admin_viewsets.py`: `EvaluationTemplateViewSet` en `/api/evaluation-templates/` y `RecordingEvaluationViewSet` en `/api/evaluations/`.
 - `backend/apps/api/cc_viewsets.py`: `QualityStatsView` en `/api/cc/quality-stats/`.
 - `backend/apps/recordings/models.py`: modelos `Recording`, `RecordingNote`, `EvaluationTemplate`, `RecordingEvaluation`.

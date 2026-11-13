@@ -60,7 +60,7 @@ Todo cuelga de `/api/` a través de `backend/apps/api/urls.py`:
 
 | Archivo | Contenido |
 |---|---|
-| `apps/api/viewsets.py` | `CampaignViewSet`, `CampaignFormViewSet`, `AgentViewSet`, `ContactViewSet`, `ContactListViewSet`, `QueueViewSet`, `CallViewSet`, `RecordingViewSet` |
+| `apps/api/viewsets/` | Paquete dividido por dominio: `campaigns.py` (`CampaignViewSet`, `CampaignFormViewSet`), `agents.py` (`AgentActionThrottle`, `AgentViewSet`), `contacts.py` (`ContactViewSet`, `ContactListViewSet`), `queues.py` (`QueueViewSet`), `calls.py` (`CallViewSet` y `hangup_by_call_id`, que comparten `/api/calls/hangup/` y `/api/agents/hangup/`) y `recordings.py` (`RecordingViewSet`). `__init__.py` reexporta todo, así que `from apps.api import viewsets; viewsets.CampaignViewSet` sigue funcionando |
 | `apps/api/admin_viewsets.py` | Usuarios (`IsAdminUser`; el DELETE desactiva), lista negra, plantillas y evaluaciones de calidad, recuperación y cambio de contraseña |
 | `apps/api/cc_viewsets.py` | Callbacks, webhooks salientes, screen pop, transferencia consultiva, conferencia, DNC, importación masiva, estadísticas de calidad |
 | `apps/api/extra_viewsets.py` | Razones de pausa, grupos de agentes, auditoría |
@@ -113,8 +113,8 @@ Beat usa `DatabaseScheduler`, así que las entradas terminan en las tablas de `d
 |---|---|---|---|
 | `ws/agent/<agent_id>/` | `consumers.AgentConsumer` | `agent_<id>` | Dueño del agente, admin o supervisor; cierra con 4401 o 4403 |
 | `ws/campaign/<campaign_id>/` | `consumers.CampaignConsumer` | `campaign_<id>` | Admin, supervisor, analista o agente asignado |
-| `ws/dashboard/` | `consumers_enhanced.RealtimeDashboardConsumer` | `dashboard`, `asterisk_events` | Staff, superusuario o rol admin/supervisor/analista; envía datos iniciales al conectar |
-| `ws/asterisk/` | `consumers_enhanced.AsteriskEventConsumer` | `asterisk_events`, `agent_<id>` | Autenticado; los agentes reciben eventos filtrados por su extensión |
+| `ws/dashboard/` | `consumers.RealtimeDashboardConsumer` | `dashboard`, `asterisk_events` | Staff, superusuario o rol admin/supervisor/analista; envía datos iniciales al conectar |
+| `ws/asterisk/` | `consumers.AsteriskEventConsumer` | `asterisk_events`, `agent_<id>` | Autenticado; los agentes reciben eventos filtrados por su extensión |
 | `ws/messaging/` | `consumers.MessagingConsumer` | `messaging_all`, `messaging_agent_<id>`, `messaging_unassigned` | Admin/supervisor o agente |
 | cualquier otra | `NotFoundConsumer` | – | Cierra con 4404 |
 

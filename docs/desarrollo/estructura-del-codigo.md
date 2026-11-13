@@ -72,7 +72,7 @@ Archivos clave dentro de `apps/telephony/`:
 | `tasks.py` | Salud de Asterisk, callbacks, webhooks, alertas antifraude, llamadas huérfanas |
 | `management/commands/` | `generate_asterisk_config` y `encrypt_sip_passwords` |
 
-`apps/api/` concentra la API pública: `urls.py` (router), `viewsets.py`, `admin_viewsets.py`, `cc_viewsets.py`, `extra_viewsets.py`, `supervisor_viewsets.py`, `routing.py`, `consumers.py`, `consumers_enhanced.py` y `health_urls.py`. El detalle está en [Backend](./backend.md).
+`apps/api/` concentra la API pública: `urls.py` (router), el paquete `viewsets/` (un módulo por dominio: `campaigns.py`, `agents.py`, `contacts.py`, `queues.py`, `calls.py`, `recordings.py`), `admin_viewsets.py`, `cc_viewsets.py`, `extra_viewsets.py`, `supervisor_viewsets.py`, `routing.py`, `consumers.py` (todos los consumidores WebSocket en un solo módulo) y `health_urls.py`. El detalle está en [Backend](./backend.md).
 
 ## frontend/
 
@@ -171,7 +171,7 @@ Si un script debe distribuirse, agréguelo a las excepciones `!<script>.sh` de `
 | Un endpoint REST | `backend/apps/api/urls.py` y el `urls.py` de la app |
 | Un permiso por rol | `backend/core/permissions.py` y `frontend/utils/navigation.ts` |
 | Qué se escribe en Asterisk | `backend/apps/telephony/asterisk_config.py`, `signals.py`, `security.py` |
-| Cómo llega un evento en vivo | `ami_cdr_listener.py` → grupos de Channels → `consumers_enhanced.py` |
+| Cómo llega un evento en vivo | `ami_cdr_listener.py` → grupos de Channels → `apps/api/consumers.py` |
 | El softphone | `frontend/composables/useWebRTC.ts`, `components/AgentSoftphone.vue` |
 | El enrutamiento SIP | `docker/kamailio/kamailio.cfg` |
 | Tareas periódicas | `backend/config/settings.py` y `backend/config/celery.py` |

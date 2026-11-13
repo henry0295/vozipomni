@@ -4,7 +4,8 @@ Endpoints de campañas (y sus acciones de marcación), calificaciones, formulari
 
 Código fuente:
 
-- `backend/apps/api/viewsets.py`: `CampaignViewSet`, `CampaignFormViewSet`, `ContactViewSet`, `ContactListViewSet`.
+- `backend/apps/api/viewsets/campaigns.py`: `CampaignViewSet`, `CampaignFormViewSet`.
+- `backend/apps/api/viewsets/contacts.py`: `ContactViewSet`, `ContactListViewSet`.
 - `backend/apps/api/admin_viewsets.py`: `BlacklistViewSet`.
 - `backend/apps/api/cc_viewsets.py`: `CallbackViewSet`, `DNCCheckView`, `BulkContactImportView`.
 - Lógica de inicio, pausa y estadísticas: `backend/apps/campaigns/services.py`.

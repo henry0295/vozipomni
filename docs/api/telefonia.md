@@ -4,7 +4,7 @@ Endpoints de llamadas, troncales SIP, enrutamiento, extensiones, IVR y recursos 
 
 Código fuente:
 
-- `backend/apps/api/viewsets.py`: `CallViewSet` en `/api/calls/`.
+- `backend/apps/api/viewsets/calls.py`: `CallViewSet` en `/api/calls/`.
 - `backend/apps/telephony/urls.py` (montado en `/api/telephony/`): `views.py`, `webrtc_views.py`, `security_views.py`.
 - `backend/apps/api/urls.py`: `/api/trunks/` (mismo `SIPTrunkViewSet`) y rutas `/api/cc/...` de `backend/apps/api/cc_viewsets.py`.
 
@@ -36,7 +36,7 @@ No existe un endpoint REST de "click-to-call" u originate de llamadas para agent
 
 ## Llamadas: `/api/calls/`
 
-`CallViewSet` de `backend/apps/api/viewsets.py`. Es el recurso que usan la consola del agente, el historial y los reportes.
+`CallViewSet` de `backend/apps/api/viewsets/calls.py`. Es el recurso que usan la consola del agente, el historial y los reportes.
 
 Permisos:
 

@@ -3,7 +3,7 @@
 Endpoints para administrar usuarios y roles, perfiles de agente (extensión SIP, estado, sesión), grupos de agentes y razones de pausa. Código fuente:
 
 - `backend/apps/api/admin_viewsets.py`: `UserAdminViewSet` (`/api/users/`).
-- `backend/apps/api/viewsets.py`: `AgentViewSet` (`/api/agents/`).
+- `backend/apps/api/viewsets/agents.py`: `AgentViewSet` (`/api/agents/`).
 - `backend/apps/api/extra_viewsets.py`: `AgentGroupViewSet` (`/api/agent-groups/`) y `AgentBreakReasonViewSet` (`/api/break-reasons/`).
 
 Convenciones de paginación, filtros, errores y roles: [README.md](./README.md). Autenticación: [autenticacion.md](./autenticacion.md).

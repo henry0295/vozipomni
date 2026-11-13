@@ -10,7 +10,7 @@ Código fuente:
 - `backend/config/asgi.py`: `ProtocolTypeRouter` con `JwtAuthMiddlewareStack` para `websocket`.
 - `backend/core/websocket_auth.py`: autenticación por `?token=`.
 - `backend/apps/api/routing.py`: rutas.
-- `backend/apps/api/consumers.py` y `backend/apps/api/consumers_enhanced.py`: consumers.
+- `backend/apps/api/consumers.py`: todos los consumers.
 - Productores de eventos: `backend/apps/telephony/ami_cdr_listener.py`, `backend/apps/telephony/asterisk_ami.py`, `backend/apps/telephony/security.py`, `backend/core/event_handlers.py`, `backend/apps/messaging/realtime.py`.
 - `docker/nginx/*.conf`: `location /ws/` hacia Daphne.
 - `websocket_server/server.py`: servidor aiohttp.
@@ -42,8 +42,6 @@ El token viaja en la URL, así que puede quedar en logs de acceso de proxies. Us
 | Cualquier otra | `NotFoundConsumer` | Nadie. | |
 
 `<agent_id>` y `<campaign_id>` son claves primarias numéricas (`Agent.id`, `Campaign.id`).
-
-`consumers.py` también define `DashboardConsumer`, pero no está enrutado; `/ws/dashboard/` usa `RealtimeDashboardConsumer`.
 
 ### Códigos de cierre
 

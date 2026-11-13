@@ -7,7 +7,7 @@ Esta lista reúne los fallos y limitaciones del código que se detectaron al red
 | Problema | Dónde | Efecto |
 |---|---|---|
 | `sip_password` no es de solo escritura en `AgentSerializer`. | `backend/apps/api/serializers.py` | Cualquier usuario autenticado, incluidos los agentes, lee la clave SIP de todos los agentes con `GET /api/agents/`. |
-| `change_status`, `start_break`, `end_break` y `save_disposition` no verifican que el agente sea del usuario. | `backend/apps/api/viewsets.py` (`AgentViewSet`) | Un agente puede cambiar el estado o calificar llamadas de otro agente. |
+| `change_status`, `start_break`, `end_break` y `save_disposition` no verifican que el agente sea del usuario. | `backend/apps/api/viewsets/agents.py` (`AgentViewSet`) | Un agente puede cambiar el estado o calificar llamadas de otro agente. |
 | `/api/telephony/calls/` y `/api/callbacks/` solo exigen autenticación. | `backend/apps/telephony/views.py`, `backend/apps/api/cc_viewsets.py` | Cualquier usuario lee y modifica todas las llamadas y devoluciones de llamada. |
 | `consultive-transfer` y `conference` pasan `channel`, `extension` y `third_party` a AMI sin validar. | `backend/apps/api/cc_viewsets.py` | Riesgo de inyección de parámetros en comandos AMI. |
 | El webhook de Meta no verifica la firma si el proveedor no tiene `app_secret`. | `backend/apps/messaging/views.py` (`MetaWebhookView`) | Quien conozca la URL puede inyectar mensajes falsos. |
@@ -38,11 +38,11 @@ Esta lista reúne los fallos y limitaciones del código que se detectaron al red
 
 | Problema | Dónde | Efecto |
 |---|---|---|
-| `save_disposition` crea `CallbackRequest` con un campo `contact_id` inexistente. | `backend/apps/api/viewsets.py` | Calificar con rellamada y fecha termina en error 500 y no crea el callback. |
-| `next_contact` devuelve `contact.notes`, que es un gestor de relación. | `backend/apps/api/viewsets.py` | Probable error 500 al pedir el siguiente contacto. |
-| `preview-decide` rechaza a los agentes con 403 antes de su propia validación. | `backend/apps/api/viewsets.py` | El modo preview no funciona para agentes. |
+| `save_disposition` crea `CallbackRequest` con un campo `contact_id` inexistente. | `backend/apps/api/viewsets/agents.py` | Calificar con rellamada y fecha termina en error 500 y no crea el callback. |
+| `next_contact` devuelve `contact.notes`, que es un gestor de relación. | `backend/apps/api/viewsets/campaigns.py` | Probable error 500 al pedir el siguiente contacto. |
+| `preview-decide` rechaza a los agentes con 403 antes de su propia validación. | `backend/apps/api/viewsets/campaigns.py` | El modo preview no funciona para agentes. |
 | El modal de importación no envía `contact_list_id` y no hay pantalla para crear listas. | `frontend/pages/contacts/index.vue` | La importación desde la pantalla siempre falla; hay que usar la API. |
-| `POST /api/contacts/` no actualiza `total_contacts`. | `backend/apps/api/viewsets.py` | Una lista cargada contacto por contacto no deja iniciar la campaña. |
+| `POST /api/contacts/` no actualiza `total_contacts`. | `backend/apps/api/viewsets/contacts.py` | Una lista cargada contacto por contacto no deja iniciar la campaña. |
 | `start_date` es obligatorio aunque la pantalla diga que es opcional; "Llamadas Simultáneas Máx." no se guarda. | `frontend/pages/campaigns/index.vue`, `backend/apps/campaigns/models.py` | Error genérico al crear la campaña; el campo no tiene efecto. |
 | La pestaña **Completadas** filtra por `completed` y el modelo usa `finished`. | `frontend/pages/campaigns/index.vue` | Las campañas finalizadas solo aparecen en **Todas**. |
 | La unicidad de la lista negra se valida antes de normalizar el teléfono. | `backend/apps/api/admin_viewsets.py` | Un duplicado con otro formato produce error 500. |

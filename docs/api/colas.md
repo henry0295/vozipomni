@@ -1,6 +1,6 @@
 # Colas
 
-Colas ACD de Asterisk (`Queue()`): configuración, recarga, estadísticas y miembros. Código: `QueueViewSet` en `backend/apps/api/viewsets.py`, modelos en `backend/apps/queues/models.py`, sincronización con Asterisk en `backend/apps/telephony/signals.py`.
+Colas ACD de Asterisk (`Queue()`): configuración, recarga, estadísticas y miembros. Código: `QueueViewSet` en `backend/apps/api/viewsets/queues.py`, modelos en `backend/apps/queues/models.py`, sincronización con Asterisk en `backend/apps/telephony/signals.py`.
 
 Convenciones comunes: [README.md](./README.md). Telefonía (IVR, rutas entrantes que envían a colas): [telefonia.md](./telefonia.md). KPIs de colas: [reportes.md](./reportes.md).
 

@@ -40,7 +40,7 @@ Quién recarga qué:
 | `PJSIPConfigGenerator.reload_pjsip()` | `res_pjsip_config_wizard.so` (pausa 2 s) → `res_pjsip.so` (1 s) → `pjsip reload` → `res_pjsip_outbound_registration.so` |
 | `_sync_agent_pjsip()` (guardar o borrar `Agent`) | Solo `res_pjsip.so` |
 | `security.apply_policy()` | `write_all_configs()` → `reload_dialplan()` → publica la política en Redis |
-| `QueueViewSet` (`apps/api/viewsets.py`) | `app_queue.so` y dialplan |
+| `QueueViewSet` (`apps/api/viewsets/queues.py`) | `app_queue.so` y dialplan |
 | `python manage.py generate_asterisk_config` | Regeneración completa; `--no-reload` para solo escribir |
 
 Las sincronizaciones de `signals.py` corren en un hilo daemon para no bloquear la petición HTTP, y un candado no bloqueante descarta la siguiente si ya hay una en curso. Para verificar lo que quedó cargado:
