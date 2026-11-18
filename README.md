@@ -191,8 +191,10 @@ sudo cat /opt/vozipomni/credentials.txt
 | URL | Uso |
 |-----|-----|
 | `https://<dominio o IP>` | Aplicación |
-| `https://<dominio o IP>/admin` | Admin de Django |
-| `https://<dominio o IP>/api/docs/` | Documentación de la API |
+| `https://<dominio o IP>/admin` | Admin de Django (por defecto solo desde localhost y redes privadas) |
+| `https://<dominio o IP>/api/docs/` | Documentación de la API (requiere iniciar sesión como administrador) |
+
+`/admin` responde 403 desde IP públicas por defecto (`DJANGO_ADMIN_ALLOW=private`). Para cambiarlo, edite `DJANGO_ADMIN_ALLOW` en `/opt/vozipomni/.env` (`private`, `all`, `off` o una lista de IP/CIDR separada por comas) y aplique con `docker compose -f docker-compose.prod.yml up -d nginx`, o entre por un túnel SSH (`ssh -L 8443:127.0.0.1:443 usuario@servidor` y abra `https://127.0.0.1:8443/admin/`). `/api/docs/` y `/api/schema/` solo responden a un administrador autenticado. Detalles en [docs/administracion/seguridad-antifraude.md](docs/administracion/seguridad-antifraude.md#acceso-a-admin-y-a-la-documentación-de-la-api).
 
 Primeros pasos recomendados: configurar una troncal SIP, crear agentes y colas, revisar la política antifraude y programar respaldos. La guía completa está en [docs/instalacion/instalacion.md](docs/instalacion/instalacion.md).
 

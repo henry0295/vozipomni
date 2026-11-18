@@ -219,6 +219,11 @@ if [ -f "${CONFIG_DIR}/manager.conf" ]; then
     fi
     echo "  [entrypoint] ✓ AMI permite localhost, ${AMI_PERMIT_NETWORK} y la IP local configurada"
 fi
+# Grabaciones legibles por nginx (descargas protegidas con X-Accel-Redirect):
+# las nuevas nacen con 0644 y las existentes sin lectura para otros reciben o+r.
+umask 0022
+find /var/spool/asterisk/monitor -type f ! -perm -o=r -exec chmod o+r {} + 2>/dev/null || true
+
 echo ""
 echo "=== Iniciando Asterisk ==="
 exec /usr/sbin/asterisk -f -vvv -U asterisk -G asterisk

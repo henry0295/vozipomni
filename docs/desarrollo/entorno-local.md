@@ -122,7 +122,7 @@ celery -A config beat -l info --scheduler django_celery_beat.schedulers:Database
 
 En Windows, Celery 5 no tiene soporte oficial para el pool por defecto; agregue `--pool=solo` al worker si las tareas no se ejecutan.
 
-La documentación interactiva de la API queda en `http://localhost:8000/api/docs/` (drf-spectacular) y el esquema en `/api/schema/`.
+La documentación interactiva de la API queda en `http://localhost:8000/api/docs/` (drf-spectacular) y el esquema en `/api/schema/`. Ambos exigen un usuario administrador: inicie sesión antes en `http://localhost:8000/admin/` con el superusuario.
 
 ### Frontend
 

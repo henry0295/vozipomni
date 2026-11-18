@@ -84,6 +84,8 @@ db.sqlite3
 db.sqlite3-journal
 /static/
 /media/
+# Reportes y exportaciones privadas (volumen private_volume en desarrollo)
+backend/private/
 .pytest_cache/
 .coverage
 htmlcov/

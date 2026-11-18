@@ -51,6 +51,10 @@ x-django-env: &django-env
   REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/0
   CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/0
   CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/1
+  # Caché compartida de Django (throttles, bloqueos): base 2 de Redis
+  CACHE_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@redis:6379/2
+  # Descargas protegidas: Django autoriza y nginx envía el archivo (X-Accel-Redirect)
+  USE_X_ACCEL_REDIRECT: ${USE_X_ACCEL_REDIRECT:-True}
   ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}  # Asterisk en host mode, acceso via IP
   ASTERISK_AMI_PORT: "5038"
   ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:?ASTERISK_AMI_USER requerido en .env}
@@ -173,6 +177,8 @@ services:
     volumes:
       - static_volume:/app/static
       - media_volume:/app/media
+      # Reportes generados y exportaciones (solo por descarga autenticada)
+      - private_volume:/app/private
       - recordings_volume:/app/recordings
       # Grabaciones de MixMonitor (/var/spool/asterisk/monitor): reproducir/descargar desde la web
       - asterisk_spool:/var/spool/asterisk
@@ -252,6 +258,8 @@ services:
       <<: *django-env
     volumes:
       - media_volume:/app/media
+      # Los reportes se generan aquí (tarea generate_report)
+      - private_volume:/app/private
       - recordings_volume:/app/recordings
       # Grabaciones de MixMonitor: las tareas de vinculación/retención las buscan aquí
       - asterisk_spool:/var/spool/asterisk
@@ -492,9 +500,16 @@ services:
     environment:
       TZ: ${TZ:-America/Bogota}
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      # Acceso a /admin/ de Django: private (LAN y localhost), all, off o lista de CIDR
+      DJANGO_ADMIN_ALLOW: ${DJANGO_ADMIN_ALLOW:-private}
     volumes:
       - static_volume:/app/static
-      - media_volume:/app/media
+      # Solo lectura: nginx sirve estos archivos únicamente por X-Accel-Redirect
+      # (ubicaciones internas /_protected/...), después de que Django autoriza la descarga
+      - media_volume:/app/media:ro
+      - private_volume:/app/private:ro
+      - asterisk_spool:/var/spool/asterisk:ro
+      - recordings_volume:/app/recordings:ro
       # Sin :ro — el entrypoint genera certificados SSL autofirmados si no existen
       - ./docker/nginx/ssl:/etc/nginx/ssl
       # Webroot de Let's Encrypt (deploy.sh / certbot escriben los retos HTTP-01)
@@ -682,6 +697,8 @@ volumes:
   static_volume:
     driver: local
   media_volume:
+    driver: local
+  private_volume:
     driver: local
   recordings_volume:
     driver: local

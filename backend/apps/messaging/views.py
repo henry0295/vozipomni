@@ -41,7 +41,7 @@ import os
 import re
 
 from django.db.models import Q
-from django.http import FileResponse, HttpResponse
+from django.http import Http404, HttpResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -51,6 +51,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core.files import protected_file_response
 from core.permissions import IsAdminOrSupervisorOrReadOnly, IsAdminUser
 from .models import Channel, Conversation, Message, WhatsAppLine, WhatsAppProvider, WhatsAppTemplate
 from .realtime import push
@@ -540,9 +541,11 @@ class MessageViewSet(viewsets.GenericViewSet):
                                 status=status.HTTP_404_NOT_FOUND)
             return Response({'error': 'El mensaje no tiene adjunto'}, status=status.HTTP_404_NOT_FOUND)
         content_type = meta.get('mime_type') or mimetypes.guess_type(path)[0] or 'application/octet-stream'
-        resp = FileResponse(open(path, 'rb'), content_type=content_type)
-        resp['Content-Disposition'] = f'inline; filename="{meta.get("filename") or os.path.basename(path)}"'
-        return resp
+        try:
+            return protected_file_response(path, filename=meta.get('filename') or os.path.basename(path),
+                                           content_type=content_type, as_attachment=False)
+        except Http404:
+            return Response({'error': 'El mensaje no tiene adjunto'}, status=status.HTTP_404_NOT_FOUND)
 
     @action(detail=True, methods=['post'])
     def retry(self, request, pk=None):

@@ -177,13 +177,18 @@ class ReportViewSet(viewsets.ModelViewSet):
     def download(self, request, pk=None):
         """Descargar el archivo generado del reporte."""
         import os
-        from django.http import FileResponse
+        from django.http import Http404
+        from core.files import protected_file_response
         report = self.get_object()
+        not_available = Response({'error': 'El reporte no tiene archivo disponible'},
+                                 status=status.HTTP_404_NOT_FOUND)
         if report.status != 'completed' or not report.file_path or not os.path.exists(report.file_path):
-            return Response({'error': 'El reporte no tiene archivo disponible'},
-                            status=status.HTTP_404_NOT_FOUND)
-        return FileResponse(open(report.file_path, 'rb'), as_attachment=True,
-                            filename=os.path.basename(report.file_path))
+            return not_available
+        try:
+            return protected_file_response(report.file_path, filename=os.path.basename(report.file_path),
+                                           as_attachment=True)
+        except Http404:
+            return not_available
 
     @action(detail=False, methods=['get'])
     def datasets(self, request):

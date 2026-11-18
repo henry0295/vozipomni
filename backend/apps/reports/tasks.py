@@ -17,7 +17,8 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-REPORTS_DIR = os.path.join(str(settings.MEDIA_ROOT), 'reports')
+# Fuera de MEDIA_ROOT: los reportes solo se descargan por la vista autenticada
+REPORTS_DIR = os.path.join(str(settings.PRIVATE_STORAGE_ROOT), 'reports')
 
 
 def _slug(text):

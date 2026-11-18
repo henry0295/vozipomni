@@ -60,6 +60,16 @@ Acciones por fila:
 
 El endpoint de descarga solo entrega archivos que estén dentro de `/var/spool/asterisk/monitor` o `/app/recordings`; si el archivo no existe responde "El archivo de la grabación no está disponible". Cada descarga o reproducción suma uno al contador de reproducciones. El botón **Descargar Seleccionadas** de la cabecera no tiene acción asociada en el código revisado.
 
+### Descargas autenticadas
+
+Las grabaciones no tienen una URL pública: nginx ya no publica `/recordings/` ni `/media/`. El navegador pide `/api/recordings/<id>/download/` con la sesión del usuario, Django comprueba el permiso y la ruta del archivo (`backend/core/files.py`) y responde con la cabecera `X-Accel-Redirect`. nginx envía entonces el archivo desde una ubicación interna (`/_protected/recordings/` o `/_protected/legacy-recordings/`) que no se puede abrir desde fuera. La respuesta lleva `Cache-Control: private, no-store`. Para eso, nginx monta `asterisk_spool` y `recordings_volume` en solo lectura (`docker-compose.prod.yml`).
+
+nginx corre con otro usuario (uid 101), así que necesita permiso de lectura para "otros" en cada archivo. El entrypoint de Asterisk fija `umask 0022` (las grabaciones nuevas quedan con `0644`) y, en cada arranque, da lectura a las grabaciones existentes que no la tengan. Si una grabación antigua responde 403 al reproducirla, aplica el mismo comando a mano:
+
+```bash
+docker exec vozipomni_asterisk sh -c 'find /var/spool/asterisk/monitor -type f ! -perm -o=r -exec chmod o+r {} +'
+```
+
 Estados de una grabación: **Grabando** (`recording`), **Completada** (`completed`), **Fallida** (`failed`) y **Archivada** (`archived`). La tabla muestra el valor interno (por ejemplo `completed`).
 
 ## Retención

@@ -13,7 +13,6 @@ Esta lista reúne los fallos y limitaciones del código que se detectaron al red
 | El webhook de Meta no verifica la firma si el proveedor no tiene `app_secret`. | `backend/apps/messaging/views.py` (`MetaWebhookView`) | Quien conozca la URL puede inyectar mensajes falsos. |
 | `spy`, `whisper` y `barge` no validan que `supervisor_extension` sea del usuario. | `backend/apps/api/supervisor_viewsets.py` | Un supervisor puede enviar la escucha a cualquier extensión. |
 | El servidor WebSocket del puerto 8765 no tiene TLS ni filtro por usuario. | `websocket_server/server.py` | Todo cliente con token válido recibe todos los eventos difundidos. |
-| `/api/schema/` y `/api/docs/` son públicos. | `backend/config/settings.py` (`SPECTACULAR_SETTINGS`) | Exponen la estructura completa de la API sin autenticación. |
 | El `docker-compose.yml` de desarrollo tiene contraseñas por defecto y `default.conf` no exige ticket en `/sip/ws`. | `docker-compose.yml`, `docker/nginx/default.conf` | Aceptable solo en una máquina de desarrollo aislada. |
 
 ## Telefonía y marcador

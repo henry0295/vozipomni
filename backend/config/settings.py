@@ -169,6 +169,19 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Recordings
 RECORDINGS_ROOT = BASE_DIR / 'recordings'
 
+# Archivos privados (reportes generados, exportaciones): nunca bajo MEDIA_ROOT
+PRIVATE_STORAGE_ROOT = Path(config('PRIVATE_STORAGE_ROOT', default=str(BASE_DIR / 'private')))
+
+# Descargas protegidas (core/files.py): con nginx delante, Django solo autoriza y nginx
+# envía el archivo desde una ubicación `internal` (X-Accel-Redirect).
+USE_X_ACCEL_REDIRECT = config('USE_X_ACCEL_REDIRECT', default=not DEBUG, cast=bool)
+PROTECTED_FILE_ROOTS = {
+    str(MEDIA_ROOT): '/_protected/media/',
+    str(PRIVATE_STORAGE_ROOT): '/_protected/private/',
+    '/var/spool/asterisk/monitor': '/_protected/recordings/',
+    '/app/recordings': '/_protected/legacy-recordings/',
+}
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Custom User Model
@@ -176,6 +189,25 @@ AUTH_USER_MODEL = 'users.User'
 
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+
+
+def _redis_db(url: str, db: int) -> str:
+    """Misma URL de Redis con otra base: 'redis://:pw@redis:6379/0' → 'redis://:pw@redis:6379/<db>'."""
+    base, _, _ = url.rpartition('/')
+    return f'{base}/{db}' if base.startswith('redis') else url
+
+
+# Caché compartida entre procesos (gunicorn, daphne, celery): throttles, bloqueos y locks.
+# Bases de Redis: 0 = broker y channels, 1 = resultados, 2 = caché.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': config('CACHE_URL', default=_redis_db(REDIS_URL, 2)),
+        'KEY_PREFIX': 'vcx',
+        'TIMEOUT': 300,
+        'OPTIONS': {'socket_connect_timeout': 2, 'socket_timeout': 2},
+    }
+}
 
 # Asterisk Configuration
 ASTERISK_HOST = config('ASTERISK_HOST', default='asterisk')
@@ -329,8 +361,9 @@ REST_FRAMEWORK = {
     'DATE_FORMAT': '%Y-%m-%d',
     # Rate limiting — protege login y endpoints públicos contra fuerza bruta
     'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
+        # Del proyecto: dejan pasar la petición si Redis (la caché) no responde
+        'core.throttling.AnonRateThrottle',
+        'core.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
         'anon': '20/minute',   # IPs sin autenticar
@@ -431,6 +464,8 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
     'COMPONENT_SPLIT_REQUEST': True,
+    # /api/schema/ y /api/docs/ solo para administradores (anónimo → 401)
+    'SERVE_PERMISSIONS': ['core.permissions.IsAdminUser'],
 }
 
 # Logging

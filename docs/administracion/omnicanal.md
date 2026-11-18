@@ -94,7 +94,7 @@ Al guardar, la tarjeta muestra el **Código para insertar**. Pégalo en tu sitio
         data-api="https://<tu-dominio>/api/messaging/webchat/public" async></script>
 ```
 
-El widget (`frontend/public/webchat/widget.js`) no tiene dependencias, aísla sus estilos en un Shadow DOM y guarda la sesión del visitante en `localStorage`. **Regenerar clave** invalida el código anterior: tendrás que actualizarlo en el sitio. Fuera del horario configurado, el widget muestra el mensaje fuera de horario.
+El widget (`frontend/public/webchat/widget.js`) no tiene dependencias, aísla sus estilos en un Shadow DOM y guarda la sesión del visitante en `localStorage`. Los adjuntos de la conversación se abren con el token de la sesión del visitante (`/api/messaging/webchat/public/<clave>/media/<id>/?token=...`) y solo los de su propia conversación. **Regenerar clave** invalida el código anterior: tendrás que actualizarlo en el sitio. Fuera del horario configurado, el widget muestra el mensaje fuera de horario.
 
 ## Messenger e Instagram
 
@@ -107,6 +107,10 @@ Usan la misma App de Meta de WhatsApp:
 5. En la tabla, usa **Suscribir** y **Probar**. El estado pasa a **Suscrita**.
 
 Para responder entre 24 horas y 7 días después del último mensaje del cliente, Meta exige el permiso Human Agent. Según el panel de chat revisado, en Instagram no se pueden adjuntar archivos.
+
+## Adjuntos protegidos
+
+Los adjuntos que llegan o se envían por cualquier canal se guardan en el volumen `media_volume` (`/app/media/whatsapp`, `meta`, `email` y `outbound`), pero nginx ya no publica `/media/`. La bandeja los pide a `/api/messaging/messages/<id>/media/` con la sesión del agente, y Django solo los entrega si el usuario puede ver esa conversación. Después de autorizar, Django responde con `X-Accel-Redirect` y nginx envía el archivo desde la ubicación interna `/_protected/media/`, que no se puede abrir desde fuera. Un enlace antiguo del tipo `https://<servidor>/media/...` responde 404.
 
 ## Enrutamiento y asignación
 

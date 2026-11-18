@@ -44,6 +44,9 @@ Reglas prácticas:
 | `ENVIRONMENT` | No | `development` | Campo `environment` de los logs JSON. Solo en `backend/.env`. |
 | `FRONTEND_URL` | No | `https://<VOZIPOMNI_IPV4>` | URL pública usada en enlaces de correo (recuperar contraseña). |
 | `PUBLIC_BASE_URL` | No | vacío | URL HTTPS pública con certificado válido para webhooks de Meta. También se usa para el host TURN si `TURN_HOST` está vacío. |
+| `USE_X_ACCEL_REDIRECT` | No | `True` en compose (en código: `not DEBUG`) | Descargas protegidas: Django autoriza y nginx envía el archivo desde una ubicación interna (`/_protected/...`). Con `False` el archivo lo envía Django (útil sin nginx, en desarrollo). |
+| `PRIVATE_STORAGE_ROOT` | No | `/app/private` | Carpeta de reportes generados y exportaciones (volumen `private_volume`). No está en compose; no la cambie en producción. |
+| `DJANGO_ADMIN_ALLOW` | No | `private` | Quién llega a `/admin/` de Django a través de nginx: `private` (localhost y redes privadas 10/8, 172.16/12, 192.168/16), `all` (sin restricción), `off` (bloqueado) o una lista de IPv4/CIDR separada por comas (`203.0.113.10,198.51.100.0/24`). Un valor desconocido bloquea `/admin/`. La lee el servicio `nginx`. |
 | `GUNICORN_WORKERS` | No | `4` | Workers de Gunicorn del servicio `backend`. |
 | `GUNICORN_TIMEOUT` | No | `120` | Timeout de Gunicorn en segundos. |
 
@@ -64,6 +67,7 @@ Reglas prácticas:
 | `REDIS_PASSWORD` | Sí | – | Contraseña de Redis (`--requirepass`). La usan Django, Kamailio, RTPEngine, marcador y `websocket_server`. |
 | `REDIS_URL` | – | la arma compose | `redis://:<clave>@redis:6379/0`. Broker de Celery y capa de Channels. En código: `redis://localhost:6379/0`. |
 | `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` | – | las arma compose | `settings.py` fija `CELERY_BROKER_URL = REDIS_URL` y `CELERY_RESULT_BACKEND = 'django-db'`. |
+| `CACHE_URL` | – | la arma compose | `redis://:<clave>@redis:6379/2`. Caché compartida de Django entre gunicorn, daphne y Celery (throttles, bloqueos, locks). En código: la base 2 de `REDIS_URL`. Si Redis no responde, los throttles dejan pasar la petición y registran un ERROR. |
 | `CELERY_CONCURRENCY` | No | `4` | Procesos del worker. |
 | `CELERY_LOG_LEVEL` | No | `info` | Nivel de log de worker y beat. |
 

@@ -116,7 +116,7 @@ Cómo se genera (`generate_report`):
 - `pdf` no está soportado y se entrega como Excel.
 - `json` no genera archivo: guarda un resumen en `filters._summary` y queda `completed` (la descarga responde `404`).
 - Al terminar, `filters` incluye `_summary` (`total_calls`, `answered`, `missed`, `abandoned`, `answer_rate`, `avg_talk_time`, `total_talk_time`) y `_rows` (filas del archivo).
-- Archivo en `MEDIA_ROOT/reports/<id>_<nombre>.<ext>`.
+- Archivo en `PRIVATE_STORAGE_ROOT/reports/<id>_<nombre>.<ext>` (`/app/private/reports`, volumen `private_volume`), fuera de `MEDIA_ROOT`. Solo se descarga con `GET /api/reports/{id}/download/` autenticado; nginx no publica esa carpeta. Los reportes antiguos guardados en `MEDIA_ROOT/reports` se siguen descargando por la misma vista.
 
 Programados (`run_scheduled_reports`, Celery Beat): cada reporte con `is_scheduled = true` se copia con el período anterior (día anterior, semana anterior los lunes o mes anterior el día 1), se genera y se envía por correo al creador si tiene email.
 

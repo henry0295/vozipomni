@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from django.core import signing
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q
 from django.db.models.functions import TruncDate
-from django.http import FileResponse, JsonResponse
+from django.http import Http404, JsonResponse
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
@@ -32,9 +32,10 @@ from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
+from core.files import protected_file_response
+from core.throttling import AnonRateThrottle
 from core.permissions import (
     IsAdminOrSupervisor, IsAdminOrSupervisorOrReadOnly, IsAdminSupervisorOrAnalyst, IsAdminUser,
 )
@@ -648,7 +649,11 @@ class WebChatMediaView(_PublicWebChatView):
         path = (m.metadata or {}).get('local_path') if m else None
         if not path or not os.path.exists(path):
             return JsonResponse({'error': 'Archivo no encontrado'}, status=404)
-        resp = FileResponse(open(path, 'rb'), content_type=(m.metadata or {}).get('mime_type')
-                            or 'application/octet-stream')
-        resp['Content-Disposition'] = f'inline; filename="{(m.metadata or {}).get("filename") or "archivo"}"'
-        return resp
+        meta = m.metadata or {}
+        try:
+            return protected_file_response(
+                path, filename=meta.get('filename') or 'archivo',
+                content_type=meta.get('mime_type') or 'application/octet-stream',
+                as_attachment=False)
+        except Http404:
+            return JsonResponse({'error': 'Archivo no encontrado'}, status=404)

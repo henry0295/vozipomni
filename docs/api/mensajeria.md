@@ -306,7 +306,7 @@ Cada cambio de asignación, cierre, reapertura, mensaje nuevo o estado de entreg
 
 `MessageViewSet` solo expone dos acciones de detalle (no hay listado). Mismo alcance que las conversaciones.
 
-`GET messages/{id}/media/` devuelve el adjunto con `Content-Disposition: inline`. Errores `404`: `{"error": "El archivo aún se está descargando, intenta en unos segundos."}` (adjunto entrante de WhatsApp pendiente de descarga) o `{"error": "El mensaje no tiene adjunto"}`.
+`GET messages/{id}/media/` devuelve el adjunto con `Content-Disposition: inline` y `Cache-Control: private, no-store`. En producción el archivo lo envía nginx por `X-Accel-Redirect` (`/_protected/media/`); `/media/` no es público. Errores `404`: `{"error": "El archivo aún se está descargando, intenta en unos segundos."}` (adjunto entrante de WhatsApp pendiente de descarga) o `{"error": "El mensaje no tiene adjunto"}`.
 
 `POST messages/{id}/retry/` reintenta un saliente con `status: failed`. Responde el mensaje. Error `400 {"error": "Solo se reintentan mensajes salientes fallidos"}`.
 

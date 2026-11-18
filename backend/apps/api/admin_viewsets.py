@@ -30,7 +30,7 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle
+from core.throttling import AnonRateThrottle
 from rest_framework.views import APIView
 
 from core.permissions import IsAdminOrSupervisor, IsAdminSupervisorOrAnalyst, IsAdminUser

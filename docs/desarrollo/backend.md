@@ -18,10 +18,11 @@ Hay un único módulo, `backend/config/settings.py`, sin paquete `settings/` ni 
 | Base de datos | `DATABASE_URL` si existe; si no, `DB_NAME`, `DB_USER`, `DB_PASSWORD` (o `POSTGRES_PASSWORD`), `DB_HOST`, `DB_PORT`. `CONN_MAX_AGE=600` |
 | Idioma y zona | `es-co`, `America/Bogota`, `USE_TZ=True` |
 | DRF | `JWTAuthentication` + `SessionAuthentication`; permiso por defecto `IsAuthenticated`; `PageNumberPagination` con `PAGE_SIZE=50`; filtros django-filter, búsqueda y orden |
-| Throttling | `anon 20/minute`, `user 200/minute`, y alcances `login 5/minute`, `password_reset 5/hour`, `webchat 60/minute` |
+| Throttling | Clases de `core/throttling.py`. `anon 20/minute`, `user 200/minute`, y alcances `login 5/minute`, `password_reset 5/hour`, `webchat 60/minute` |
 | JWT | Acceso 8 h, refresco 7 días, rotación con lista negra (`BLACKLIST_AFTER_ROTATION`) |
 | Channels | `channels_redis.core.RedisChannelLayer` sobre `REDIS_URL` (`capacity 1500`, `expiry 10`) |
-| Caché | No hay `CACHES`: Django usa `LocMemCache`, local a cada proceso. `apps/api/health_urls.py` prueba esa caché, no Redis |
+| Caché | `CACHES` con `RedisCache` en `CACHE_URL` (por defecto la base 2 de `REDIS_URL`, prefijo `vcx`), compartida entre gunicorn, daphne y Celery. `apps/api/health_urls.py` la prueba, así que mide Redis. Los throttles del proyecto (`core/throttling.py`) dejan pasar la petición si Redis falla |
+| Descargas | `core/files.py` `protected_file_response()`: valida la ruta contra `PROTECTED_FILE_ROOTS` y, con `USE_X_ACCEL_REDIRECT` (por defecto `not DEBUG`), delega el envío a nginx (`/_protected/...`). Reportes en `PRIVATE_STORAGE_ROOT/reports` |
 | CORS | `CORS_ALLOW_ALL` o `CORS_ORIGINS`; con `DEBUG` y sin lista permite `localhost:3000` y `127.0.0.1:3000`. No se define `CSRF_TRUSTED_ORIGINS` |
 | Producción | `SECURE_PROXY_SSL_HEADER`, `SECURE_SSL_REDIRECT`, cookies seguras, HSTS, `X_FRAME_OPTIONS='DENY'` |
 | Telefonía | `ASTERISK_HOST`, `ASTERISK_AMI_*`, `ASTERISK_CONFIG_DIR`, `PJSIP_CONFIG_PATH`, `TURN_*`, `SIP_WS_TICKET_TTL` |

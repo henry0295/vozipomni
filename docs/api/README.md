@@ -23,7 +23,7 @@ drf-spectacular está instalado y expuesto en `backend/config/urls.py`:
 | `GET /api/schema/` | Esquema OpenAPI 3 (YAML por defecto; `?format=json` para JSON). |
 | `GET /api/docs/` | Swagger UI sobre el esquema anterior. |
 
-`SPECTACULAR_SETTINGS` define título `VozipCX Contact Center API`, versión `1.0.0` y `COMPONENT_SPLIT_REQUEST: True`. No sobrescribe `SERVE_PERMISSIONS`, así que con el valor por defecto de drf-spectacular el esquema y Swagger se sirven sin autenticación. Para probar endpoints protegidos desde Swagger use el botón "Authorize" con `Bearer <TOKEN>`.
+`SPECTACULAR_SETTINGS` define título `VozipCX Contact Center API`, versión `1.0.0` y `COMPONENT_SPLIT_REQUEST: True`. `SERVE_PERMISSIONS` es `core.permissions.IsAdminUser`: el esquema y Swagger solo se sirven a un administrador autenticado (sin credenciales responden 401; con otro rol, 403). Para descargar el esquema use `curl -H "Authorization: Bearer <TOKEN_DE_ADMIN>" https://<IP_DEL_SERVIDOR>/api/schema/`. Para probar endpoints protegidos desde Swagger use el botón "Authorize" con `Bearer <TOKEN>`.
 
 El esquema se genera automáticamente y en varios endpoints personalizados (acciones `@action` y `APIView`) no describe el cuerpo ni la respuesta real. Esta documentación es la referencia para esos casos.
 
@@ -52,7 +52,7 @@ curl -s https://<IP_DEL_SERVIDOR>/api/auth/me/ \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
-Endpoints públicos (sin token): `auth/login/`, `auth/refresh/`, `auth/password-reset/`, `auth/password-reset/confirm/`, `health/`, `schema/`, `docs/`, `telephony/sip-ws-auth/` (uso interno de nginx), el webhook de Meta y la API pública del chat web (ver [mensajeria.md](./mensajeria.md)).
+Endpoints públicos (sin token): `auth/login/`, `auth/refresh/`, `auth/password-reset/`, `auth/password-reset/confirm/`, `health/`, `telephony/sip-ws-auth/` (uso interno de nginx), el webhook de Meta y la API pública del chat web (ver [mensajeria.md](./mensajeria.md)).
 
 ## Formato
 
@@ -112,7 +112,7 @@ Convención de las vistas personalizadas: devuelven `{"error": "..."}` en fallos
 
 ## Límites de peticiones (throttling)
 
-`DEFAULT_THROTTLE_CLASSES`: `AnonRateThrottle` y `UserRateThrottle`. Tasas en `DEFAULT_THROTTLE_RATES`:
+`DEFAULT_THROTTLE_CLASSES`: `core.throttling.AnonRateThrottle` y `core.throttling.UserRateThrottle`. Los contadores viven en la caché compartida de Redis (`CACHE_URL`); si Redis no responde, la petición pasa y queda un ERROR en el log. Tasas en `DEFAULT_THROTTLE_RATES`:
 
 | Alcance | Tasa | Se aplica a |
 |---|---|---|

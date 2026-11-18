@@ -135,6 +135,18 @@ Para levantar un baneo antes de que expire:
 
 Si una IP legítima se banea con frecuencia (por ejemplo un teléfono de la oficina), no la desbloquees a mano cada vez: agrega la red a los orígenes confiables con `KAMAILIO_TRUST_LAN` o revisa por qué envía peticiones a Kamailio.
 
+## Acceso a `/admin/` y a la documentación de la API
+
+- **`/admin/` de Django.** nginx limita quién llega según `DJANGO_ADMIN_ALLOW` en el `.env` (lo lee el contenedor `nginx` al arrancar):
+  - `private` (por defecto): solo localhost y redes privadas (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16). Desde Internet responde 403.
+  - `all`: sin restricción (no recomendado en un servidor con IP pública).
+  - `off`: bloqueado para todos.
+  - Lista de IPv4 o CIDR separada por comas, por ejemplo `DJANGO_ADMIN_ALLOW=203.0.113.10,198.51.100.0/24`. Los elementos inválidos se descartan con un aviso en `docker logs vozipomni_nginx`; si no queda ninguno, `/admin/` queda bloqueado.
+  - Cualquier otro valor bloquea `/admin/` y deja el aviso "DJANGO_ADMIN_ALLOW desconocido".
+
+  Para entrar desde fuera de la LAN sin abrir `/admin/`, usa un túnel SSH (`ssh -L 8443:127.0.0.1:443 usuario@servidor` y abre `https://127.0.0.1:8443/admin/`). Después de cambiar el valor, aplica con `docker compose -f docker-compose.prod.yml up -d nginx`. La ACL se genera en `/etc/nginx/vozipomni/admin_acl.inc` con `docker/nginx/admin-acl.sh`.
+- **`/api/schema/` y `/api/docs/`.** Solo los ve un administrador autenticado. Sin sesión responden 401; con otro rol, 403.
+
 ## Lista de verificación
 
 - La política tiene **Bloquear llamadas internacionales** activado y **Indicativo del país** en `57`, o la operación documentó por qué no.
@@ -147,6 +159,7 @@ Si una IP legítima se banea con frecuencia (por ejemplo un teléfono de la ofic
 - Tras guardar apareció "Política aplicada".
 - `KAMAILIO_TRUST_LAN` está en `0`, salvo que haya teléfonos IP en una LAN confiable.
 - El firewall del servidor y el grupo de seguridad de la nube solo exponen los puertos documentados.
+- `/admin/` responde 403 desde una IP pública (`DJANGO_ADMIN_ALLOW=private` o una lista de IP propias).
 - Alguien revisa **Eventos de seguridad** y `docker logs vozipomni_kamailio | grep SECURITY` al menos una vez por semana.
 
 ## Problemas frecuentes

@@ -122,7 +122,7 @@ Ejemplo de elemento del listado:
 
 ### Descargar o reproducir: `GET /api/recordings/{id}/download/`
 
-Devuelve el archivo de audio (`FileResponse`), no JSON. Exige el mismo token que el resto de la API, así que un `<audio src>` directo no funciona: el frontend debe pedir el archivo con la cabecera `Authorization` y reproducirlo como blob.
+Devuelve el archivo de audio, no JSON. En producción Django solo autoriza y responde con `X-Accel-Redirect`; nginx envía el archivo desde la ubicación interna `/_protected/recordings/` (con `USE_X_ACCEL_REDIRECT=False` lo envía Django con `FileResponse`). La respuesta lleva `Content-Disposition` con `filename*` (UTF-8) y `Cache-Control: private, no-store`. Exige el mismo token que el resto de la API, así que un `<audio src>` directo no funciona: el frontend debe pedir el archivo con la cabecera `Authorization` y reproducirlo como blob.
 
 | Parámetro | Efecto |
 |---|---|

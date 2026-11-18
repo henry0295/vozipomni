@@ -34,22 +34,29 @@ class RecordingViewSet(viewsets.ModelViewSet):
         """Audio de la grabación (autenticado). ?inline=1 para reproducir en el navegador."""
         import mimetypes
         import os
-        from django.http import FileResponse
+        from django.http import Http404
         from apps.recordings.tasks import RECORDING_DIRS
+        from core.files import protected_file_response
 
         recording = self.get_object()
         path = os.path.realpath(recording.file_path or '')
         # Solo servir archivos dentro de los directorios de grabaciones (el path viene de la BD)
         allowed = [os.path.realpath(d) for d in RECORDING_DIRS]
-        if not path or not any(path.startswith(d + os.sep) for d in allowed) or not os.path.isfile(path):
-            return Response({'error': 'El archivo de la grabación no está disponible'},
-                            status=status.HTTP_404_NOT_FOUND)
+        not_available = Response({'error': 'El archivo de la grabación no está disponible'},
+                                 status=status.HTTP_404_NOT_FOUND)
+        if not recording.file_path or not any(path.startswith(d + os.sep) for d in allowed) or not os.path.isfile(path):
+            return not_available
 
-        Recording.objects.filter(pk=recording.pk).update(access_count=recording.access_count + 1)
         content_type = mimetypes.guess_type(path)[0] or 'audio/wav'
-        return FileResponse(open(path, 'rb'), content_type=content_type,
-                            as_attachment=request.query_params.get('inline') != '1',
-                            filename=recording.filename or os.path.basename(path))
+        try:
+            response = protected_file_response(
+                path, filename=recording.filename or os.path.basename(path),
+                content_type=content_type,
+                as_attachment=request.query_params.get('inline') != '1')
+        except Http404:
+            return not_available
+        Recording.objects.filter(pk=recording.pk).update(access_count=recording.access_count + 1)
+        return response
 
     def perform_destroy(self, instance):
         import os
