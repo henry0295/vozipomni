@@ -511,7 +511,7 @@ curl -s -X POST https://<IP_DEL_SERVIDOR>/api/telephony/custom-destinations/ \
 
 ### GET /api/telephony/webrtc-credentials/
 
-`WebRTCCredentialsView`, permiso `IsAuthenticated`. Entrega al softphone los servidores ICE y un ticket firmado para abrir el WebSocket SIP.
+`WebRTCCredentialsView`, permiso `IsAuthenticated`. Entrega al softphone los servidores ICE, un ticket firmado para abrir el WebSocket SIP y la extensión y clave SIP del agente del propio usuario. La respuesta lleva `Cache-Control: no-store`.
 
 ```bash
 curl -s https://<IP_DEL_SERVIDOR>/api/telephony/webrtc-credentials/ \
@@ -531,9 +531,12 @@ curl -s https://<IP_DEL_SERVIDOR>/api/telephony/webrtc-credentials/ \
   "turn_enabled": true,
   "turn_ttl": 43200,
   "ws_ticket": "<TICKET_WS>",
-  "ws_ticket_ttl": 86400
+  "ws_ticket_ttl": 86400,
+  "sip": {"extension": "1005", "password": "<CLAVE_SIP>"}
 }
 ```
+
+- `sip`: credenciales del perfil de agente del usuario autenticado (nunca de otro agente). `null` si el usuario no tiene perfil de agente.
 
 - TURN: solo si `TURN_SECRET` está definido. Usuario `<expiración unix>:<id de usuario>` y credencial HMAC-SHA1 con el secreto compartido de coturn (TURN REST). Vida `TURN_CREDENTIAL_TTL` (12 h por defecto). Host: `TURN_HOST`, o el de `PUBLIC_BASE_URL`, o el host de la petición. Puerto `TURN_PORT` (3478).
 - `ws_ticket`: `django.core.signing` con el ID del usuario; vida `SIP_WS_TICKET_TTL` (24 h por defecto). El cliente abre `wss://<IP_DEL_SERVIDOR>/sip/ws?ticket=<TICKET_WS>`.

@@ -88,9 +88,16 @@
             </div>
 
             <!-- Información adicional del contacto -->
-            <div v-if="nextContact.notes" class="mb-3 p-2 bg-blue-50 rounded text-sm">
+            <div v-if="nextContact.notes?.length" class="mb-3 p-2 bg-blue-50 rounded text-sm">
               <p class="text-xs text-blue-600 font-medium mb-1">Notas previas:</p>
-              <p class="text-blue-800">{{ nextContact.notes }}</p>
+              <p
+                v-for="(n, i) in nextContact.notes"
+                :key="i"
+                class="text-blue-800"
+                :class="{ 'font-semibold': n.is_important }"
+              >
+                {{ n.note }}
+              </p>
             </div>
 
             <!-- Botones de acción (Preview) -->
@@ -197,7 +204,8 @@ interface NextContact {
   phone: string
   email?: string
   company?: string
-  notes?: string
+  // Últimas 5 notas del contacto (más recientes primero)
+  notes?: { note: string, created_at: string, is_important: boolean }[]
 }
 
 interface DialerStats {

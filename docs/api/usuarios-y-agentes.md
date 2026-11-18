@@ -119,15 +119,17 @@ Respuesta `200`: `{"is_active": false}`. Error `400 {"error": "No puedes desacti
 
 ## Agentes: `/api/agents/`
 
-`AgentViewSet` (`ModelViewSet`). Permiso base `IsAdminOrSupervisorOrReadOnly`: cualquier usuario autenticado puede leer; crear, editar y borrar requiere `admin` o `supervisor`. Las acciones `login`, `logout`, `change_status`, `start_break`, `end_break` y `save_disposition` se abren a cualquier usuario autenticado (`get_permissions`).
+`AgentViewSet` (`ModelViewSet`). Permiso base `IsAdminOrSupervisorOrReadOnly`: cualquier usuario autenticado puede leer; crear, editar y borrar requiere `admin` o `supervisor`. Un usuario con rol `agent` solo ve su propio registro (`get_queryset` filtra por `user`): pedir otro agente devuelve `404`.
+
+Las acciones `login`, `logout`, `change_status`, `start_break`, `end_break` y `save_disposition` admiten a cualquier usuario autenticado, pero dentro de cada acción se comprueba la propiedad (`_deny_if_not_owner`): admin, supervisor y superusuario pueden operar sobre cualquier agente; el agente solo sobre el suyo (otro agente → `404`); el resto de roles (por ejemplo `analyst`) recibe `403 {"detail": "No tiene permisos sobre este agente"}`. `next_available` y `check_availability` son solo para `admin` y `supervisor`.
 
 ### CRUD
 
 | Acción | Método y ruta | Permiso | Notas |
 |---|---|---|---|
-| list | `GET /api/agents/` | Autenticado | Paginado. Orden por defecto `-created_at`. |
+| list | `GET /api/agents/` | Autenticado | Paginado. Orden por defecto `-created_at`. El rol `agent` solo recibe su propio registro. |
 | create | `POST /api/agents/` | admin, supervisor | Crea también el usuario (rol `agent`). |
-| retrieve | `GET /api/agents/{id}/` | Autenticado | |
+| retrieve | `GET /api/agents/{id}/` | Autenticado | El rol `agent` solo su propio registro (otro → `404`). |
 | update | `PUT /api/agents/{id}/` | admin, supervisor | |
 | partial_update | `PATCH /api/agents/{id}/` | admin, supervisor | |
 | destroy | `DELETE /api/agents/{id}/` | admin, supervisor | Borra el endpoint PJSIP, desactiva el usuario (`is_active` y `is_active_agent` en `false`) y elimina el agente. `204`. |
@@ -153,7 +155,7 @@ Campos (`AgentSerializer`, `fields = '__all__'` más campos auxiliares):
 | `user_details` | objeto | Solo lectura | `UserSerializer` del usuario (id, username, email, name, role...). |
 | `agent_id` | string | Obligatorio al crear | Código único del agente. |
 | `sip_extension` | string | Obligatorio al crear | Extensión SIP única. |
-| `sip_password` | string | Opcional | Clave SIP. Si no se envía se genera. |
+| `sip_password` | string | Solo escritura, opcional | Clave SIP. Si no se envía se genera. Nunca aparece en las respuestas. |
 | `status` | string | Solo lectura | Se cambia con las acciones de este recurso. |
 | `is_available` | boolean | Solo lectura | `status == "available"` y `current_calls < max_concurrent_calls`. |
 | `webrtc_enabled` | boolean | Opcional (por defecto `true`) | |
@@ -167,7 +169,7 @@ Campos (`AgentSerializer`, `fields = '__all__'` más campos auxiliares):
 | `created_at`, `updated_at` | datetime | Solo lectura | |
 | `username`, `password`, `first_name`, `last_name`, `email` | string | Solo escritura | Datos del usuario vinculado. `username` es obligatorio al crear. |
 
-Nota de seguridad: `sip_password` no está marcado como solo escritura en el serializer, así que `GET /api/agents/` y `GET /api/agents/{id}/` devuelven la clave SIP en texto plano a cualquier usuario autenticado, incluidos los agentes.
+`sip_password` es de solo escritura: ninguna respuesta de `/api/agents/` la incluye, para ningún rol. El softphone del agente obtiene su propia extensión y clave en `GET /api/telephony/webrtc-credentials/` (campo `sip`, ver [telefonia.md](./telefonia.md#credenciales-webrtc)).
 
 Comportamiento al crear:
 
@@ -205,7 +207,6 @@ Respuesta `201` (extracto):
     "last_activity": null
   },
   "is_available": false,
-  "sip_password": "<CLAVE_SIP>",
   "agent_id": "AGT005",
   "sip_extension": "1005",
   "status": "offline",
@@ -237,7 +238,7 @@ Errores comunes de creación (`400`): `{"username": "Se requiere un nombre de us
 
 Inicia la sesión del agente: `status = available` y `logged_in_at = ahora`. Después, `AgentService.login_agent` emite el evento `agent_logged_in` (métricas, alta en colas ACD de Asterisk, eventos en vivo). Si esa parte falla, el login queda hecho igual y el error solo se registra en el log.
 
-Permiso: cualquier usuario autenticado, pero un usuario que no sea admin o supervisor solo puede iniciar su propio perfil (`agent.user == usuario del token`). Sin cuerpo.
+Permiso: admin, supervisor o superusuario sobre cualquier agente; el agente solo sobre su propio perfil (`agent.user == usuario del token`). Sin cuerpo.
 
 ```bash
 curl -s -X POST https://<IP_DEL_SERVIDOR>/api/agents/9/login/ \
@@ -250,17 +251,17 @@ Respuesta `200`:
 {"status": "logged in", "agent_id": "AGT005", "sip_extension": "1005"}
 ```
 
-Errores: `403 {"error": "No tiene permisos para iniciar sesión de este agente"}`, `404` si el agente no existe, `500 {"error": "..."}` ante error inesperado.
+Errores: `403 {"detail": "No tiene permisos sobre este agente"}`, `404` si el agente no existe o no es del propio agente, `500 {"error": "..."}` ante error inesperado.
 
 ### POST /api/agents/{id}/logout/
 
 Cierra la sesión: `status = offline`, `logged_in_at = null`, `current_calls = 0`, y `AgentService.logout_agent` emite `agent_logged_out` (baja de colas). Mismas reglas de permiso que `login`. Sin cuerpo.
 
-Respuesta `200`: `{"status": "logged out"}`. Errores: `403 {"error": "No tiene permisos para cerrar sesión de este agente"}`, `404`, `500`.
+Respuesta `200`: `{"status": "logged out"}`. Errores: `403 {"detail": "No tiene permisos sobre este agente"}`, `404`, `500`.
 
 ### POST /api/agents/{id}/change_status/
 
-Cambia el estado del agente. Permiso: cualquier usuario autenticado; el código no comprueba que el agente sea del propio usuario. Throttle `agent_action` (10/min por usuario).
+Cambia el estado del agente. Permiso: el mismo que `login` (admin, supervisor o el propio agente). Throttle `agent_action` (10/min por usuario).
 
 | Campo | Tipo | Requerido | Valores |
 |---|---|---|---|
@@ -287,7 +288,7 @@ Esta acción solo guarda el estado en el modelo; no llama a `AgentService`, por 
 
 ### POST /api/agents/{id}/start_break/
 
-Pone al agente en `break`. Permiso: autenticado (sin comprobación de propietario). Throttle `agent_action`.
+Pone al agente en `break`. Permiso: admin, supervisor o el propio agente. Throttle `agent_action`.
 
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
@@ -297,13 +298,13 @@ Respuesta `200`: `{"status": "break started", "reason": "almuerzo"}`.
 
 ### POST /api/agents/{id}/end_break/
 
-Devuelve al agente a `available`. Permiso: autenticado. Throttle `agent_action`. Sin cuerpo.
+Devuelve al agente a `available`. Permiso: admin, supervisor o el propio agente. Throttle `agent_action`. Sin cuerpo.
 
 Respuesta `200`: `{"status": "break ended", "new_status": "available"}`.
 
 ### GET /api/agents/{id}/stats/
 
-Métricas del día del agente. Permiso: autenticado.
+Métricas del día del agente. Permiso: autenticado (el rol `agent` solo las suyas).
 
 ```json
 {
@@ -326,7 +327,7 @@ Tiempos en segundos. `session_duration` se calcula desde `logged_in_at`; `occupa
 
 ### POST /api/agents/{id}/save_disposition/
 
-Guarda la calificación (disposición) de una llamada desde la consola del agente. Permiso: autenticado; el agente se toma del `{id}` de la URL. Throttle `agent_action`.
+Guarda la calificación (disposición) de una llamada desde la consola del agente. Permiso: admin, supervisor o el propio agente; el agente se toma del `{id}` de la URL. Throttle `agent_action`.
 
 | Campo | Tipo | Requerido | Descripción |
 |---|---|---|---|
@@ -335,10 +336,10 @@ Guarda la calificación (disposición) de una llamada desde la consola del agent
 | `disposition_code` | string | Con `campaign_id` | `code` de una calificación de esa campaña. |
 | `notes` | string | No | Se limpian etiquetas HTML (bleach). |
 | `form_data` | objeto | No | Respuestas del formulario de gestión (`{"campo": "valor"}`); cada valor se limpia de HTML. |
-| `callback_date` | string ISO 8601 | No | Si la calificación tiene `requires_callback`, intenta crear una devolución de llamada (ver limitación más abajo). |
-| `contact_id` | integer | No | Si llega con `form_data`, se fusiona en `custom_fields` del contacto. |
+| `callback_date` | string ISO 8601 | No | Si la calificación tiene `requires_callback`, crea una devolución de llamada para esa fecha. Una fecha sin zona horaria se interpreta en la zona del servidor (`TIME_ZONE`). |
+| `contact_id` | integer | No | Contacto del callback. Si llega con `form_data`, se fusiona en `custom_fields` del contacto. Un ID inexistente se ignora. |
 
-Efectos, en este orden: actualiza `disposition`, `notes` y `metadata.form_data` de la llamada; intenta crear un `CallbackRequest` si corresponde; actualiza `custom_fields` del contacto.
+Efectos, en este orden: valida `callback_date`; actualiza `disposition`, `notes` y `metadata.form_data` de la llamada; crea un `CallbackRequest` (con `contact`, `campaign`, `agent`, `call` y `scheduled_at`) si la calificación lo pide y hay fecha; actualiza `custom_fields` del contacto. El teléfono del callback es el número llamado o, sin llamada, el teléfono del contacto.
 
 ```bash
 curl -s -X POST https://<IP_DEL_SERVIDOR>/api/agents/9/save_disposition/ \
@@ -359,19 +360,19 @@ Errores:
 
 | Código | Cuerpo |
 |---|---|
+| `400` | `{"callback_date": ["Fecha inválida (ISO 8601)"]}` |
+| `403` | `{"detail": "No tiene permisos sobre este agente"}` |
 | `403` | `{"error": "Agent is not assigned to this campaign"}` |
 | `403` | `{"error": "Call does not belong to this agent"}` |
 | `404` | `{"error": "Campaign 3 not found"}` |
 | `400` | `{"error": "Disposition VENTA not found for campaign 3"}` |
 | `429` | Más de 10 peticiones por minuto. |
 
-Un `call_id` inexistente se ignora sin error. Un `callback_date` con formato inválido produce un `500`.
-
-Limitación actual del código: al crear la devolución de llamada, la vista pasa `contact_id` a `CallbackRequest.objects.create()`, pero el modelo `CallbackRequest` no tiene campo `contact`. Por eso, con una calificación que tiene `requires_callback = true` y un `callback_date`, la petición termina en `500` después de haber guardado la calificación en la llamada, y el callback no se crea. Hasta que se corrija, cree el callback con `POST /api/callbacks/` (ver [campanas-y-contactos.md](./campanas-y-contactos.md)).
+Un `call_id` inexistente se ignora sin error. Un `callback_date` inválido se rechaza con `400` antes de modificar la llamada.
 
 ### GET /api/agents/next_available/
 
-Propone el siguiente `agent_id` (mismo prefijo del último, numeración con 3 dígitos) y la siguiente `sip_extension` libre (por defecto `AGT001` y `100`). Permiso: autenticado.
+Propone el siguiente `agent_id` (mismo prefijo del último, numeración con 3 dígitos) y la siguiente `sip_extension` libre (por defecto `AGT001` y `100`). Permiso: `admin` o `supervisor`.
 
 ```json
 {"agent_id": "AGT006", "sip_extension": "1006"}
@@ -379,7 +380,7 @@ Propone el siguiente `agent_id` (mismo prefijo del último, numeración con 3 d�
 
 ### POST /api/agents/check_availability/
 
-Verifica si un código o una extensión están libres. Permiso: `admin` o `supervisor` (es `POST` y hereda el permiso del ViewSet).
+Verifica si un código o una extensión están libres. Permiso: `admin` o `supervisor`.
 
 | Campo | Tipo | Requerido |
 |---|---|---|

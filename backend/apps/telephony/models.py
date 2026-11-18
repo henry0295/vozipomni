@@ -675,6 +675,8 @@ class CallbackRequest(models.Model):
                                  related_name='callbacks', verbose_name='Campaña')
     agent = models.ForeignKey('agents.Agent', on_delete=models.SET_NULL, null=True, blank=True,
                               related_name='callbacks_assigned', verbose_name='Agente asignado')
+    contact = models.ForeignKey('contacts.Contact', on_delete=models.SET_NULL, null=True, blank=True,
+                                related_name='callbacks', verbose_name='Contacto')
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
                                    verbose_name='Creado por')
 

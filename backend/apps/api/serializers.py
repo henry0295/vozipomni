@@ -160,7 +160,9 @@ class AgentSerializer(serializers.ModelSerializer):
     first_name = serializers.CharField(write_only=True, required=False)
     last_name = serializers.CharField(write_only=True, required=False)
     email = serializers.EmailField(write_only=True, required=False)
-    sip_password = serializers.CharField(required=False, style={'input_type': 'password'})
+    # Solo escritura: la clave SIP nunca sale en /api/agents/ (el propio agente la
+    # recibe en /api/telephony/webrtc-credentials/)
+    sip_password = serializers.CharField(required=False, write_only=True, style={'input_type': 'password'})
     
     class Meta:
         model = Agent

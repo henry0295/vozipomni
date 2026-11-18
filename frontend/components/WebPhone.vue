@@ -217,12 +217,30 @@ let durationInterval: any = null
 
 const dialPadDigits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#']
 
-// SIP Settings
+// SIP Settings: la extensión y la clave SIP del propio agente llegan de
+// /api/telephony/webrtc-credentials/ (nunca de /api/agents/)
+const sipCredentials = ref<{ extension: string, password: string } | null>(null)
 const sipSettings = computed(() => ({
-  extension: user.value?.extension || '1000',
+  extension: sipCredentials.value?.extension || '',
   server: config.public.wsBase?.replace('/ws', '') || 'wss://localhost:8080',
-  password: user.value?.sip_password || 'password'
+  password: sipCredentials.value?.password || ''
 }))
+
+async function loadSipCredentials(): Promise<boolean> {
+  try {
+    const base = String(config.public.apiBase || '/api').replace(/\/$/, '')
+    const data: any = await $fetch(`${base}/telephony/webrtc-credentials/`)
+    sipCredentials.value = data?.sip || null
+  } catch (error) {
+    console.error('WebPhone: no se pudieron obtener las credenciales SIP', error)
+    sipCredentials.value = null
+  }
+  if (!sipCredentials.value?.password) {
+    useToast().add({ title: 'Su usuario no tiene extensión SIP', color: 'red' })
+    return false
+  }
+  return true
+}
 
 // Status computed properties
 const statusClass = computed(() => {
@@ -261,6 +279,7 @@ onUnmounted(() => {
 
 async function initializeWebPhone() {
   try {
+    if (!(await loadSipCredentials())) return
     const socket = new JsSIP.WebSocketInterface(`${sipSettings.value.server}`)
     
     const configuration = {

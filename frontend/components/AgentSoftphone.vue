@@ -626,9 +626,17 @@ watch(() => agentStore.isLoggedIn, (isLoggedIn) => {
       sipServer: sipHost,
       sipPort: 443,
       sipUser: agentStore.agent.sip_extension,
-      sipPassword: agentStore.agent.sip_password || agentStore.agent.sip_extension,
+      // La clave SIP la entrega /api/telephony/webrtc-credentials/ dentro de register()
       sipExtension: agentStore.agent.sip_extension,
       displayName: agentStore.agent.user_details?.first_name || 'Agente'
+    }).then((result) => {
+      if (!result.success) {
+        useToast().add({
+          title: 'Softphone no registrado',
+          description: result.error,
+          color: 'red'
+        })
+      }
     })
   } else {
     webrtc.unregister()

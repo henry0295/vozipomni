@@ -6,13 +6,17 @@ from core.throttling import UserRateThrottle
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 import bleach
+import logging
 
 from apps.agents.models import Agent
 
 from apps.api import serializers
 from apps.api.viewsets.calls import hangup_by_call_id
-from core.permissions import IsAdminOrSupervisorOrReadOnly
+from core.permissions import IsAdminOrSupervisor, IsAdminOrSupervisorOrReadOnly
+
+logger = logging.getLogger(__name__)
 
 
 class AgentActionThrottle(UserRateThrottle):
@@ -45,8 +49,34 @@ class AgentViewSet(viewsets.ModelViewSet):
         
         if self.action in agent_allowed_actions:
             return [IsAuthenticated()]
+
+        # Asistentes del formulario de alta: solo quien puede crear agentes
+        if self.action in ('next_available', 'check_availability'):
+            return [IsAdminOrSupervisor()]
         
         return super().get_permissions()
+
+    def get_queryset(self):
+        """El rol agente solo ve su propio registro (otro agente → 404)."""
+        qs = super().get_queryset()
+        user = self.request.user
+        if getattr(user, 'role', None) == 'agent' and not getattr(user, 'is_superuser', False):
+            qs = qs.filter(user=user)
+        return qs
+
+    def _deny_if_not_owner(self, agent):
+        """403 si el usuario no es admin/supervisor/superusuario ni dueño del agente."""
+        user = self.request.user
+        if getattr(user, 'is_superuser', False):
+            return None
+        if getattr(user, 'role', None) in ('admin', 'supervisor'):
+            return None
+        if agent.user_id == user.id:
+            return None
+        return Response(
+            {'detail': 'No tiene permisos sobre este agente'},
+            status=status.HTTP_403_FORBIDDEN
+        )
     
     def get_throttles(self):
         """Aplicar rate limiting solo a acciones de agente"""
@@ -78,18 +108,15 @@ class AgentViewSet(viewsets.ModelViewSet):
         """Marcar agente como conectado y unirlo a las colas ACD de Asterisk"""
         import logging
         _log = logging.getLogger(__name__)
+        # Fuera del try: un agente ajeno debe dar 404 (queryset filtrado), no 500
+        agent = self.get_object()
+
+        # Un agente solo puede iniciar su propia sesión.
+        # Admin/supervisor pueden iniciar sesión de cualquier agente.
+        denied = self._deny_if_not_owner(agent)
+        if denied:
+            return denied
         try:
-            agent = self.get_object()
-
-            # Un agente solo puede iniciar su propia sesión.
-            # Admin/supervisor pueden iniciar sesión de cualquier agente.
-            user_role = getattr(request.user, 'role', None)
-            if user_role not in ['admin', 'supervisor'] and agent.user_id != request.user.id:
-                return Response(
-                    {'error': 'No tiene permisos para iniciar sesión de este agente'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
             # ── Operación crítica: escribir directamente sobre el modelo ──
             # No depende de AgentService, Prometheus, AMI ni event bus.
             agent.status = 'available'
@@ -123,16 +150,12 @@ class AgentViewSet(viewsets.ModelViewSet):
         """Marcar agente como desconectado y retirarlo de las colas ACD de Asterisk"""
         import logging
         _log = logging.getLogger(__name__)
+        agent = self.get_object()
+
+        denied = self._deny_if_not_owner(agent)
+        if denied:
+            return denied
         try:
-            agent = self.get_object()
-
-            user_role = getattr(request.user, 'role', None)
-            if user_role not in ['admin', 'supervisor'] and agent.user_id != request.user.id:
-                return Response(
-                    {'error': 'No tiene permisos para cerrar sesión de este agente'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
             # Operación crítica directa sobre el modelo
             agent.status = 'offline'
             agent.logged_in_at = None
@@ -162,8 +185,11 @@ class AgentViewSet(viewsets.ModelViewSet):
         """Cambiar estado del agente"""
         import logging
         _log = logging.getLogger(__name__)
+        agent = self.get_object()
+        denied = self._deny_if_not_owner(agent)
+        if denied:
+            return denied
         try:
-            agent = self.get_object()
             new_status = request.data.get('status')
 
             # Validar que sea una cadena (evita TypeError si llega un objeto JSON)
@@ -216,6 +242,9 @@ class AgentViewSet(viewsets.ModelViewSet):
     def start_break(self, request, pk=None):
         """Iniciar descanso del agente"""
         agent = self.get_object()
+        denied = self._deny_if_not_owner(agent)
+        if denied:
+            return denied
         reason = request.data.get('reason', 'personal')
         
         agent.status = 'break'
@@ -230,6 +259,9 @@ class AgentViewSet(viewsets.ModelViewSet):
     def end_break(self, request, pk=None):
         """Finalizar descanso del agente"""
         agent = self.get_object()
+        denied = self._deny_if_not_owner(agent)
+        if denied:
+            return denied
         
         agent.status = 'available'
         agent.save()
@@ -319,6 +351,9 @@ class AgentViewSet(viewsets.ModelViewSet):
     def save_disposition(self, request, pk=None):
         """Guardar disposición de llamada (para agentes logueados)"""
         agent = self.get_object()
+        denied = self._deny_if_not_owner(agent)
+        if denied:
+            return denied
         
         # Extraer datos
         call_id = request.data.get('call_id')
@@ -337,6 +372,31 @@ class AgentViewSet(viewsets.ModelViewSet):
         from apps.campaigns.models import CampaignDisposition, Campaign
         from apps.telephony.models import Call
         from apps.contacts.models import Contact
+
+        # Fecha de rellamada (ISO 8601); se valida antes de modificar nada
+        callback_datetime = None
+        if callback_date:
+            try:
+                callback_datetime = parse_datetime(callback_date) if isinstance(callback_date, str) else None
+            except ValueError:
+                callback_datetime = None
+            if callback_datetime is None:
+                return Response(
+                    {'callback_date': ['Fecha inválida (ISO 8601)']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if timezone.is_naive(callback_datetime):
+                callback_datetime = timezone.make_aware(callback_datetime)
+
+        # Contacto: si no existe se ignora (el callback queda sin contacto)
+        if contact_id:
+            try:
+                contact_exists = Contact.objects.filter(pk=contact_id).exists()
+            except (ValueError, TypeError):
+                contact_exists = False
+            if not contact_exists:
+                logger.debug('save_disposition: contact_id %r no existe, se ignora', contact_id)
+                contact_id = None
         
         disposition = None
         if campaign_id and disposition_code:
@@ -387,21 +447,24 @@ class AgentViewSet(viewsets.ModelViewSet):
                 pass
         
         # Crear callback si es necesario
-        if disposition and disposition.requires_callback and callback_date:
+        if disposition and disposition.requires_callback and callback_datetime:
             from apps.telephony.models import CallbackRequest
-            from datetime import datetime
-            
-            callback_datetime = datetime.fromisoformat(callback_date.replace('Z', '+00:00'))
+
+            contact = Contact.objects.filter(pk=contact_id).first() if contact_id else None
+            if call and call.contact:
+                contact_name = call.contact.full_name
+            else:
+                contact_name = contact.full_name if contact else ''
             
             CallbackRequest.objects.create(
-                phone=call.called_number if call else '',
-                contact_name=call.contact.full_name if call and call.contact else '',
+                phone=(call.called_number if call else '') or (contact.phone if contact else ''),
+                contact_name=contact_name,
                 notes=notes,
                 scheduled_at=callback_datetime,
                 campaign_id=campaign_id,
                 agent=agent,
                 call=call,
-                contact_id=contact_id,
+                contact_id=contact_id or None,
                 created_by=request.user
             )
         

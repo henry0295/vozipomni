@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from drf_spectacular.utils import extend_schema, OpenApiExample, OpenApiResponse
@@ -28,6 +29,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
     # agents: permite filtrar campañas por agente asignado (usado por el panel de agente)
     # Ejemplo: /api/campaigns/?agents=5&status=active
     filterset_fields = ['campaign_type', 'status', 'dialer_type', 'agents']
+
+    def get_permissions(self):
+        # preview-decide lo usan los agentes: la propiedad se valida dentro de la acción
+        if self.action == 'preview_decide':
+            return [IsAuthenticated()]
+        return super().get_permissions()
     
     @extend_schema(
         summary="Iniciar campaña",
@@ -145,6 +152,18 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 {'error': 'agent_id is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # El agente solo puede pedir contactos para su propio agent_id
+        if getattr(request.user, 'role', None) == 'agent' and not request.user.is_superuser:
+            try:
+                owns = Agent.objects.filter(id=agent_id, user=request.user).exists()
+            except (ValueError, TypeError):
+                owns = False
+            if not owns:
+                return Response(
+                    {'error': 'No puede pedir contactos para otro agente'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
         
         try:
             from apps.contacts.models import Contact
@@ -172,7 +191,9 @@ class CampaignViewSet(viewsets.ModelViewSet):
                     'phone': contact.phone,
                     'email': contact.email,
                     'company': contact.company,
-                    'notes': contact.notes,
+                    'notes': list(contact.notes.order_by('-created_at').values(
+                        'note', 'created_at', 'is_important'
+                    )[:5]),
                     'custom_fields': contact.custom_fields,
                     'priority': contact.priority,
                     'call_history': [
@@ -248,10 +269,21 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if getattr(request.user, 'role', None) == 'agent':
-            if not Agent.objects.filter(id=agent_id, user=request.user).exists():
+        role = getattr(request.user, 'role', None)
+        if not request.user.is_superuser and role not in ('admin', 'supervisor'):
+            if role != 'agent':
                 return Response(
-                    {'error': 'No puede decidir por otro agente'},
+                    {'error': 'Sin permisos para decidir contactos en preview'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            campaign = self.get_object()
+            try:
+                owns = Agent.objects.filter(id=agent_id, user=request.user, campaigns=campaign).exists()
+            except (ValueError, TypeError):
+                owns = False
+            if not owns:
+                return Response(
+                    {'error': 'No puede decidir por otro agente ni en una campaña no asignada'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
 

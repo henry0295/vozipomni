@@ -188,11 +188,11 @@ Error `404 {"error": "Campaign 3 not found"}`.
 
 ### GET /api/campaigns/{id}/next_contact/
 
-Siguiente contacto a marcar para un agente: contactos de la lista de la campaña en estado `pending` o `callback`, sin llamadas en las últimas 24 horas, ordenados por `priority` e `id`. Cualquier autenticado; un usuario con rol `agent` debe estar asignado a la campaña.
+Siguiente contacto a marcar para un agente: contactos de la lista de la campaña en estado `pending` o `callback`, sin llamadas en las últimas 24 horas, ordenados por `priority` e `id`. Cualquier autenticado; un usuario con rol `agent` debe estar asignado a la campaña y solo puede pedir contactos con su propio `agent_id`.
 
 | Query | Tipo | Requerido |
 |---|---|---|
-| `agent_id` | integer | Sí (solo se valida que venga). |
+| `agent_id` | integer | Sí. Para el rol `agent` debe ser el ID de su propio agente. |
 
 ```bash
 curl -s "https://<IP_DEL_SERVIDOR>/api/campaigns/3/next_contact/?agent_id=9" \
@@ -207,7 +207,9 @@ curl -s "https://<IP_DEL_SERVIDOR>/api/campaigns/3/next_contact/?agent_id=9" \
     "phone": "+573001234567",
     "email": "carlos@example.com",
     "company": "Ejemplo SAS",
-    "notes": "(ver observación)",
+    "notes": [
+      {"note": "Cliente prefiere la tarde", "created_at": "2025-03-08 15:10:00", "is_important": true}
+    ],
     "custom_fields": {"plan": "Básico"},
     "priority": 0,
     "call_history": [
@@ -217,9 +219,9 @@ curl -s "https://<IP_DEL_SERVIDOR>/api/campaigns/3/next_contact/?agent_id=9" \
 }
 ```
 
-Sin contactos pendientes: `200 {"contact": null, "message": "No pending contacts"}`. Errores: `400 {"error": "agent_id is required"}`, `403 {"error": "El agente no está asignado a esta campaña"}`, `500 {"error": "..."}`.
+Sin contactos pendientes: `200 {"contact": null, "message": "No pending contacts"}`. Errores: `400 {"error": "agent_id is required"}`, `403 {"error": "El agente no está asignado a esta campaña"}`, `403 {"error": "No puede pedir contactos para otro agente"}`, `500 {"error": "..."}`.
 
-Observación sobre el código: `notes` se llena con `contact.notes`, que es el gestor de la relación `ContactNote` (el modelo `Contact` no tiene un campo de texto `notes`). El codificador JSON de DRF no sabe convertir un gestor, así que, leyendo el código, la respuesta debería fallar con `500` cada vez que se encuentra un contacto. No se verificó en ejecución. El ejemplo muestra la forma que la vista intenta devolver.
+`notes` es la lista de las últimas 5 notas del contacto (`ContactNote`), de la más reciente a la más antigua, con `note`, `created_at` e `is_important`.
 
 ### POST /api/campaigns/{id}/clone/
 
@@ -240,9 +242,9 @@ Registra la decisión del agente en modo preview: guarda en Redis `campaign:{id}
 | `agent_id` | integer | Sí | ID del agente. |
 | `decision` | string | Sí | `accept` o `reject`. |
 
-Respuesta `200`: `{"status": "ok", "decision": "accept"}`. Errores: `400 {"error": "Se requiere agent_id y decision (accept/reject)"}`, `500` si Redis falla.
+Respuesta `200`: `{"status": "ok", "decision": "accept"}`. Errores: `400 {"error": "Se requiere agent_id y decision (accept/reject)"}`, `403` (ver permisos), `500` si Redis falla.
 
-Permiso efectivo: al ser `POST`, el permiso del ViewSet solo deja pasar a `admin` y `supervisor` (y superusuarios). La comprobación interna que permitiría a un agente decidir por sí mismo nunca se alcanza: un usuario con rol `agent` recibe `403`.
+Permisos: `admin`, `supervisor` y superusuarios deciden por cualquier agente. Un usuario con rol `agent` solo puede decidir con su propio `agent_id` y en una campaña a la que está asignado; si no, `403 {"error": "No puede decidir por otro agente ni en una campaña no asignada"}`. El resto de roles (por ejemplo `analyst`) recibe `403`.
 
 ### GET /api/campaigns/templates/
 
@@ -578,6 +580,8 @@ Filtros: `status`, `campaign`, `agent`. `search` sobre `phone`, `contact_name`, 
 | `attempts` | integer | Solo lectura. |
 | `max_attempts` | integer | 3. |
 | `call`, `campaign`, `agent` | integer o null | Llamada origen, campaña y agente asignado. |
+| `contact` | integer o null | Solo lectura: ID del contacto vinculado. |
+| `contact_id` | integer o null | Solo escritura: vincula el callback a un contacto existente. |
 | `campaign_name`, `agent_name` | string | Solo lectura. |
 | `created_by` | integer | Solo lectura (usuario del token). |
 | `created_at`, `updated_at` | datetime | Solo lectura. |
@@ -605,6 +609,7 @@ curl -s -X POST https://<IP_DEL_SERVIDOR>/api/callbacks/ \
   "campaign_name": "Renovaciones marzo",
   "agent": 9,
   "agent_name": "Juan Pérez",
+  "contact": null,
   "created_by": 3,
   "created_at": "2025-03-10 12:20:00",
   "updated_at": "2025-03-10 12:20:00"

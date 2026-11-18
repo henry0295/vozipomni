@@ -4,6 +4,7 @@ Credenciales para el softphone WebRTC.
   GET /api/telephony/webrtc-credentials/   (autenticado)
       → ice_servers: STUN + TURN con credencial temporal (coturn use-auth-secret, RFC 7635/TURN REST)
       → ws_ticket:   ticket firmado para abrir wss://<host>/sip/ws?ticket=...
+      → sip:         {extension, password} del agente del propio usuario, o null
 
   GET /api/telephony/sip-ws-auth/          (solo nginx, auth_request)
       → 204 si el ticket de X-Original-URI es válido, 401 si no.
@@ -67,13 +68,22 @@ class WebRTCCredentialsView(APIView):
                 'credential': credential,
             })
         ticket = signing.dumps({'u': request.user.pk}, salt=WS_TICKET_SALT)
-        return Response({
+
+        # Credenciales SIP solo del agente del propio usuario (no salen en /api/agents/)
+        from apps.agents.models import Agent
+        agent = Agent.objects.filter(user=request.user).only('sip_extension', 'sip_password').first()
+        sip = {'extension': agent.sip_extension, 'password': agent.sip_password} if agent else None
+
+        response = Response({
             'ice_servers': ice_servers,
             'turn_enabled': bool(settings.TURN_SECRET),
             'turn_ttl': turn_ttl,
             'ws_ticket': ticket,
             'ws_ticket_ttl': settings.SIP_WS_TICKET_TTL,
+            'sip': sip,
         })
+        response['Cache-Control'] = 'no-store'
+        return response
 
 
 def validate_ws_ticket(ticket: str):

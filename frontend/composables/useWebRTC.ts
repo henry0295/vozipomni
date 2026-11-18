@@ -10,7 +10,16 @@ const DEFAULT_ICE: RTCIceServer[] = [
 let _iceServers: RTCIceServer[] = DEFAULT_ICE
 let _credentialsTimer: any = null
 
-async function fetchWebRTCCredentials(): Promise<{ ice_servers: RTCIceServer[], ws_ticket: string } | null> {
+export const NO_SIP_EXTENSION_ERROR = 'Su usuario no tiene extensión SIP'
+
+interface WebRTCCredentials {
+  ice_servers: RTCIceServer[]
+  ws_ticket: string
+  // Credenciales SIP del agente del usuario actual (null si no tiene perfil de agente)
+  sip: { extension: string, password: string } | null
+}
+
+async function fetchWebRTCCredentials(): Promise<WebRTCCredentials | null> {
   try {
     const base = String(useRuntimeConfig().public.apiBase || '/api').replace(/\/$/, '')
     const data: any = await $fetch(`${base}/telephony/webrtc-credentials/`)
@@ -36,7 +45,7 @@ export interface WebRTCConfig {
   sipServer: string
   sipPort: number
   sipUser: string
-  sipPassword: string
+  // La clave SIP no viaja en /api/agents/: se toma de webrtc-credentials en register()
   sipExtension: string
   displayName?: string
   wsUrl?: string
@@ -113,13 +122,21 @@ export const useWebRTC = () => {
       if (_ua) { try { _ua.stop() } catch { /* ignore */ } _ua = null }
       lastConfig.value = config
 
+      if (!creds) {
+        throw new Error('No se pudieron obtener las credenciales SIP')
+      }
+      if (!creds.sip || !creds.sip.password) {
+        throw new Error(NO_SIP_EXTENSION_ERROR)
+      }
+      const sipExtension = creds.sip.extension || config.sipExtension
+
       const wsEndpoint = withTicket(config.wsUrl || `wss://${config.sipServer}:${config.sipPort}/ws`, creds?.ws_ticket)
       const socket = new JsSIP.WebSocketInterface(wsEndpoint)
       
       const configuration = {
         sockets: [socket],
-        uri: `sip:${config.sipExtension}@${config.sipServer}`,
-        password: config.sipPassword,
+        uri: `sip:${sipExtension}@${config.sipServer}`,
+        password: creds.sip.password,
         display_name: config.displayName || config.sipUser,
         register: true,
         session_timers: false,

@@ -28,10 +28,18 @@ logger = logging.getLogger(__name__)
 
 from rest_framework import serializers as drf_serializers
 
+from apps.contacts.models import Contact
+
 
 class CallbackSerializer(drf_serializers.ModelSerializer):
     agent_name = drf_serializers.SerializerMethodField()
     campaign_name = drf_serializers.CharField(source='campaign.name', read_only=True)
+    # contact: id del contacto en lectura; contact_id: para asignarlo al crear/editar
+    contact = drf_serializers.PrimaryKeyRelatedField(read_only=True)
+    contact_id = drf_serializers.PrimaryKeyRelatedField(
+        source='contact', write_only=True, required=False, allow_null=True,
+        queryset=Contact.objects.all(),
+    )
 
     class Meta:
         from apps.telephony.models import CallbackRequest
@@ -40,6 +48,7 @@ class CallbackSerializer(drf_serializers.ModelSerializer):
             'id', 'phone', 'contact_name', 'notes', 'status', 'priority',
             'scheduled_at', 'attempts', 'max_attempts',
             'call', 'campaign', 'campaign_name', 'agent', 'agent_name',
+            'contact', 'contact_id',
             'created_by', 'created_at', 'updated_at',
         ]
         read_only_fields = ['created_at', 'updated_at', 'attempts', 'created_by']

@@ -139,7 +139,7 @@ Reemplaza `globalThis.$fetch` por un envoltorio que:
 Ciclo de vida:
 
 1. `AgentSoftphone.vue` llama `register()` con `wsUrl` = origen de la página (ws/wss) + `/sip/ws`, `sipServer` = host de la página, puerto 443 y la extensión del agente.
-2. `register()` detiene un UA previo y pide credenciales con `fetchWebRTCCredentials()` → `GET <apiBase>/telephony/webrtc-credentials/`. La respuesta trae `ice_servers` (STUN + TURN temporal) y `ws_ticket`; si `ice_servers` viene vacío se conservan los STUN públicos por defecto.
+2. `register()` detiene un UA previo y pide credenciales con `fetchWebRTCCredentials()` → `GET <apiBase>/telephony/webrtc-credentials/`. La respuesta trae `ice_servers` (STUN + TURN temporal), `ws_ticket` y `sip` (extensión y clave SIP del propio agente); si `ice_servers` viene vacío se conservan los STUN públicos por defecto. La clave SIP sale solo de aquí (`/api/agents/` ya no la devuelve). Si `sip` es `null`, `register()` falla con "Su usuario no tiene extensión SIP" y el softphone lo muestra en un aviso.
 3. `withTicket()` agrega `?ticket=<ws_ticket>` a la URL del WebSocket (reemplazando uno anterior). nginx valida ese ticket con `auth_request` antes de pasar a Kamailio (ver [Telefonía interna](./telefonia-interna.md)).
 4. Se crea `JsSIP.UA` con `register: true`, `session_timers: false` y `use_preloaded_route: false`, envuelto en `markRaw` para que Vue no lo haga reactivo.
 5. Un `setInterval` de 30 minutos vuelve a pedir credenciales (las TURN duran 12 h por defecto). Cada reconexión también pide credenciales nuevas, así no se reutilizan tickets vencidos.
