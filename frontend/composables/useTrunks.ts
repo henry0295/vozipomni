@@ -46,9 +46,11 @@ export const useTrunks = () => {
   }
 
   // Activar/desactivar troncal
-  const toggleTrunkStatus = async (id: number) => {
-    const { data, error } = await apiFetch(`/trunks/${id}/toggle_status/`, {
-      method: 'POST'
+  // No existe una acción toggle_status en el backend: se actualiza is_active con PATCH
+  const toggleTrunkStatus = async (id: number, isActive: boolean) => {
+    const { data, error } = await apiFetch(`/trunks/${id}/`, {
+      method: 'PATCH',
+      body: { is_active: isActive }
     })
     return { data: data.value, error: error.value }
   }

@@ -95,7 +95,6 @@ frontend/
 └── public/               Estáticos
 ```
 
-Restos de una versión React/Vite que Nuxt no usa: `src/*.jsx`, `index.html`, `vite.config.js`, `MIGRATION_GUIDE.md` y `COMPARACION_REACT_VS_NUXT.md`. Nuxt 3 no toma `src/` ni `vite.config.js` como parte de la aplicación; se pueden ignorar al buscar código. Ver [Frontend](./frontend.md).
 
 ## dialer_engine/ y websocket_server/
 

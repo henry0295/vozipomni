@@ -1086,7 +1086,7 @@ const closeModal = () => {
 }
 
 const toggleTrunk = async (trunk: SipTrunk) => {
-  await toggleTrunkStatus(trunk.id)
+  await toggleTrunkStatus(trunk.id, !trunk.is_active)
   await loadTrunks()
 }
 

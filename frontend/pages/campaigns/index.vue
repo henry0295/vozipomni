@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div>
     <div class="mb-8 flex items-center justify-between">
       <div>
@@ -328,7 +328,7 @@ const actionLoading = ref<number | null>(null)
 const tabs = [
   { label: 'Activas', value: 'active' },
   { label: 'Pausadas', value: 'paused' },
-  { label: 'Completadas', value: 'completed' },
+  { label: 'Finalizadas', value: 'finished' },
   { label: 'Todas', value: 'all' }
 ]
 

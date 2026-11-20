@@ -3,11 +3,6 @@
     <!-- Header -->
     <div class="flex items-center justify-between">
       <h1 class="text-2xl font-bold text-gray-900">Grabaciones</h1>
-      <UButton
-        icon="i-heroicons-arrow-down-tray"
-        label="Descargar Seleccionadas"
-        color="sky"
-      />
     </div>
 
     <UAlert v-if="error" color="red" icon="i-heroicons-exclamation-triangle">
