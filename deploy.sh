@@ -238,10 +238,16 @@ sync_postgres_password() {
         return 0
     fi
 
-    # Intentar conectar con la contraseña del .env
-    if $COMPOSE_CMD -f docker-compose.prod.yml exec -T \
-        -e PGPASSWORD="$db_pass" \
-        postgres psql -U "$db_user" -d vozipomni -c "SELECT 1" &>/dev/null; then
+    # Probar la contraseña por TCP (-h 127.0.0.1), igual que el backend. Por el
+    # socket local la imagen oficial usa "trust" y acepta cualquier contraseña,
+    # así que esa prueba siempre daba OK aunque no coincidiera (A-4).
+    pg_password_ok() {
+        $COMPOSE_CMD -f docker-compose.prod.yml exec -T \
+            -e PGPASSWORD="$db_pass" \
+            postgres psql -h 127.0.0.1 -U "$db_user" -d vozipomni -c "SELECT 1" &>/dev/null
+    }
+
+    if pg_password_ok; then
         log_success "Credenciales de PostgreSQL sincronizadas ✓"
         return 0
     fi
@@ -251,14 +257,16 @@ sync_postgres_password() {
 
     # Intentar actualizar contraseña usando conexión por socket local (no requiere password)
     if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres \
-        psql -U "$db_user" -d vozipomni -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" &>/dev/null; then
+        psql -U "$db_user" -d vozipomni -c "ALTER USER \"$db_user\" WITH PASSWORD '$db_pass';" &>/dev/null \
+        && pg_password_ok; then
         log_success "Contraseña de PostgreSQL actualizada desde socket local ✓"
         return 0
     fi
 
     # Si falla, intentar con superusuario postgres (algunas instalaciones lo tienen)
     if $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres \
-        psql -U postgres -c "ALTER USER $db_user WITH PASSWORD '$db_pass';" &>/dev/null 2>&1; then
+        psql -U postgres -c "ALTER USER \"$db_user\" WITH PASSWORD '$db_pass';" &>/dev/null \
+        && pg_password_ok; then
         log_success "Contraseña actualizada usando superusuario postgres ✓"
         return 0
     fi
@@ -932,6 +940,9 @@ clone_repo() {
         git fetch origin
         git checkout "$BRANCH" 2>/dev/null || true
         # Descartar cambios locales para que git pull no falle
+        # El entrypoint de Asterisk escribe la clave AMI y la IP en estos archivos montados:
+        # se descartan (se regeneran al arrancar) para no guardarlos en un stash (M-2)
+        git checkout -- docker/asterisk/configs 2>/dev/null || true
         git stash 2>/dev/null || true
         git pull origin "$BRANCH"
     else
@@ -1143,12 +1154,12 @@ configure_firewall() {
     # Puertos públicos (accesibles desde internet)
     # 8080 (WebSocket de Kamailio) ya no se publica: solo escucha en 127.0.0.1 detrás de nginx.
     # 5060: Kamailio rechaza y banea orígenes no autorizados. 3478: TURN (coturn).
-    local PUBLIC_PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 3478/tcp 3478/udp"
+    local PUBLIC_PORTS="22/tcp 80/tcp 443/tcp 5060/tcp 5060/udp 3478/tcp 3478/udp 5161/udp 5162/udp"  # 5161/5162: troncales SIP de Asterisk
     # Relay TURN
     local TURN_RELAY_PORTS="49152:49200/udp"
     
     # Puertos RTP (solo para VoIP providers - se puede restringir por IP más adelante)
-    local RTP_PORTS="10000:23100/udp"
+    local RTP_PORTS="10000:23300/udp"  # Asterisk 10000-20000 + RTPEngine 23000-23300
 
     if command -v ufw &>/dev/null; then
         # Configurar UFW
@@ -1205,15 +1216,28 @@ configure_firewall() {
         ipt_ensure -p udp --dport 5060 -j ACCEPT
         ipt_ensure -p tcp --dport 3478 -j ACCEPT
         ipt_ensure -p udp --dport 3478 -j ACCEPT
+        ipt_ensure -p udp --dport 5161 -j ACCEPT
+        ipt_ensure -p udp --dport 5162 -j ACCEPT
         ipt_ensure -p udp --dport 49152:49200 -j ACCEPT
         
         # RTP
-        ipt_ensure -p udp --dport 10000:23100 -j ACCEPT
+        ipt_ensure -p udp --dport 10000:23300 -j ACCEPT
         
         # BLOQUEAR puertos internos desde externa
         ipt_ensure -p tcp --dport 5432 ! -s 127.0.0.1 -j DROP
         ipt_ensure -p tcp --dport 6379 ! -s 127.0.0.1 -j DROP
         ipt_ensure -p tcp --dport 5038 ! -s 127.0.0.1 -j DROP
+
+        # Tráfico desde las redes Docker (backend -> AMI/Redis en la IP del host)
+        ipt_ensure -i docker0 -j ACCEPT
+        ipt_ensure -i br-+ -j ACCEPT
+        # ICMP (ping, PMTU)
+        ipt_ensure -p icmp -j ACCEPT
+        # Todo lo demás se descarta (M-7): sin esto quedaban expuestos 8088/8089,
+        # 8765, 22222 y otros puertos internos. SSH (22) ya está aceptado arriba.
+        if [ "${VOZIPOMNI_FIREWALL_DEFAULT_DROP:-true}" = true ]; then
+            ipt_ensure -j DROP
+        fi
         
         # Persistir reglas (best effort: un fallo solo advierte, nunca aborta el deploy)
         if command -v apt-get &>/dev/null; then
@@ -1316,14 +1340,18 @@ failregex = .*Failed attempt from <HOST>.*
 ignoreregex =
 FAIL2BAN_FILTER
     
+    # Asterisk escribe sus logs en ./logs/asterisk (bind mount): el archivo debe
+    # existir antes de arrancar fail2ban o la cárcel no carga (M-6)
+    mkdir -p "$INSTALL_DIR/logs/asterisk" && touch "$INSTALL_DIR/logs/asterisk/messages"
+    chown -R 1000:1000 "$INSTALL_DIR/logs/asterisk" 2>/dev/null || true
+
     # Configurar jail para AMI
     cat > /etc/fail2ban/jail.d/asterisk-ami.conf <<'FAIL2BAN_JAIL'
 [asterisk-ami]
 enabled = true
 port = 5038
 filter = asterisk-ami
-logpath = /var/log/asterisk/messages
-          /opt/vozipomni/logs/asterisk/*.log
+logpath = /opt/vozipomni/logs/asterisk/messages
 maxretry = 3
 findtime = 600
 bantime = 3600
@@ -1859,14 +1887,11 @@ INITSQL
         log_warning "Redis no reporta healthy — continuando de todos modos"
     fi
 
-    # Verificar credenciales solo cuando se reutiliza .env existente.
-    # En instalación limpia (CLEAN_INSTALL=true o FRESH_ENV=true) el volumen y las credenciales
-    # siempre coinciden, así que no hace falta verificar.
-    if [ "$FRESH_ENV" != true ] && [ "$CLEAN_INSTALL" != true ]; then
-        verify_postgres_credentials || exit 1
-    else
-        log_info "Instalación nueva: omitiendo verificación de credenciales"
-    fi
+    # Verificar SIEMPRE: aunque el .env sea nuevo (p.ej. se borró /opt/vozipomni a
+    # mano), el volumen de PostgreSQL de una instalación anterior sobrevive con la
+    # contraseña vieja y el backend fallaría con "password authentication failed".
+    # La verificación es barata y, si no coincide, actualiza la contraseña sin perder datos.
+    verify_postgres_credentials || exit 1
 
     # ─── Fase 2: Backend ─────────────────────────────────────────────────
     log_info "Iniciando backend..."
@@ -2303,6 +2328,9 @@ update_production() {
     git fetch origin
     git checkout "${BRANCH:-main}" 2>/dev/null || true
     # Descartar cambios locales para que git pull no falle
+    # El entrypoint de Asterisk escribe la clave AMI y la IP en estos archivos montados:
+    # se descartan (se regeneran al arrancar) para no guardarlos en un stash (M-2)
+    git checkout -- docker/asterisk/configs 2>/dev/null || true
     git stash 2>/dev/null || true
     local deploy_hash_before
     deploy_hash_before=$(git hash-object "$INSTALL_DIR/deploy.sh" 2>/dev/null || echo "")

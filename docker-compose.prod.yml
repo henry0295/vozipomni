@@ -353,7 +353,8 @@ services:
       NAT_IPV4: ${NAT_IPV4:-}
       TZ: ${TZ:-America/Bogota}
     volumes:
-      - asterisk_logs:/var/log/asterisk
+      # Bind mount: fail2ban del host lee logs/asterisk/messages (cárcel AMI)
+      - ./logs/asterisk:/var/log/asterisk
       - asterisk_spool:/var/spool/asterisk
       - asterisk_lib:/var/lib/asterisk
       - ./docker/asterisk/configs:/etc/asterisk

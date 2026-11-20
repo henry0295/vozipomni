@@ -60,9 +60,10 @@ Plataforma de Contact Center omnicanal basada en Django REST Framework, Nuxt 3, 
 | 5060 | UDP/TCP | SIP (Kamailio) |
 | 3478 | UDP/TCP | TURN (coturn) |
 | 49152-49200 | UDP | Relay TURN |
-| 10000-23100 | UDP | Audio RTP |
+| 5161, 5162 | UDP | Troncales SIP (Asterisk) |
+| 10000-23300 | UDP | Audio RTP (Asterisk y RTPEngine) |
 
-PostgreSQL, Redis, AMI y el backend escuchan solo en `127.0.0.1`; `deploy.sh` bloquea su acceso externo.
+PostgreSQL, Redis, AMI y el backend escuchan solo en `127.0.0.1` o quedan bloqueados por el firewall. Con iptables, `deploy.sh` descarta todo el tráfico de entrada que no esté en esta tabla (`VOZIPOMNI_FIREWALL_DEFAULT_DROP=false` lo desactiva).
 
 ---
 
@@ -231,7 +232,7 @@ Scripts de apoyo incluidos:
 
 **Un servicio queda `unhealthy`.** Revise sus logs con `docker compose -f docker-compose.prod.yml logs <servicio>`.
 
-**Audio en una sola dirección.** Normalmente falta `--nat <IP_PUBLICA>` o los puertos UDP 10000-23100 están cerrados en el firewall externo.
+**Audio en una sola dirección.** Normalmente falta `--nat <IP_PUBLICA>` o los puertos UDP 10000-23300 están cerrados en el firewall externo.
 
 **Las troncales SIP no registran.**
 
