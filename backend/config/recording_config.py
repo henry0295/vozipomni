@@ -12,6 +12,10 @@ RECORDING_RETENTION = {
     
     # Días antes de eliminar grabaciones archivadas
     'DELETE_DAYS': config('RECORDING_DELETE_DAYS', default=180, cast=int),
+
+    # Borrado físico: desactivado por defecto (archivar es seguro). Solo borra
+    # archivos si se activa explícitamente RECORDING_DELETE_ENABLED=true (DR4-5).
+    'DELETE_ENABLED': config('RECORDING_DELETE_ENABLED', default=False, cast=bool),
     
     # Días antes de eliminar grabaciones de baja prioridad
     'DELETE_LOW_PRIORITY_DAYS': config('RECORDING_DELETE_LOW_PRIORITY', default=30, cast=int),

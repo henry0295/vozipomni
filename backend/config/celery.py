@@ -4,7 +4,6 @@ Celery configuration for VozipCX
 
 import os
 from celery import Celery
-from celery.schedules import crontab
 
 # Set the default Django settings module
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -19,61 +18,10 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 app.autodiscover_tasks()
 
 # Configuración de tareas periódicas
-app.conf.beat_schedule = {
-    'process-pending-calls': {
-        'task': 'apps.campaigns.tasks.process_pending_calls',
-        'schedule': 10.0,  # cada 10 segundos
-    },
-    'update-agent-statistics': {
-        'task': 'apps.agents.tasks.update_agent_statistics',
-        'schedule': 60.0,  # cada minuto
-    },
-    'cleanup-old-recordings': {
-        'task': 'apps.recordings.tasks.cleanup_old_recordings',
-        'schedule': crontab(hour=2, minute=0),  # 2 AM diario
-    },
-    'generate-daily-reports': {
-        'task': 'apps.reports.tasks.generate_daily_reports',
-        'schedule': crontab(hour=1, minute=0),  # 1 AM diario
-    },
-    
-    # ===== TAREAS PERIODICAS DE TELEFONIA =====
-    
-    # Sincronizar configuración de telefonía a Redis cada 5 minutos
-    'sync-telephony-redis': {
-        'task': 'apps.telephony.tasks.sync_all_telephony_config_to_redis',
-        'schedule': 300.0,  # 5 minutos
-    },
-    
-    # Verificar salud de Asterisk cada minuto
-    'check-asterisk-health': {
-        'task': 'apps.telephony.tasks.check_asterisk_health',
-        'schedule': 60.0,  # 1 minuto
-    },
-    
-    # Reiniciar métricas diarias de agentes a medianoche
-    'reset-daily-agent-metrics': {
-        'task': 'apps.agents.tasks.reset_daily_agent_metrics',
-        'schedule': crontab(hour=0, minute=0),  # 00:00 diario
-    },
-    
-    # Actualizar métricas de Prometheus cada minuto
-    'update-prometheus-metrics': {
-        'task': 'apps.agents.tasks.update_prometheus_metrics',
-        'schedule': 60.0,  # cada minuto
-    },
-    # Red de seguridad: escanear grabaciones no vinculadas cada 5 minutos
-    'scan-unlinked-recordings': {
-        'task': 'recordings.scan_unlinked_recordings',
-        'schedule': 300.0,  # cada 5 minutos
-    },
-    
-    # Detectar llamadas huérfanas sin heartbeat cada 5 minutos
-    'detect-orphan-calls': {
-        'task': 'apps.telephony.tasks.detect_orphan_calls',
-        'schedule': 300.0,  # cada 5 minutos
-    },
-}
+# La programación de tareas periódicas vive SOLO en settings.CELERY_BEAT_SCHEDULE.
+# (Antes aquí se reasignaba app.conf.beat_schedule con nombres no registrados y
+# se anulaba la de settings: retención, callbacks, antifraude, correo, etc. no corrían.)
+
 
 @app.task(bind=True, ignore_result=True)
 def debug_task(self):

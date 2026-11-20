@@ -259,3 +259,13 @@ Renueva al menos 30 días antes. Tras reemplazar los archivos, recarga nginx con
 - [SSL y HTTPS](../instalacion/ssl-https.md)
 - [Grabaciones y calidad](../administracion/grabaciones-y-calidad.md)
 - [Glosario](../general/glosario.md)
+
+## Retención de grabaciones
+
+La tarea `recordings.cleanup_old_recordings` corre todos los días a las 02:00 (Celery Beat).
+
+- Archiva las grabaciones con más de `RECORDING_ARCHIVE_DAYS` días (90 por defecto). No borra nada.
+- El **borrado físico** de archivos con más de `RECORDING_DELETE_DAYS` días (180) está **desactivado por defecto**. Mientras lo esté, el log muestra cuántos archivos habría borrado.
+- Para activarlo, agregue `RECORDING_DELETE_ENABLED=true` a `/opt/vozipomni/.env` y ejecute `sudo bash deploy.sh --update <IP>`. Antes, confirme que los respaldos incluyen las grabaciones.
+
+`deploy.sh` ejecuta `manage.py sync_periodic_tasks` después de migrar: elimina de la base las tareas periódicas con nombres que ya no existen.

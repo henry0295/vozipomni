@@ -42,6 +42,10 @@ x-django-env: &django-env
   ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS requerido en .env}
   CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS requerido en .env}
   VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
+  # Retención de grabaciones (el borrado físico está desactivado por defecto)
+  RECORDING_ARCHIVE_DAYS: ${RECORDING_ARCHIVE_DAYS:-90}
+  RECORDING_DELETE_DAYS: ${RECORDING_DELETE_DAYS:-180}
+  RECORDING_DELETE_ENABLED: ${RECORDING_DELETE_ENABLED:-false}
   DB_NAME: ${POSTGRES_DB:-vozipomni}
   DB_USER: ${POSTGRES_USER:-vozipomni_user}
   DB_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requerido en .env}

@@ -2035,6 +2035,7 @@ post_deploy() {
     $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput 2>/dev/null || \
     $COMPOSE_CMD -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
     run_manage_nonfatal check_security_config
+    run_manage_nonfatal sync_periodic_tasks
 
     # Crear superusuario
     log_info "Creando usuario administrador..."
@@ -2352,6 +2353,7 @@ update_production() {
         grep -v '^$' || true
     log_success "Migraciones aplicadas"
     run_manage_nonfatal check_security_config
+    run_manage_nonfatal sync_periodic_tasks
 
     # 7. Asegurar que el usuario admin existe y tiene rol correcto
     log_info "Verificando usuario admin..."

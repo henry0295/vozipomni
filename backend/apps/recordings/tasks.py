@@ -178,12 +178,7 @@ def cleanup_old_recordings():
         created_at__lt=archive_cutoff,
         status='completed',
     )
-    archived_count = 0
-    for recording in to_archive:
-        recording.status = 'archived'
-        recording.archived_at = timezone.now()
-        recording.save(update_fields=['status', 'archived_at'])
-        archived_count += 1
+    archived_count = to_archive.update(status='archived', archived_at=timezone.now())
 
     if archived_count:
         logger.info(f"[Retention] Archivadas {archived_count} grabaciones (>{archive_days} días)")
@@ -197,7 +192,21 @@ def cleanup_old_recordings():
 
     deleted_count = 0
     deleted_bytes = 0
-    for recording in to_delete:
+    if not RECORDING_RETENTION.get('DELETE_ENABLED', False):
+        pending = to_delete.count()
+        if pending:
+            logger.info(
+                f"[Retention] Borrado desactivado (RECORDING_DELETE_ENABLED=false): "
+                f"habría borrado {pending} archivos (>{delete_days} días)"
+            )
+        return {
+            'archived': archived_count,
+            'deleted': 0,
+            'would_delete': pending,
+            'freed_mb': 0,
+            'delete_enabled': False,
+        }
+    for recording in to_delete.iterator(chunk_size=500):
         try:
             if recording.file_path and os.path.exists(recording.file_path):
                 size = os.path.getsize(recording.file_path)
@@ -223,6 +232,7 @@ def cleanup_old_recordings():
         'archived': archived_count,
         'deleted': deleted_count,
         'freed_mb': round(deleted_mb, 2),
+        'delete_enabled': True,
     }
 
 
