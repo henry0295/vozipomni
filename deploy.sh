@@ -2296,6 +2296,8 @@ update_production() {
         fi
     fi
 
+    # 1c. Respaldo de la base ANTES de traer código y migrar (permite volver atrás)
+    backup_db_before_update
     # 2. Actualizar código
     log_info "Actualizando código desde GitHub (rama: ${BRANCH:-main})..."
     git fetch origin
@@ -2535,6 +2537,63 @@ show_result() {
 # =============================================================================
 # MAIN
 # =============================================================================
+# ─── Respaldos ───────────────────────────────────────────────────────────────
+# Respaldo diario automático (03:30) con backup-production.sh. Idempotente.
+configure_backup_cron() {
+    local script="$INSTALL_DIR/backup-production.sh" cron_file="/etc/cron.d/vozipomni-backup"
+    if [ ! -f "$script" ]; then
+        log_warning "No se encontró $script: no se programan respaldos automáticos"
+        return 0
+    fi
+    if [ ! -d /etc/cron.d ]; then
+        log_warning "No existe /etc/cron.d: programe manualmente 'bash $script' a diario"
+        return 0
+    fi
+    printf '%s\n' \
+        "# Generado por deploy.sh de VozipCX: respaldo diario" \
+        "SHELL=/bin/bash" \
+        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+        "30 3 * * * root INSTALL_DIR=$INSTALL_DIR bash $script >> /var/log/vozipomni-backup.log 2>&1" \
+        > "$cron_file" 2>/dev/null && chmod 644 "$cron_file" 2>/dev/null \
+        && log_success "Respaldo diario programado (03:30, $cron_file; destino: /var/backups/vozipomni)" \
+        || log_warning "No se pudo programar el respaldo automático"
+    # cronie no viene en algunas imágenes mínimas
+    if ! command -v crond &>/dev/null && ! command -v cron &>/dev/null; then
+        if command -v dnf &>/dev/null; then dnf install -y cronie >/dev/null 2>&1 || true
+        elif command -v apt-get &>/dev/null; then DEBIAN_FRONTEND=noninteractive apt-get install -y cron >/dev/null 2>&1 || true
+        fi
+    fi
+    systemctl enable --now crond >/dev/null 2>&1 || systemctl enable --now cron >/dev/null 2>&1 || true
+    return 0
+}
+
+# pg_dump antes de --update. Si falla, se pregunta (interactivo) o se continúa con aviso.
+backup_db_before_update() {
+    local dir="/var/backups/vozipomni/pre-update" file
+    file="$dir/postgres-$(date +%Y%m%d_%H%M%S).dump"
+    mkdir -p "$dir" 2>/dev/null && chmod 700 "$dir" 2>/dev/null || true
+    local db_user db_name
+    db_user=$(grep '^POSTGRES_USER=' "$INSTALL_DIR/.env" 2>/dev/null | tail -1 | cut -d= -f2-); db_user="${db_user:-vozipomni_user}"
+    db_name=$(grep '^POSTGRES_DB=' "$INSTALL_DIR/.env" 2>/dev/null | tail -1 | cut -d= -f2-);   db_name="${db_name:-vozipomni}"
+    log_info "Respaldando la base de datos antes de actualizar..."
+    if (cd "$INSTALL_DIR" && $COMPOSE_CMD -f docker-compose.prod.yml exec -T postgres \
+            pg_dump -U "$db_user" -d "$db_name" --format=custom) > "$file" 2>/dev/null && [ -s "$file" ]; then
+        chmod 600 "$file"
+        log_success "Respaldo previo: $file"
+        log_info "  Restaurar: docker compose -f docker-compose.prod.yml exec -T postgres pg_restore -U $db_user -d $db_name --clean < $file"
+        # Conservar los 5 más recientes
+        ls -1t "$dir"/postgres-*.dump 2>/dev/null | tail -n +6 | xargs -r rm -f
+    else
+        rm -f "$file"
+        log_warning "No se pudo respaldar la base antes de actualizar (¿PostgreSQL detenido?)"
+        if [ -t 0 ]; then
+            read -r -p "¿Continuar la actualización sin respaldo? [s/N]: " ans
+            [[ "$ans" =~ ^[sS]$ ]] || { log_error "Actualización cancelada"; exit 1; }
+        fi
+    fi
+    return 0
+}
+
 main() {
     banner
 
@@ -2543,6 +2602,7 @@ main() {
         check_prerequisites
         install_base_dependencies
         update_production
+        configure_backup_cron
         exit 0
     fi
 
@@ -2574,6 +2634,8 @@ main() {
     post_deploy
     echo ""
     apply_v3_improvements
+    echo ""
+    configure_backup_cron
     echo ""
     show_result
 }

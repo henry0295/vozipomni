@@ -242,3 +242,38 @@ Pruebe la restauración al menos una vez por trimestre en un servidor aparte. Un
 - [Instalación](../instalacion/instalacion.md)
 - [Variables de entorno](../instalacion/variables-entorno.md)
 - [Grabaciones y calidad](../administracion/grabaciones-y-calidad.md)
+
+## Respaldo automático (desde esta versión)
+
+`deploy.sh` programa `backup-production.sh` todos los días a las 03:30 en `/etc/cron.d/vozipomni-backup` (log en `/var/log/vozipomni-backup.log`). Cada respaldo queda en `/var/backups/vozipomni/<fecha>/` con:
+
+| Archivo | Contenido |
+|---|---|
+| `postgres.dump` | Base de datos completa (`pg_dump` formato custom) |
+| `asterisk_spool.tar.gz` | Grabaciones reales de Asterisk (MixMonitor) y buzones |
+| `recordings_volume.tar.gz`, `media_volume.tar.gz` | Grabaciones procesadas y adjuntos |
+| `asterisk_config.tar.gz` | Configuración dinámica de Asterisk |
+| `config.tar.gz` (o `.enc`) | `.env`, `backend/.env`, `credentials.txt` y certificados |
+
+El `.env` contiene `FIELD_ENCRYPTION_KEY`: sin él no se pueden descifrar las claves SIP guardadas en la base.
+
+Opciones en `/opt/vozipomni/.env`:
+
+- `BACKUP_RETENTION_DAYS` (14): días de respaldos locales.
+- `BACKUP_PASSPHRASE`: cifra la configuración con AES-256. Descifrar: `openssl enc -d -aes-256-cbc -pbkdf2 -in config.tar.gz.enc | tar xz`.
+- `BACKUP_REMOTE`: copia fuera del servidor, `usuario@host:/ruta` (rsync con clave SSH) o `s3://bucket/ruta` (aws cli).
+
+Mantenga siempre una copia fuera del servidor: un respaldo en el mismo disco no protege ante la pérdida de la máquina.
+
+### Respaldo antes de actualizar
+
+`deploy.sh --update` hace un `pg_dump` antes de traer el código nuevo y migrar, en `/var/backups/vozipomni/pre-update/` (conserva los 5 últimos). Para volver atrás:
+
+```bash
+cd /opt/vozipomni
+docker compose -f docker-compose.prod.yml exec -T postgres pg_restore -U vozipomni_user -d vozipomni --clean < /var/backups/vozipomni/pre-update/postgres-<fecha>.dump
+```
+
+### Probar una restauración
+
+Pruebe al menos una vez restaurar en un servidor de prueba: `pg_restore` del dump, descomprimir `asterisk_spool.tar.gz` en el volumen `vozipomni_asterisk_spool` y copiar el `.env`.
