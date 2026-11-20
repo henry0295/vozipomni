@@ -53,8 +53,15 @@ cp "$HTTPS_CONF" "$ACTIVE_CONF"
 echo "[SSL-switch] ✓ Nginx configurado para HTTPS (wss:// disponible para WebRTC)"
 echo "[SSL-switch]   Certificado: $SSL_CERT"
 echo "[SSL-switch]   Clave:       $SSL_KEY"
-echo ""
-echo "[SSL-switch] IMPORTANTE: El certificado es autofirmado."
-echo "[SSL-switch] El browser mostrará advertencia de seguridad."
-echo "[SSL-switch] Acepta el certificado en:"
-echo "[SSL-switch]   https://${SERVER_IP}"
+# Aviso solo si el certificado es autofirmado (emisor == sujeto)
+SUBJ=$(openssl x509 -noout -subject -in "$SSL_CERT" 2>/dev/null | sed 's/^subject= *//')
+ISSU=$(openssl x509 -noout -issuer -in "$SSL_CERT" 2>/dev/null | sed 's/^issuer= *//')
+if [ -n "$SUBJ" ] && [ "$SUBJ" = "$ISSU" ]; then
+    echo ""
+    echo "[SSL-switch] IMPORTANTE: El certificado es autofirmado."
+    echo "[SSL-switch] El browser mostrará advertencia de seguridad."
+    echo "[SSL-switch] Acepta el certificado en:"
+    echo "[SSL-switch]   https://${SERVER_IP}"
+else
+    echo "[SSL-switch] Certificado emitido por: $ISSU"
+fi

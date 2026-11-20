@@ -42,6 +42,8 @@ x-django-env: &django-env
   ALLOWED_HOSTS: ${ALLOWED_HOSTS:?ALLOWED_HOSTS requerido en .env}
   CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS requerido en .env}
   VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
+  VOZIPOMNI_DOMAIN: ${VOZIPOMNI_DOMAIN:-}
+  NAT_IPV4: ${NAT_IPV4:-}
   # Retención de grabaciones (el borrado físico está desactivado por defecto)
   RECORDING_ARCHIVE_DAYS: ${RECORDING_ARCHIVE_DAYS:-90}
   RECORDING_DELETE_DAYS: ${RECORDING_DELETE_DAYS:-180}
@@ -384,7 +386,7 @@ services:
     container_name: vozipomni_kamailio
     network_mode: host
     environment:
-      REDIS_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      REDIS_HOST: 127.0.0.1
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}
       ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
@@ -424,7 +426,7 @@ services:
     environment:
       VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
       NAT_IPV4: ${NAT_IPV4:-}
-      REDIS_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
+      REDIS_HOST: 127.0.0.1
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}
       TZ: ${TZ:-America/Bogota}
@@ -584,7 +586,7 @@ services:
     environment:
       WS_HOST: "0.0.0.0"
       WS_PORT: "${WS_PORT:-8765}"
-      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@127.0.0.1:6379/0
       SECRET_KEY: ${SECRET_KEY:?SECRET_KEY requerido en .env}
       TZ: ${TZ:-America/Bogota}
     depends_on:
@@ -612,11 +614,14 @@ services:
     dns: 8.8.8.8
     network_mode: host
     environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@127.0.0.1:6379/0
       ASTERISK_HOST: ${VOZIPOMNI_IPV4:-127.0.0.1}
       ASTERISK_AMI_PORT: "5038"
       ASTERISK_AMI_USER: ${ASTERISK_AMI_USER:-admin}
       ASTERISK_AMI_PASSWORD: ${ASTERISK_AMI_PASSWORD:?ASTERISK_AMI_PASSWORD requerido en .env}
+      # Red host: el backend está en 127.0.0.1:8000 (el nombre 'backend' no resuelve)
+      BACKEND_URL: http://127.0.0.1:8000
+      DIALER_API_TOKEN: ${DIALER_API_TOKEN:-}
       TZ: ${TZ:-America/Bogota}
     depends_on:
       redis:

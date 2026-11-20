@@ -342,6 +342,9 @@ CHANNEL_LAYERS = {
 
 # REST Framework
 REST_FRAMEWORK = {
+    # nginx es el único proxy: DRF toma la IP real del último salto de
+    # X-Forwarded-For y no la que envía el cliente (evita saltarse el throttle)
+    'NUM_PROXIES': 1,
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
@@ -519,9 +522,16 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
-    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    # HSTS lo envía nginx (una sola fuente). Django no lo duplica salvo que se pida.
+    SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+    SECURE_HSTS_PRELOAD = False
+
+# Orígenes confiables para CSRF (admin de Django por HTTPS): dominio e IP del servidor
+_csrf_hosts = [h for h in [config('VOZIPOMNI_DOMAIN', default=''), config('VOZIPOMNI_IPV4', default=''), config('NAT_IPV4', default='')] if h]
+CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in _csrf_hosts] + [
+    o.strip() for o in config('CSRF_TRUSTED_ORIGINS', default='').split(',') if o.strip()
+]
 
 # CORS Configuration — fuente única autoritativa de orígenes permitidos
 CORS_ORIGIN_ALLOW_ALL = config('CORS_ALLOW_ALL', default=False, cast=bool)
