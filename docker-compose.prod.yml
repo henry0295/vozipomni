@@ -92,7 +92,7 @@ x-django-common: &django-common
   build:
     context: ./backend
     dockerfile: Dockerfile
-  dns: 8.8.8.8
+  dns: ${DOCKER_DNS:-8.8.8.8}
   <<: *restart-policy
   logging: *default-logging
 
@@ -108,7 +108,7 @@ services:
   postgres:
     image: postgres:14-alpine
     container_name: vozipomni_postgres
-    dns: 8.8.8.8
+    dns: ${DOCKER_DNS:-8.8.8.8}
     networks:
       - backend
     ports:
@@ -133,15 +133,15 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: ${MEM_LIMIT_POSTGRES:-2048M}
           cpus: '${CPU_LIMIT_POSTGRES:-2.0}'
         reservations:
           memory: 512M
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: vozipomni_redis
-    dns: 8.8.8.8
+    dns: ${DOCKER_DNS:-8.8.8.8}
     networks:
       - backend
     ports:
@@ -160,7 +160,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: ${MEM_LIMIT_REDIS:-1024M}
           cpus: '${CPU_LIMIT_REDIS:-1.0}'
         reservations:
           memory: 256M
@@ -207,7 +207,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: ${MEM_LIMIT_BACKEND:-2048M}
           cpus: '${CPU_LIMIT_BACKEND:-2.0}'
         reservations:
           memory: 512M
@@ -290,7 +290,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: ${MEM_LIMIT_CELERY:-1024M}
           cpus: '${CPU_LIMIT_CELERY:-2.0}'
         reservations:
           memory: 256M
@@ -374,7 +374,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 4G
+          memory: ${MEM_LIMIT_ASTERISK:-4096M}
           cpus: '${CPU_LIMIT_ASTERISK:-4.0}'
         reservations:
           memory: 1G
@@ -502,7 +502,7 @@ services:
       context: ./docker/nginx
       dockerfile: Dockerfile.prod
     container_name: vozipomni_nginx
-    dns: 8.8.8.8
+    dns: ${DOCKER_DNS:-8.8.8.8}
     network_mode: host
     environment:
       TZ: ${TZ:-America/Bogota}
@@ -550,7 +550,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: vozipomni_frontend
-    dns: 8.8.8.8
+    dns: ${DOCKER_DNS:-8.8.8.8}
     network_mode: host
     environment:
       NODE_ENV: production
@@ -582,7 +582,9 @@ services:
       context: ./websocket_server
       dockerfile: Dockerfile
     container_name: vozipomni_websocket
-    dns: 8.8.8.8
+    # Sin uso en el frontend actual (B-4): solo arranca con --profile legacy-ws
+    profiles: ["legacy-ws"]
+    dns: ${DOCKER_DNS:-8.8.8.8}
     network_mode: host
     environment:
       WS_HOST: "0.0.0.0"
@@ -612,7 +614,7 @@ services:
       context: ./dialer_engine
       dockerfile: Dockerfile
     container_name: vozipomni_dialer
-    dns: 8.8.8.8
+    dns: ${DOCKER_DNS:-8.8.8.8}
     network_mode: host
     environment:
       REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requerido en .env}@127.0.0.1:6379/0

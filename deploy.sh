@@ -1821,7 +1821,7 @@ setup_https_automatic() {
 # ("range of CPUs is from 0.01 to N"). docker-compose.prod.yml lee los límites
 # desde CPU_LIMIT_* en .env; aquí se fijan como min(valor deseado, nproc).
 configure_cpu_limits() {
-    local env_file="$INSTALL_DIR/.env" host_cpus name wanted value
+    local env_file="$INSTALL_DIR/.env" host_cpus name wanted value host_mem_mb mem_cap
     [ -f "$env_file" ] || return 0
     host_cpus=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
     log_info "CPUs disponibles: $host_cpus — ajustando límites de CPU de los contenedores"
@@ -1833,7 +1833,52 @@ configure_cpu_limits() {
         sed -i "/^${name}=/d" "$env_file"
         printf '%s=%s\n' "$name" "$value" >> "$env_file"
     done
+
+    # Memoria (g): cada límite se recorta a la mitad de la RAM del host, para que
+    # el límite del contenedor actúe antes que el OOM killer del sistema.
+    host_mem_mb=$(awk '/^MemTotal:/ { printf "%d", $2 / 1024 }' /proc/meminfo 2>/dev/null || echo 0)
+    if [ "${host_mem_mb:-0}" -gt 0 ] 2>/dev/null; then
+        mem_cap=$(( host_mem_mb / 2 ))
+        [ "$mem_cap" -lt 512 ] && mem_cap=512
+        log_info "RAM: ${host_mem_mb} MB — límite máximo por contenedor: ${mem_cap} MB"
+        for pair in MEM_LIMIT_POSTGRES:2048 MEM_LIMIT_REDIS:1024 MEM_LIMIT_BACKEND:2048 \
+                    MEM_LIMIT_CELERY:1024 MEM_LIMIT_ASTERISK:4096; do
+            name="${pair%%:*}"
+            wanted="${pair#*:}"
+            value=$(( wanted < mem_cap ? wanted : mem_cap ))
+            sed -i "/^${name}=/d" "$env_file"
+            printf '%s=%sM\n' "$name" "$value" >> "$env_file"
+        done
+        [ "$host_mem_mb" -lt 3800 ] && log_warning "El servidor tiene menos de 4 GB de RAM: se recomiendan 8 GB en producción"
+    fi
     chmod 600 "$env_file"
+}
+
+# Rotación de logs del host (nginx y asterisk montados en ./logs) — M-8
+configure_logrotate() {
+    [ -d /etc/logrotate.d ] || { command -v dnf &>/dev/null && dnf install -y logrotate >/dev/null 2>&1; } || true
+    [ -d /etc/logrotate.d ] || { log_warning "logrotate no disponible: los logs de $INSTALL_DIR/logs no rotarán"; return 0; }
+    cat > /etc/logrotate.d/vozipomni <<LOGROTATE 2>/dev/null || { log_warning "No se pudo configurar logrotate"; return 0; }
+# Generado por deploy.sh de VozipCX
+$INSTALL_DIR/logs/nginx/*.log $INSTALL_DIR/logs/asterisk/messages $INSTALL_DIR/logs/asterisk/*.log /var/log/vozipomni-backup.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+    su root root
+}
+LOGROTATE
+    log_success "Rotación diaria de logs configurada (/etc/logrotate.d/vozipomni, 14 días)"
+    # Aviso de disco
+    local free_gb
+    free_gb=$(df -BG --output=avail / 2>/dev/null | tail -1 | tr -dc '0-9')
+    if [ -n "$free_gb" ] && [ "$free_gb" -lt 10 ]; then
+        log_warning "Quedan solo ${free_gb} GB libres en /: las grabaciones pueden llenar el disco"
+    fi
+    return 0
 }
 
 # ─── 7. Build & Deploy ──────────────────────────────────────────────────────
@@ -2631,6 +2676,7 @@ main() {
         install_base_dependencies
         update_production
         configure_backup_cron
+        configure_logrotate
         exit 0
     fi
 
@@ -2664,6 +2710,7 @@ main() {
     apply_v3_improvements
     echo ""
     configure_backup_cron
+    configure_logrotate
     echo ""
     show_result
 }
