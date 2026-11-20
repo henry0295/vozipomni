@@ -68,6 +68,7 @@ export const NAVIGATION: NavItem[] = [
       { label: 'Agentes', icon: 'i-heroicons-user-group', to: '/agents', roles: ADMIN_SUP },
       { label: 'Campañas', icon: 'i-heroicons-megaphone', to: '/campaigns', roles: ADMIN_SUP_ANALYST },
       { label: 'Formularios de campaña', icon: 'i-heroicons-document-text', to: '/campaign-forms', roles: ADMIN_SUP },
+      { label: 'Tipificaciones', icon: 'i-heroicons-tag', to: '/dispositions', roles: ADMIN_SUP },
       { label: 'Contactos', icon: 'i-heroicons-users', to: '/contacts', roles: ADMIN_SUP },
       { label: 'Lista negra (DNC)', icon: 'i-heroicons-no-symbol', to: '/contacts/blacklist', roles: ADMIN_SUP },
       { label: 'Callbacks', icon: 'i-heroicons-phone-arrow-down-left', to: '/callbacks', roles: ADMIN_SUP },

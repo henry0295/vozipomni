@@ -155,3 +155,15 @@ La página de detalle (**Ver detalles**) muestra contactos totales, contactados,
 - [Glosario](../general/glosario.md)
 - [Arquitectura](../general/arquitectura.md)
 - [API: campañas y contactos](../api/campanas-y-contactos.md)
+
+## Tipificaciones de llamada
+
+En **Operación > Tipificaciones** (administrador y supervisor) se crean, editan y eliminan las opciones con las que el agente califica cada llamada. Se configuran por campaña:
+
+- **Código** (único en la campaña) y **nombre** visibles para el agente.
+- **Cuenta como éxito**: suma a la tasa de éxito de la campaña.
+- **Requiere rellamada**: el agente debe indicar fecha y hora y se crea el callback.
+- **Formulario específico**: reemplaza el formulario de la campaña cuando se elige esa tipificación.
+- **Copiar de otra campaña**: copia las tipificaciones de otra campaña (omite los códigos que ya existen).
+
+Eliminar una tipificación no borra el historial de las llamadas ya calificadas.
