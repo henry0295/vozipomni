@@ -139,7 +139,8 @@ services:
           memory: 512M
 
   redis:
-    image: redis:7.2-alpine
+    # 7.4: redis:7-alpine ya instalaba 7.4 y su formato de datos (RDB v12) no lo lee 7.2
+    image: redis:7.4-alpine
     container_name: vozipomni_redis
     dns: ${DOCKER_DNS:-8.8.8.8}
     networks:
