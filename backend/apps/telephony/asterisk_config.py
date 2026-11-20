@@ -511,48 +511,61 @@ class AsteriskConfigGenerator:
         ]
         
         try:
-            queues = Queue.objects.filter(is_active=True)
-            for queue in queues:
-                strategy = queue.strategy or 'ringall'
-                timeout = queue.timeout or 30
-                retry = queue.retry or 5
-                wrapup = queue.wrap_up_time or 0
-                maxlen = queue.max_callers or 0
-                max_wait = queue.max_wait_time or 300
-                servicelevel = queue.service_level or 60
-                announce_freq = queue.announce_frequency or 30
-                announce_hold = 'yes' if queue.announce_holdtime else 'no'
-                periodic_freq = queue.periodic_announce_frequency or 60
-                moh = queue.music_on_hold or 'default'
-                
-                config.extend([
-                    f"[{queue.name}]",
-                    f"strategy = {strategy}",
-                    f"timeout = {timeout}",
-                    f"retry = {retry}",
-                    f"maxlen = {maxlen}",
-                    f"wrapuptime = {wrapup}",
-                    f"announce-frequency = {announce_freq}",
-                    f"announce-holdtime = {announce_hold}",
-                    f"periodic-announce-frequency = {periodic_freq}",
-                    "ringinuse = no",
-                    f"servicelevel = {servicelevel}",
-                    f"musicclass = {moh}",
-                    "weight = 0",
-                    "monitor-type = MixMonitor",
-                ])
-                
-                # Agregar miembros de la cola
-                for member in queue.members.select_related('agent').filter(agent__is_active=True):
-                    ext = getattr(member.agent, 'sip_extension', None)
-                    if ext:
-                        penalty = member.penalty or 0
-                        config.append(f"member => PJSIP/{ext},{penalty}")
-                
-                config.append("")
-        except Exception as e:
-            logger.warning(f"No se pudieron cargar colas dinámicas: {e}")
-        
+            queues = list(Queue.objects.filter(is_active=True))
+        except Exception:
+            logger.exception("No se pudieron cargar las colas dinámicas")
+            queues = []
+
+        for queue in queues:
+            # Un error en una cola no debe dejar fuera a las demás (DR4-2)
+            try:
+                block = self._queue_block(queue)
+            except Exception:
+                logger.exception(f"Cola '{queue.name}' omitida en queues_dynamic.conf")
+                continue
+            config.extend(block)
+
+        return '\n'.join(config)
+
+    def _queue_block(self, queue):
+        strategy = queue.strategy or 'ringall'
+        timeout = queue.timeout or 30
+        retry = queue.retry or 5
+        wrapup = queue.wrap_up_time or 0
+        maxlen = queue.max_callers or 0
+        servicelevel = queue.service_level or 60
+        announce_freq = queue.announce_frequency or 30
+        announce_hold = 'yes' if queue.announce_holdtime else 'no'
+        periodic_freq = queue.periodic_announce_frequency or 60
+        moh = queue.music_on_hold or 'default'
+
+        block = [
+            f"[{queue.name}]",
+            f"strategy = {strategy}",
+            f"timeout = {timeout}",
+            f"retry = {retry}",
+            f"maxlen = {maxlen}",
+            f"wrapuptime = {wrapup}",
+            f"announce-frequency = {announce_freq}",
+            f"announce-holdtime = {announce_hold}",
+            f"periodic-announce-frequency = {periodic_freq}",
+            "ringinuse = no",
+            f"servicelevel = {servicelevel}",
+            f"musicclass = {moh}",
+            "weight = 0",
+            "monitor-type = MixMonitor",
+        ]
+
+        # Miembros estáticos: Agent no tiene is_active; se filtra por el usuario
+        members = queue.members.select_related('agent', 'agent__user').filter(agent__user__is_active=True)
+        for member in members:
+            ext = getattr(member.agent, 'sip_extension', None)
+            if ext:
+                penalty = member.penalty or 0
+                block.append(f"member => PJSIP/{ext},{penalty}")
+
+        block.append("")
+        return block        
         return '\n'.join(config)
     
     def write_all_configs(self):

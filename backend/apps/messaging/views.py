@@ -876,12 +876,15 @@ class MetaWebhookView(APIView):
             return HttpResponse(status=404)
 
         raw = request.body
-        if provider.app_secret:
-            signature = request.headers.get('X-Hub-Signature-256', '')
-            expected = 'sha256=' + hmac.new(provider.app_secret.encode(), raw, hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(signature, expected):
-                logger.warning(f"[WhatsApp] Firma inválida en webhook de app {app_id}")
-                return HttpResponse('Invalid signature', status=403)
+        # Sin App Secret no se puede verificar la firma: se rechaza (A-7)
+        if not provider.app_secret:
+            logger.warning(f"[WhatsApp] Webhook rechazado: el proveedor de app {app_id} no tiene App Secret")
+            return HttpResponse('App Secret no configurado', status=403)
+        signature = request.headers.get('X-Hub-Signature-256', '')
+        expected = 'sha256=' + hmac.new(provider.app_secret.encode(), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            logger.warning(f"[WhatsApp] Firma inválida en webhook de app {app_id}")
+            return HttpResponse('Invalid signature', status=403)
 
         try:
             payload = json.loads(raw.decode('utf-8') or '{}')

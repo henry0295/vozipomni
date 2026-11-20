@@ -21,6 +21,29 @@ from django.utils import timezone
 from datetime import timedelta
 
 from core.permissions import IsAdminOrSupervisor
+from core.validators import ensure_ami_safe, validate_dial_extension
+from rest_framework.exceptions import ValidationError as DRFValidationError
+
+
+def _supervisor_extension_or_error(request):
+    """
+    Extensión desde la que el supervisor escucha/susurra/entra. Debe ser una
+    extensión válida y, si el supervisor tiene agente asociado, la suya propia
+    (evita originar ChanSpy hacia el teléfono de otra persona).
+    Devuelve (extension, None) o (None, Response de error).
+    """
+    raw = request.data.get('supervisor_extension')
+    if not raw:
+        return None, Response({'error': 'supervisor_extension requerido'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        ext = validate_dial_extension(raw, 'supervisor_extension')
+    except DRFValidationError:
+        return None, Response({'error': 'supervisor_extension inválida'}, status=status.HTTP_400_BAD_REQUEST)
+    own = getattr(getattr(request.user, 'agent_profile', None), 'sip_extension', None) \
+        or getattr(getattr(request.user, 'agent', None), 'sip_extension', None)
+    if own and own != ext and getattr(request.user, 'role', '') != 'admin':
+        return None, Response({'error': 'Solo puede usar su propia extensión'}, status=status.HTTP_403_FORBIDDEN)
+    return ext, None
 
 
 class SupervisorViewSet(viewsets.ViewSet):
@@ -147,9 +170,9 @@ class SupervisorViewSet(viewsets.ViewSet):
         except Call.DoesNotExist:
             return Response({'error': 'Llamada activa no encontrada'}, status=status.HTTP_404_NOT_FOUND)
 
-        supervisor_extension = request.data.get('supervisor_extension')
-        if not supervisor_extension:
-            return Response({'error': 'supervisor_extension requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        supervisor_extension, error = _supervisor_extension_or_error(request)
+        if error:
+            return error
 
         ami = AsteriskAMI()
         if ami.connect():
@@ -159,7 +182,7 @@ class SupervisorViewSet(viewsets.ViewSet):
                     context='from-spy',
                     exten='s',
                     priority=1,
-                    variable={'SPY_MODE': 'listen', 'SPY_CHANNEL': call.channel or ''},
+                    variable={'SPY_MODE': 'listen', 'SPY_CHANNEL': ensure_ami_safe(call.channel or '', 'channel')},
                     caller_id=f'Supervisor <{supervisor_extension}>',
                 )
                 ami.disconnect()
@@ -180,9 +203,9 @@ class SupervisorViewSet(viewsets.ViewSet):
         except Call.DoesNotExist:
             return Response({'error': 'Llamada activa no encontrada'}, status=status.HTTP_404_NOT_FOUND)
 
-        supervisor_extension = request.data.get('supervisor_extension')
-        if not supervisor_extension:
-            return Response({'error': 'supervisor_extension requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        supervisor_extension, error = _supervisor_extension_or_error(request)
+        if error:
+            return error
 
         ami = AsteriskAMI()
         if ami.connect():
@@ -192,7 +215,7 @@ class SupervisorViewSet(viewsets.ViewSet):
                     context='from-spy',
                     exten='s',
                     priority=1,
-                    variable={'SPY_MODE': 'whisper', 'SPY_CHANNEL': call.channel or ''},
+                    variable={'SPY_MODE': 'whisper', 'SPY_CHANNEL': ensure_ami_safe(call.channel or '', 'channel')},
                     caller_id=f'Supervisor <{supervisor_extension}>',
                 )
                 ami.disconnect()
@@ -213,9 +236,9 @@ class SupervisorViewSet(viewsets.ViewSet):
         except Call.DoesNotExist:
             return Response({'error': 'Llamada activa no encontrada'}, status=status.HTTP_404_NOT_FOUND)
 
-        supervisor_extension = request.data.get('supervisor_extension')
-        if not supervisor_extension:
-            return Response({'error': 'supervisor_extension requerido'}, status=status.HTTP_400_BAD_REQUEST)
+        supervisor_extension, error = _supervisor_extension_or_error(request)
+        if error:
+            return error
 
         ami = AsteriskAMI()
         if ami.connect():
@@ -225,7 +248,7 @@ class SupervisorViewSet(viewsets.ViewSet):
                     context='from-spy',
                     exten='s',
                     priority=1,
-                    variable={'SPY_MODE': 'barge', 'SPY_CHANNEL': call.channel or ''},
+                    variable={'SPY_MODE': 'barge', 'SPY_CHANNEL': ensure_ami_safe(call.channel or '', 'channel')},
                     caller_id=f'Supervisor <{supervisor_extension}>',
                 )
                 ami.disconnect()

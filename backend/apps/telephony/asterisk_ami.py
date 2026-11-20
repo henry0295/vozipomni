@@ -5,11 +5,15 @@ Maneja la conexión y comunicación con Asterisk
 import asyncio
 import socket
 import logging
-from typing import Optional, Dict, Callable
+import time
+import uuid
+from typing import Optional, Dict, Callable, List
 from panoramisk import Manager
 from django.conf import settings
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+
+from core.validators import ensure_ami_safe
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +230,20 @@ class AsteriskAMI:
         if not self.connected:
             raise ConnectionError("No conectado a Asterisk AMI")
 
+        # Ningún valor que va a AMI puede llevar CR/LF: inyectaría cabeceras
+        channel = ensure_ami_safe(channel, 'channel')
+        context = ensure_ami_safe(context, 'context')
+        exten = ensure_ami_safe(exten, 'exten')
+        priority = ensure_ami_safe(priority, 'priority')
+        timeout = ensure_ami_safe(timeout, 'timeout')
+        if caller_id:
+            caller_id = ensure_ami_safe(caller_id, 'caller_id')
+        if variable:
+            variable = {
+                ensure_ami_safe(k, 'variable'): ensure_ami_safe(v, 'variable')
+                for k, v in variable.items()
+            }
+
         cmd = (
             f"Action: Originate\r\n"
             f"Channel: {channel}\r\n"
@@ -249,6 +267,69 @@ class AsteriskAMI:
         if not success and 'Error' in response:
             raise RuntimeError(f"AMI Originate error: {response[:200]}")
         return response
+
+    CORE_SHOW_CHANNEL_FIELDS = (
+        'Channel', 'Uniqueid', 'Linkedid', 'CallerIDNum', 'ConnectedLineNum',
+        'ChannelStateDesc', 'BridgeId',
+    )
+
+    def core_show_channels(self, timeout: float = 5) -> List[dict]:
+        """
+        Lista los canales activos con Action: CoreShowChannels.
+
+        Lee bloques hasta 'Event: CoreShowChannelsComplete' o hasta que vence
+        `timeout`. Si vence, devuelve lo leído y registra un WARNING.
+        Lanza ConnectionError si no hay conexión y RuntimeError si AMI
+        responde con error.
+        """
+        if not self.connected:
+            raise ConnectionError("No conectado a Asterisk AMI")
+
+        action_id = uuid.uuid4().hex
+        self._send_command(f"Action: CoreShowChannels\r\nActionID: {action_id}\r\n\r\n")
+
+        channels: List[dict] = []
+        complete = False
+        buf = b''
+        deadline = time.monotonic() + timeout
+        old_timeout = self.sock.gettimeout()
+        self.sock.settimeout(1)
+        try:
+            while not complete and time.monotonic() < deadline:
+                try:
+                    chunk = self.sock.recv(8192)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                buf += chunk
+                while b'\r\n\r\n' in buf:
+                    raw_block, buf = buf.split(b'\r\n\r\n', 1)
+                    fields = {}
+                    for line in raw_block.decode('utf-8', errors='ignore').split('\r\n'):
+                        key, sep, val = line.partition(':')
+                        if sep:
+                            fields[key.strip()] = val.strip()
+                    # La conexión puede recibir eventos ajenos: solo los de esta acción
+                    if fields.get('ActionID') != action_id:
+                        continue
+                    if fields.get('Response') == 'Error':
+                        raise RuntimeError(f"AMI CoreShowChannels error: {fields.get('Message', '')}")
+                    event = fields.get('Event')
+                    if event == 'CoreShowChannel':
+                        channels.append({k: fields.get(k, '') for k in self.CORE_SHOW_CHANNEL_FIELDS})
+                    elif event == 'CoreShowChannelsComplete':
+                        complete = True
+                        break
+        finally:
+            self.sock.settimeout(old_timeout)
+
+        if not complete:
+            logger.warning(
+                f"CoreShowChannels sin respuesta completa en {timeout}s; "
+                f"se usan {len(channels)} canales leídos"
+            )
+        return channels
     
     def sip_show_peers(self):
         """Obtener lista de peers SIP"""

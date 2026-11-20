@@ -18,16 +18,30 @@ from .asterisk_config import AsteriskConfigGenerator
 from .asterisk_ami import AsteriskAMI
 
 
-class CallViewSet(viewsets.ModelViewSet):
+class CallViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    API endpoint para gestión de llamadas
+    API endpoint de solo lectura para llamadas.
+    admin, supervisor y analyst ven todas; un agente solo las suyas.
     """
     queryset = Call.objects.all()
     serializer_class = CallSerializer
     permission_classes = [IsAuthenticated]
     filterset_fields = ['direction', 'status', 'agent', 'campaign']
     search_fields = ['caller_id', 'called_number', 'call_id']
-    ordering_fields = ['start_time', 'duration']
+    # 'duration' es una propiedad, no un campo: ordenar por ella daba 500
+    ordering_fields = ['start_time', 'talk_time']
+
+    def get_queryset(self):
+        qs = Call.objects.select_related('agent__user', 'campaign', 'queue')
+        user = self.request.user
+        if getattr(user, 'is_superuser', False):
+            return qs
+        role = getattr(user, 'role', None)
+        if role in ('admin', 'supervisor', 'analyst'):
+            return qs
+        if role == 'agent':
+            return qs.filter(agent__user=user)
+        return qs.none()
 
 
 class SIPTrunkViewSet(viewsets.ModelViewSet):

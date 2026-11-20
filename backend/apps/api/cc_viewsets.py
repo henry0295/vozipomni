@@ -9,15 +9,21 @@ ViewSets para features avanzados de Contact Center:
 from rest_framework import viewsets, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, BasePermission, SAFE_METHODS
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
 from django.db.models import Q
 import logging
+import time
 
-from core.permissions import IsAdminOrSupervisor, IsAdminOrSupervisorOrReadOnly
+from core.permissions import (
+    IsAdminOrSupervisor, IsAdminOrSupervisorOrReadOnly, IsAdminSupervisorOrAnalyst,
+)
+from core.validators import (
+    validate_ami_channel, validate_dial_extension, validate_dial_number, sanitize_caller_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -103,20 +109,74 @@ class WebhookDeliverySerializer(drf_serializers.ModelSerializer):
 # Callbacks ViewSet
 # ──────────────────────────────────────────────────────────────────────────────
 
+class _DenyAnalystWrites(BasePermission):
+    """El analista solo lee: cualquier método de escritura recibe 403."""
+    message = 'El rol analista solo tiene acceso de lectura.'
+
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return True
+        if getattr(request.user, 'is_superuser', False):
+            return True
+        return getattr(request.user, 'role', None) != 'analyst'
+
+
+def _is_agent_role(user) -> bool:
+    return not getattr(user, 'is_superuser', False) and getattr(user, 'role', None) == 'agent'
+
+
 class CallbackViewSet(viewsets.ModelViewSet):
-    """CRUD + acciones para devoluciones de llamada."""
+    """
+    CRUD + acciones para devoluciones de llamada.
+
+    admin/supervisor: todo. analyst: solo lectura. agent: solo los asignados a
+    él o creados por él, sin poder reasignarlos ni borrarlos.
+    """
     serializer_class = CallbackSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, _DenyAnalystWrites]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'campaign', 'agent']
     search_fields = ['phone', 'contact_name', 'notes']
     ordering_fields = ['scheduled_at', 'priority', 'created_at']
 
+    def get_permissions(self):
+        if self.action == 'destroy':
+            return [IsAdminOrSupervisor()]
+        return super().get_permissions()
+
     def get_queryset(self):
         from apps.telephony.models import CallbackRequest
-        return CallbackRequest.objects.select_related(
+        qs = CallbackRequest.objects.select_related(
             'agent__user', 'campaign', 'call', 'created_by'
-        ).all()
+        )
+        user = self.request.user
+        if getattr(user, 'is_superuser', False):
+            return qs
+        role = getattr(user, 'role', None)
+        if role in ('admin', 'supervisor', 'analyst'):
+            return qs
+        if role == 'agent':
+            return qs.filter(Q(agent__user=user) | Q(created_by=user))
+        return qs.none()
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if _is_agent_role(user):
+            agent = getattr(user, 'agent_profile', None)
+            if agent is None:
+                raise drf_serializers.ValidationError(
+                    {'agent': ['Su usuario no tiene perfil de agente']}
+                )
+            serializer.save(agent=agent, created_by=user)
+            return
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if _is_agent_role(self.request.user):
+            # El agente no puede reasignar el callback: se ignora el 'agent' del cuerpo
+            serializer.save(agent=serializer.instance.agent)
+            return
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
@@ -143,12 +203,12 @@ class CallbackViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def pending_count(self, request):
-        """Conteo de callbacks pendientes para el dashboard."""
-        from apps.telephony.models import CallbackRequest
-        count = CallbackRequest.objects.filter(
+        """Conteo de callbacks pendientes (de los que el usuario puede ver)."""
+        visible = self.get_queryset()
+        count = visible.filter(
             status__in=['pending', 'scheduled']
         ).count()
-        overdue = CallbackRequest.objects.filter(
+        overdue = visible.filter(
             status__in=['pending', 'scheduled'],
             scheduled_at__lt=timezone.now(),
         ).count()
@@ -275,6 +335,49 @@ class ScreenPopView(APIView):
 # Transfer Consultivo
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _check_call_control(request, channel):
+    """
+    Decide si el usuario puede actuar sobre `channel` (transferir, conferenciar).
+    admin/supervisor: siempre. agent: solo canales de su llamada en curso, según
+    CoreShowChannels. Otros roles: 403. Devuelve una Response de error o None.
+    """
+    user = request.user
+    role = getattr(user, 'role', None)
+    if getattr(user, 'is_superuser', False) or role in ('admin', 'supervisor'):
+        return None
+    if role != 'agent':
+        return Response({'detail': 'No tiene permisos para controlar llamadas'},
+                        status=status.HTTP_403_FORBIDDEN)
+    agent = getattr(user, 'agent_profile', None)
+    if agent is None:
+        return Response({'detail': 'Su usuario no tiene perfil de agente'},
+                        status=status.HTTP_403_FORBIDDEN)
+
+    from apps.telephony.asterisk_ami import AsteriskAMI
+    from apps.telephony.channel_guard import agent_owns_channel
+
+    ami = AsteriskAMI()
+    if not ami.connect():
+        return Response({'detail': 'Asterisk no disponible'},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    try:
+        channels = ami.core_show_channels(timeout=5)
+    except Exception as e:
+        logger.error(f"CoreShowChannels falló: {e}")
+        return Response({'detail': 'Asterisk no disponible'},
+                        status=status.HTTP_503_SERVICE_UNAVAILABLE)
+    finally:
+        ami.disconnect()
+
+    if not agent_owns_channel(agent, channel, channels):
+        logger.warning(
+            f"Agente {agent.sip_extension} intentó actuar sobre el canal {channel}, que no es de su llamada"
+        )
+        return Response({'detail': 'El canal no pertenece a su llamada'},
+                        status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
 class ConsultiveTransferView(APIView):
     """
     GET  /api/cc/available-agents/       → lista agentes disponibles para transferencia
@@ -305,13 +408,21 @@ class ConsultiveTransferView(APIView):
         blind=False → transferencia consultiva (2 pasos: hold + originate al agente receptor).
                       Requiere que el frontend gestione la señalización del segundo leg.
         """
-        channel = request.data.get('channel', '').strip()
-        extension = request.data.get('extension', '').strip()
+        channel = str(request.data.get('channel') or '').strip()
+        extension = str(request.data.get('extension') or '').strip()
         blind = request.data.get('blind', True)
 
         if not channel or not extension:
             return Response({'error': 'channel y extension requeridos'},
                             status=status.HTTP_400_BAD_REQUEST)
+
+        # Formato y ausencia de CR/LF (ValidationError → 400)
+        channel = validate_ami_channel(channel, 'channel')
+        extension = validate_dial_extension(extension, 'extension')
+
+        denied = _check_call_control(request, channel)
+        if denied is not None:
+            return denied
 
         from apps.telephony.services import CallService
 
@@ -334,7 +445,7 @@ class ConsultiveTransferView(APIView):
 
             # Originar llamada al agente receptor; cuando conteste,
             # el agente actual podrá completar el bridge con AMI Bridge action.
-            caller_id = request.data.get('caller_id', 'Transferencia')
+            caller_id = sanitize_caller_id(request.data.get('caller_id'), default='Transferencia')
             response_raw = ami.originate(
                 channel=f"PJSIP/{extension}",
                 context='from-internal',
@@ -375,14 +486,26 @@ class ConferenceView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        channel = request.data.get('channel', '').strip()
-        third_party = request.data.get('third_party', '').strip()
-        caller_id = request.data.get('caller_id', 'ConferenceBridge')
-        conf_bridge_id = request.data.get('conference_id', f"conf-{int(timezone.now().timestamp())}")
+        channel = str(request.data.get('channel') or '').strip()
+        third_party = str(request.data.get('third_party') or '').strip()
+        caller_id = sanitize_caller_id(request.data.get('caller_id'), default='ConferenceBridge')
+        # Lo genera siempre el servidor: el conference_id del cliente se ignora
+        conf_bridge_id = f"conf-{int(time.time() * 1000)}"
 
         if not channel or not third_party:
             return Response({'error': 'channel y third_party requeridos'},
                             status=status.HTTP_400_BAD_REQUEST)
+
+        channel = validate_ami_channel(channel, 'channel')
+        # third_party puede ser un número externo o una extensión interna
+        try:
+            third_party = validate_dial_number(third_party, 'third_party')
+        except drf_serializers.ValidationError:
+            third_party = validate_dial_extension(third_party, 'third_party')
+
+        denied = _check_call_control(request, channel)
+        if denied is not None:
+            return denied
 
         try:
             from apps.telephony.asterisk_ami import AsteriskAMI
@@ -531,7 +654,7 @@ class QualityStatsView(APIView):
     GET /api/cc/quality-stats/?date_from=&date_to=&agent_id=
     Estadísticas de calidad: scores promedio, trending, calibración.
     """
-    permission_classes = [IsAdminOrSupervisor]
+    permission_classes = [IsAdminSupervisorOrAnalyst]
 
     PASS_THRESHOLD = 80  # puntaje (0-100) a partir del cual una evaluación "aprueba"
 

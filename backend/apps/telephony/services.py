@@ -7,6 +7,8 @@ vistas Django y handlers Celery (contexto síncrono).
 """
 import logging
 
+from core.validators import ensure_ami_safe
+
 from .asterisk_ami import AsteriskAMI
 
 logger = logging.getLogger(__name__)
@@ -64,6 +66,7 @@ class CallService:
         """Colgar un canal activo via AMI Hangup."""
         ami = None
         try:
+            channel = ensure_ami_safe(channel, 'channel')
             ami = _ami_connect()
             ami._send_command(
                 f"Action: Hangup\r\n"
@@ -86,6 +89,9 @@ class CallService:
         """Transferir un canal via AMI Redirect."""
         ami = None
         try:
+            channel = ensure_ami_safe(channel, 'channel')
+            extension = ensure_ami_safe(extension, 'extension')
+            context = ensure_ami_safe(context, 'context')
             ami = _ami_connect()
             ami._send_command(
                 f"Action: Redirect\r\n"
@@ -110,6 +116,8 @@ class CallService:
         """Iniciar grabación MixMonitor en un canal."""
         ami = None
         try:
+            channel = ensure_ami_safe(channel, 'channel')
+            filename = ensure_ami_safe(filename, 'filename')
             ami = _ami_connect()
             ami._send_command(
                 f"Action: MixMonitor\r\n"
@@ -133,6 +141,7 @@ class CallService:
         """Detener grabación MixMonitor en un canal."""
         ami = None
         try:
+            channel = ensure_ami_safe(channel, 'channel')
             ami = _ami_connect()
             ami._send_command(
                 f"Action: StopMixMonitor\r\n"
@@ -179,13 +188,17 @@ class QueueService:
         """Agregar un agente a una cola ACD."""
         ami = None
         try:
+            queue_name = ensure_ami_safe(queue_name, 'queue_name')
+            agent_extension = ensure_ami_safe(agent_extension, 'agent_extension')
+            penalty = ensure_ami_safe(penalty, 'penalty')
+            member_name = ensure_ami_safe(agent_name or 'Agent ' + agent_extension, 'agent_name')
             ami = _ami_connect()
             ami._send_command(
                 f"Action: QueueAdd\r\n"
                 f"Queue: {queue_name}\r\n"
                 f"Interface: PJSIP/{agent_extension}\r\n"
                 f"Penalty: {penalty}\r\n"
-                f"MemberName: {agent_name or 'Agent ' + agent_extension}\r\n\r\n"
+                f"MemberName: {member_name}\r\n\r\n"
             )
             response = ami._read_response()
             success = 'Success' in response
@@ -205,6 +218,8 @@ class QueueService:
         """Retirar un agente de una cola ACD."""
         ami = None
         try:
+            queue_name = ensure_ami_safe(queue_name, 'queue_name')
+            agent_extension = ensure_ami_safe(agent_extension, 'agent_extension')
             ami = _ami_connect()
             ami._send_command(
                 f"Action: QueueRemove\r\n"
@@ -234,6 +249,10 @@ class QueueService:
         """Pausar o despausar un agente en una cola."""
         ami = None
         try:
+            queue_name = ensure_ami_safe(queue_name, 'queue_name')
+            agent_extension = ensure_ami_safe(agent_extension, 'agent_extension')
+            if reason:
+                reason = ensure_ami_safe(reason, 'reason')
             ami = _ami_connect()
             cmd = (
                 f"Action: QueuePause\r\n"
@@ -267,7 +286,7 @@ class QueueService:
             ami = _ami_connect()
             cmd = "Action: QueueStatus\r\n"
             if queue_name:
-                cmd += f"Queue: {queue_name}\r\n"
+                cmd += f"Queue: {ensure_ami_safe(queue_name, 'queue_name')}\r\n"
             cmd += "\r\n"
             ami._send_command(cmd)
             response = ami._read_command_response(timeout=5)

@@ -1,4 +1,4 @@
-# Problemas conocidos
+﻿# Problemas conocidos
 
 Esta lista reúne los fallos y limitaciones del código que se detectaron al redactar la documentación, leyendo el código fuente. No se reprodujeron todos en ejecución: cada punto indica qué archivo revisar. Sirve para priorizar correcciones; los documentos de cada módulo describen el comportamiento actual para que nadie se sorprenda en producción. Al corregir un punto, bórrelo de aquí y actualice el documento que lo menciona.
 
@@ -6,10 +6,6 @@ Esta lista reúne los fallos y limitaciones del código que se detectaron al red
 
 | Problema | Dónde | Efecto |
 |---|---|---|
-| `/api/telephony/calls/` y `/api/callbacks/` solo exigen autenticación. | `backend/apps/telephony/views.py`, `backend/apps/api/cc_viewsets.py` | Cualquier usuario lee y modifica todas las llamadas y devoluciones de llamada. |
-| `consultive-transfer` y `conference` pasan `channel`, `extension` y `third_party` a AMI sin validar. | `backend/apps/api/cc_viewsets.py` | Riesgo de inyección de parámetros en comandos AMI. |
-| El webhook de Meta no verifica la firma si el proveedor no tiene `app_secret`. | `backend/apps/messaging/views.py` (`MetaWebhookView`) | Quien conozca la URL puede inyectar mensajes falsos. |
-| `spy`, `whisper` y `barge` no validan que `supervisor_extension` sea del usuario. | `backend/apps/api/supervisor_viewsets.py` | Un supervisor puede enviar la escucha a cualquier extensión. |
 | El servidor WebSocket del puerto 8765 no tiene TLS ni filtro por usuario. | `websocket_server/server.py` | Todo cliente con token válido recibe todos los eventos difundidos. |
 | El `docker-compose.yml` de desarrollo tiene contraseñas por defecto y `default.conf` no exige ticket en `/sip/ws`. | `docker-compose.yml`, `docker/nginx/default.conf` | Aceptable solo en una máquina de desarrollo aislada. |
 
@@ -47,12 +43,10 @@ Esta lista reúne los fallos y limitaciones del código que se detectaron al red
 | Problema | Dónde | Efecto |
 |---|---|---|
 | El botón **Descargar Seleccionadas** no tiene acción y el filtro **Agente** filtra solo la página cargada. | `frontend/pages/recordings/index.vue` | Funciones incompletas en la pantalla de grabaciones. |
-| `/api/cc/quality-stats/` excluye al rol analista. | `backend/apps/api/cc_viewsets.py` | El analista ve vacíos los indicadores de calidad. |
 | `dashboard-stats` y `supervisor/dashboard` calculan "hoy" en UTC. | `backend/apps/reports/views.py`, `backend/apps/api/supervisor_viewsets.py` | "Hoy" empieza a las 19:00 del día anterior en Colombia en esas dos vistas. |
 | El plugin `api.ts` no guarda el refresh token rotado. | `frontend/plugins/api.ts` | Tras una rotación, ese camino puede mandar al usuario a `/login`. |
 | El contador de post-llamada de la consola es fijo en 10 s. | `frontend/components/AgentCallDisposition.vue` | Ignora el tiempo de post-llamada configurado. |
 | El límite de reintentos de reconexión del softphone nunca se alcanza. | `frontend/composables/useWebRTC.ts` | El softphone reintenta indefinidamente. |
-| `?ordering=duration` en `/api/telephony/calls/` ordena por una propiedad. | `backend/apps/telephony/views.py` | Error 500. |
 
 ## Repositorio y CI
 

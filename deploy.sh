@@ -1903,6 +1903,12 @@ INITSQL
     log_success "Servicios iniciados"
 }
 
+# Ejecuta un comando de manage.py en el backend sin abortar el deploy si falla
+run_manage_nonfatal() {
+    $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py "$@" 2>&1 \
+        || log_warning "manage.py $1 falló (no bloquea el despliegue)"
+    return 0
+}
 # ─── 8. wait_for_env — Polling HTTP ──────────────────────
 wait_for_env() {
     local url="http://localhost:8000/api/health/"
@@ -2028,6 +2034,7 @@ post_deploy() {
 
     $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput 2>/dev/null || \
     $COMPOSE_CMD -f docker-compose.prod.yml run --rm backend python manage.py migrate --noinput
+    run_manage_nonfatal check_security_config
 
     # Crear superusuario
     log_info "Creando usuario administrador..."
@@ -2344,6 +2351,7 @@ update_production() {
     $COMPOSE_CMD -f docker-compose.prod.yml exec -T backend python manage.py migrate --noinput 2>&1 | \
         grep -v '^$' || true
     log_success "Migraciones aplicadas"
+    run_manage_nonfatal check_security_config
 
     # 7. Asegurar que el usuario admin existe y tiene rol correcto
     log_info "Verificando usuario admin..."

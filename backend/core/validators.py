@@ -163,3 +163,68 @@ def validate_trunk_channels(value):
             _('%(value)s no es un número válido de canales.'),
             params={'value': value},
         )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Valores que se envían a Asterisk AMI
+#
+# Lanzan rest_framework.exceptions.ValidationError: DRF la convierte en un 400
+# con {campo: [mensaje]} cuando ocurre dentro de una vista, y fuera de una vista
+# (Celery, servicios) es una excepción normal que el llamador captura.
+# ──────────────────────────────────────────────────────────────────────────────
+
+from rest_framework.exceptions import ValidationError as APIValidationError  # noqa: E402
+
+AMI_MAX_VALUE_LENGTH = 200
+
+_AMI_CHANNEL_RE = re.compile(r'^(PJSIP|SIP|Local|IAX2)/[A-Za-z0-9_.@:+\-]{1,100}(-[0-9a-f]{8})?(;[12])?$')
+_DIAL_EXTENSION_RE = re.compile(r'^[0-9*#+]{1,20}$')
+_DIAL_NUMBER_RE = re.compile(r'^\+?[0-9]{3,20}$')
+_CALLER_ID_DISALLOWED_RE = re.compile(r'[^\w \-<>+.]')
+
+
+def ensure_ami_safe(value, field='value'):
+    """
+    Rechaza valores que podrían inyectar cabeceras en un comando AMI
+    (CR, LF o NUL) o que superan AMI_MAX_VALUE_LENGTH. Devuelve el valor
+    como texto, sin espacios en los extremos.
+    """
+    text = '' if value is None else str(value)
+    if '\r' in text or '\n' in text or '\x00' in text or len(text) > AMI_MAX_VALUE_LENGTH:
+        raise APIValidationError({field: 'Valor inválido'})
+    return text.strip()
+
+
+def validate_ami_channel(value, field='channel'):
+    """Nombre de canal de Asterisk: PJSIP/1001-0000000a, Local/123@ctx;1, …"""
+    text = ensure_ami_safe(value, field)
+    if not _AMI_CHANNEL_RE.match(text):
+        raise APIValidationError({field: 'Canal inválido'})
+    return text
+
+
+def validate_dial_extension(value, field='extension'):
+    """Extensión interna: dígitos, *, # y + (máximo 20)."""
+    text = ensure_ami_safe(value, field)
+    if not _DIAL_EXTENSION_RE.match(text):
+        raise APIValidationError({field: 'Extensión inválida'})
+    return text
+
+
+def validate_dial_number(value, field='number'):
+    """Número externo: + opcional y de 3 a 20 dígitos."""
+    text = ensure_ami_safe(value, field)
+    if not _DIAL_NUMBER_RE.match(text):
+        raise APIValidationError({field: 'Número inválido'})
+    return text
+
+
+def sanitize_caller_id(value, default='VozipCX'):
+    """
+    Limpia un Caller ID para AMI: quita CR/LF y todo carácter fuera de
+    [\\w \\-<>+.], y lo recorta a 60 caracteres. Si queda vacío, usa `default`.
+    """
+    text = '' if value is None else str(value)
+    text = text.replace('\r', ' ').replace('\n', ' ').replace('\x00', '')
+    text = _CALLER_ID_DISALLOWED_RE.sub('', text).strip()[:60].strip()
+    return text or default

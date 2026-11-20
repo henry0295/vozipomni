@@ -223,6 +223,17 @@ class WhatsAppProviderSerializer(serializers.ModelSerializer):
         read_only_fields = ['verify_token', 'webhook_verified', 'webhook_verified_at',
                             'last_webhook_at', 'last_error', 'created_at', 'updated_at']
 
+    def validate(self, attrs):
+        # A-7: sin App Secret el webhook rechaza todo; es obligatorio al crear
+        # y no se puede vaciar al editar (omitirlo conserva el actual).
+        secret = attrs.get('app_secret', None)
+        if self.instance is None:
+            if not (secret or '').strip():
+                raise serializers.ValidationError({'app_secret': 'El App Secret es obligatorio'})
+        elif secret is not None and not secret.strip():
+            raise serializers.ValidationError({'app_secret': 'El App Secret no puede quedar vacío'})
+        return super().validate(attrs)
+
     def get_has_app_secret(self, obj):
         return bool(obj.app_secret)
 
