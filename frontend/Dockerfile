@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package*.json .npmrc ./
 
 # Install dependencies
-RUN npm install --legacy-peer-deps
+# package-lock.json fija las versiones: builds reproducibles
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY . .
