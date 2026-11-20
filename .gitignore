@@ -42,6 +42,7 @@ service-account*.json
 # Volcados de base de datos y respaldos (contienen datos reales)
 *.sql
 *.sql.gz
+!docker/postgresql/init.sql
 *.dump
 *.bak
 *.backup
