@@ -304,7 +304,7 @@ async function saveDestination() {
     closeModal()
     await fetchDestinations()
   } catch (err: any) {
-    const detail = err?.data?.name?.[0] ?? err?.data?.detail ?? 'Error al guardar'
+    const detail = apiErrorMessage(err, 'Error al guardar')
     toast.add({ title: detail, color: 'red' })
   } finally {
     saving.value = false

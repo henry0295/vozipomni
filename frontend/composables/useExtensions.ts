@@ -23,7 +23,7 @@ export const useExtensions = () => {
     loading.value = true
     try {
       const { data, error: fetchError } = await apiFetch<any>('/telephony/extensions/')
-      if (fetchError.value) throw new Error('Error al obtener extensiones')
+      if (fetchError.value) throw Object.assign(new Error('Error al obtener extensiones'), { data: fetchError.value.data })
       const raw = data.value
       extensions.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
@@ -39,7 +39,7 @@ export const useExtensions = () => {
       method: 'POST',
       body: ext
     })
-    if (fetchError.value) throw new Error('Error al crear extensión')
+    if (fetchError.value) throw Object.assign(new Error('Error al crear extensión'), { data: fetchError.value.data })
     const created = data.value
     extensions.value.push(created)
     return created
@@ -50,7 +50,7 @@ export const useExtensions = () => {
       method: 'PUT',
       body: ext
     })
-    if (fetchError.value) throw new Error('Error al actualizar extensión')
+    if (fetchError.value) throw Object.assign(new Error('Error al actualizar extensión'), { data: fetchError.value.data })
     const updated = data.value
     const index = extensions.value.findIndex(e => e.id === id)
     if (index > -1) extensions.value[index] = updated
@@ -61,7 +61,7 @@ export const useExtensions = () => {
     const { error: fetchError } = await apiFetch(`/telephony/extensions/${id}/`, {
       method: 'DELETE'
     })
-    if (fetchError.value) throw new Error('Error al eliminar extensión')
+    if (fetchError.value) throw Object.assign(new Error('Error al eliminar extensión'), { data: fetchError.value.data })
     extensions.value = extensions.value.filter(e => e.id !== id)
   }
 

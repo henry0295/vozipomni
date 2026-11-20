@@ -21,7 +21,7 @@ export const useOutboundRoutes = () => {
     loading.value = true
     try {
       const { data, error: fetchError } = await apiFetch<any>('/telephony/outbound-routes/')
-      if (fetchError.value) throw new Error('Error al obtener rutas salientes')
+      if (fetchError.value) throw Object.assign(new Error('Error al obtener rutas salientes'), { data: fetchError.value.data })
       const raw = data.value
       routes.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
@@ -37,7 +37,7 @@ export const useOutboundRoutes = () => {
       method: 'POST',
       body: route
     })
-    if (fetchError.value) throw new Error('Error al crear ruta')
+    if (fetchError.value) throw Object.assign(new Error('Error al crear ruta'), { data: fetchError.value.data })
     const created = data.value
     routes.value.push(created)
     return created
@@ -48,7 +48,7 @@ export const useOutboundRoutes = () => {
       method: 'PUT',
       body: route
     })
-    if (fetchError.value) throw new Error('Error al actualizar ruta')
+    if (fetchError.value) throw Object.assign(new Error('Error al actualizar ruta'), { data: fetchError.value.data })
     const updated = data.value
     const index = routes.value.findIndex(r => r.id === id)
     if (index > -1) routes.value[index] = updated
@@ -59,7 +59,7 @@ export const useOutboundRoutes = () => {
     const { error: fetchError } = await apiFetch(`/telephony/outbound-routes/${id}/`, {
       method: 'DELETE'
     })
-    if (fetchError.value) throw new Error('Error al eliminar ruta')
+    if (fetchError.value) throw Object.assign(new Error('Error al eliminar ruta'), { data: fetchError.value.data })
     routes.value = routes.value.filter(r => r.id !== id)
   }
 

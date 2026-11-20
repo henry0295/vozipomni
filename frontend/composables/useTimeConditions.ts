@@ -28,7 +28,7 @@ export const useTimeConditions = () => {
     loading.value = true
     try {
       const { data, error: fetchError } = await apiFetch<any>('/telephony/time-conditions/')
-      if (fetchError.value) throw new Error('Error al obtener condiciones de horario')
+      if (fetchError.value) throw Object.assign(new Error('Error al obtener condiciones de horario'), { data: fetchError.value.data })
       const raw = data.value
       conditions.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
@@ -44,7 +44,7 @@ export const useTimeConditions = () => {
       method: 'POST',
       body: condition
     })
-    if (fetchError.value) throw new Error('Error al crear condición')
+    if (fetchError.value) throw Object.assign(new Error('Error al crear condición'), { data: fetchError.value.data })
     const created = data.value
     conditions.value.push(created)
     return created
@@ -55,7 +55,7 @@ export const useTimeConditions = () => {
       method: 'PUT',
       body: condition
     })
-    if (fetchError.value) throw new Error('Error al actualizar condición')
+    if (fetchError.value) throw Object.assign(new Error('Error al actualizar condición'), { data: fetchError.value.data })
     const updated = data.value
     const index = conditions.value.findIndex(c => c.id === id)
     if (index > -1) conditions.value[index] = updated
@@ -66,7 +66,7 @@ export const useTimeConditions = () => {
     const { error: fetchError } = await apiFetch(`/telephony/time-conditions/${id}/`, {
       method: 'DELETE'
     })
-    if (fetchError.value) throw new Error('Error al eliminar condición')
+    if (fetchError.value) throw Object.assign(new Error('Error al eliminar condición'), { data: fetchError.value.data })
     conditions.value = conditions.value.filter(c => c.id !== id)
   }
 

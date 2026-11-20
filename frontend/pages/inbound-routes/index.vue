@@ -422,18 +422,18 @@ const saveRoute = async () => {
         method: 'PUT',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la ruta')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la ruta'), { data: saveError.value.data })
     } else {
       const { error: saveError } = await apiFetch('/telephony/inbound-routes/', {
         method: 'POST',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la ruta')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la ruta'), { data: saveError.value.data })
     }
     await loadRoutes()
     isModalOpen.value = false
-  } catch (err) {
-    error.value = 'Error al guardar la ruta'
+  } catch (err: any) {
+    error.value = apiErrorMessage(err, 'Error al guardar la ruta')
     console.error('Error saving route:', err)
   } finally {
     isSaving.value = false
@@ -444,10 +444,10 @@ const deleteRoute = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta ruta?')) {
     try {
       const { error: delError } = await apiFetch(`/telephony/inbound-routes/${id}/`, { method: 'DELETE' })
-      if (delError.value) throw new Error('Error al eliminar la ruta')
+      if (delError.value) throw Object.assign(new Error('Error al eliminar la ruta'), { data: delError.value.data })
       await loadRoutes()
-    } catch (err) {
-      error.value = 'Error al eliminar la ruta'
+    } catch (err: any) {
+      error.value = apiErrorMessage(err, 'Error al eliminar la ruta')
       console.error('Error deleting route:', err)
     }
   }

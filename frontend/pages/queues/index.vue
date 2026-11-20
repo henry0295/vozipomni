@@ -468,18 +468,18 @@ const saveQueue = async () => {
         method: 'PUT',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la cola')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la cola'), { data: saveError.value.data })
     } else {
       const { error: saveError } = await apiFetch('/queues/', {
         method: 'POST',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la cola')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la cola'), { data: saveError.value.data })
     }
     await loadQueues()
     isModalOpen.value = false
-  } catch (err) {
-    error.value = 'Error al guardar la cola'
+  } catch (err: any) {
+    error.value = apiErrorMessage(err, 'Error al guardar la cola')
     console.error('Error saving queue:', err)
   } finally {
     isSaving.value = false
@@ -490,10 +490,10 @@ const deleteQueue = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta cola?')) {
     try {
       const { error: delError } = await apiFetch(`/queues/${id}/`, { method: 'DELETE' })
-      if (delError.value) throw new Error('Error al eliminar la cola')
+      if (delError.value) throw Object.assign(new Error('Error al eliminar la cola'), { data: delError.value.data })
       await loadQueues()
-    } catch (err) {
-      error.value = 'Error al eliminar la cola'
+    } catch (err: any) {
+      error.value = apiErrorMessage(err, 'Error al eliminar la cola')
       console.error('Error deleting queue:', err)
     }
   }

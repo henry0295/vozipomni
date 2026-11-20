@@ -326,18 +326,18 @@ const saveVoicemail = async () => {
         method: 'PUT',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar el buzón')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar el buzón'), { data: saveError.value.data })
     } else {
       const { error: saveError } = await apiFetch('/telephony/voicemail/', {
         method: 'POST',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar el buzón')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar el buzón'), { data: saveError.value.data })
     }
     await loadVoicemails()
     isModalOpen.value = false
-  } catch (err) {
-    error.value = 'Error al guardar el buzón'
+  } catch (err: any) {
+    error.value = apiErrorMessage(err, 'Error al guardar el buzón')
     console.error('Error saving voicemail:', err)
   } finally {
     isSaving.value = false
@@ -348,10 +348,10 @@ const deleteVoicemail = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar este buzón de voz?')) {
     try {
       const { error: delError } = await apiFetch(`/telephony/voicemail/${id}/`, { method: 'DELETE' })
-      if (delError.value) throw new Error('Error al eliminar el buzón')
+      if (delError.value) throw Object.assign(new Error('Error al eliminar el buzón'), { data: delError.value.data })
       await loadVoicemails()
-    } catch (err) {
-      error.value = 'Error al eliminar el buzón'
+    } catch (err: any) {
+      error.value = apiErrorMessage(err, 'Error al eliminar el buzón')
       console.error('Error deleting voicemail:', err)
     }
   }

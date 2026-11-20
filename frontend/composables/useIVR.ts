@@ -23,7 +23,7 @@ export const useIVR = () => {
     loading.value = true
     try {
       const { data, error: fetchError } = await apiFetch<any>('/telephony/ivr/')
-      if (fetchError.value) throw new Error('Error al obtener IVRs')
+      if (fetchError.value) throw Object.assign(new Error('Error al obtener IVRs'), { data: fetchError.value.data })
       const raw = data.value
       ivrs.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
@@ -39,7 +39,7 @@ export const useIVR = () => {
       method: 'POST',
       body: ivr
     })
-    if (fetchError.value) throw new Error('Error al crear IVR')
+    if (fetchError.value) throw Object.assign(new Error('Error al crear IVR'), { data: fetchError.value.data })
     const created = data.value
     ivrs.value.push(created)
     return created
@@ -50,7 +50,7 @@ export const useIVR = () => {
       method: 'PUT',
       body: ivr
     })
-    if (fetchError.value) throw new Error('Error al actualizar IVR')
+    if (fetchError.value) throw Object.assign(new Error('Error al actualizar IVR'), { data: fetchError.value.data })
     const updated = data.value
     const index = ivrs.value.findIndex(i => i.id === id)
     if (index > -1) ivrs.value[index] = updated
@@ -61,7 +61,7 @@ export const useIVR = () => {
     const { error: fetchError } = await apiFetch(`/telephony/ivr/${id}/`, {
       method: 'DELETE'
     })
-    if (fetchError.value) throw new Error('Error al eliminar IVR')
+    if (fetchError.value) throw Object.assign(new Error('Error al eliminar IVR'), { data: fetchError.value.data })
     ivrs.value = ivrs.value.filter(i => i.id !== id)
   }
 

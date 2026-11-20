@@ -429,18 +429,18 @@ const saveCondition = async () => {
         method: 'PUT',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la condición')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la condición'), { data: saveError.value.data })
     } else {
       const { error: saveError } = await apiFetch('/telephony/time-conditions/', {
         method: 'POST',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la condición')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la condición'), { data: saveError.value.data })
     }
     await loadConditions()
     isModalOpen.value = false
-  } catch (err) {
-    error.value = 'Error al guardar la condición'
+  } catch (err: any) {
+    error.value = apiErrorMessage(err, 'Error al guardar la condición')
     console.error('Error saving condition:', err)
   } finally {
     isSaving.value = false
@@ -451,10 +451,10 @@ const deleteCondition = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta condición?')) {
     try {
       const { error: delError } = await apiFetch(`/telephony/time-conditions/${id}/`, { method: 'DELETE' })
-      if (delError.value) throw new Error('Error al eliminar la condición')
+      if (delError.value) throw Object.assign(new Error('Error al eliminar la condición'), { data: delError.value.data })
       await loadConditions()
-    } catch (err) {
-      error.value = 'Error al eliminar la condición'
+    } catch (err: any) {
+      error.value = apiErrorMessage(err, 'Error al eliminar la condición')
       console.error('Error deleting condition:', err)
     }
   }

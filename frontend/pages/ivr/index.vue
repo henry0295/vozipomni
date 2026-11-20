@@ -634,18 +634,18 @@ const saveIVR = async () => {
         method: 'PUT',
         body: payload
       })
-      if (saveError.value) throw new Error('Error al guardar el IVR')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar el IVR'), { data: saveError.value.data })
     } else {
       const { error: saveError } = await apiFetch('/telephony/ivr/', {
         method: 'POST',
         body: payload
       })
-      if (saveError.value) throw new Error('Error al guardar el IVR')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar el IVR'), { data: saveError.value.data })
     }
     await loadIVRs()
     isModalOpen.value = false
-  } catch (err) {
-    error.value = 'Error al guardar el IVR'
+  } catch (err: any) {
+    error.value = apiErrorMessage(err, 'Error al guardar el IVR')
     console.error('Error saving IVR:', err)
   } finally {
     isSaving.value = false
@@ -656,10 +656,10 @@ const deleteIVR = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar este IVR?')) {
     try {
       const { error: delError } = await apiFetch(`/telephony/ivr/${id}/`, { method: 'DELETE' })
-      if (delError.value) throw new Error('Error al eliminar el IVR')
+      if (delError.value) throw Object.assign(new Error('Error al eliminar el IVR'), { data: delError.value.data })
       await loadIVRs()
-    } catch (err) {
-      error.value = 'Error al eliminar el IVR'
+    } catch (err: any) {
+      error.value = apiErrorMessage(err, 'Error al eliminar el IVR')
       console.error('Error deleting IVR:', err)
     }
   }

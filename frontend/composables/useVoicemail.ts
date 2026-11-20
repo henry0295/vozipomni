@@ -22,7 +22,7 @@ export const useVoicemail = () => {
     loading.value = true
     try {
       const { data, error: fetchError } = await apiFetch<any>('/telephony/voicemail/')
-      if (fetchError.value) throw new Error('Error al obtener buzones de voz')
+      if (fetchError.value) throw Object.assign(new Error('Error al obtener buzones de voz'), { data: fetchError.value.data })
       const raw = data.value
       voicemails.value = Array.isArray(raw) ? raw : (raw?.results || [])
       error.value = null
@@ -38,7 +38,7 @@ export const useVoicemail = () => {
       method: 'POST',
       body: vm
     })
-    if (fetchError.value) throw new Error('Error al crear buzón')
+    if (fetchError.value) throw Object.assign(new Error('Error al crear buzón'), { data: fetchError.value.data })
     const created = data.value
     voicemails.value.push(created)
     return created
@@ -49,7 +49,7 @@ export const useVoicemail = () => {
       method: 'PUT',
       body: vm
     })
-    if (fetchError.value) throw new Error('Error al actualizar buzón')
+    if (fetchError.value) throw Object.assign(new Error('Error al actualizar buzón'), { data: fetchError.value.data })
     const updated = data.value
     const index = voicemails.value.findIndex(v => v.id === id)
     if (index > -1) voicemails.value[index] = updated
@@ -60,7 +60,7 @@ export const useVoicemail = () => {
     const { error: fetchError } = await apiFetch(`/telephony/voicemail/${id}/`, {
       method: 'DELETE'
     })
-    if (fetchError.value) throw new Error('Error al eliminar buzón')
+    if (fetchError.value) throw Object.assign(new Error('Error al eliminar buzón'), { data: fetchError.value.data })
     voicemails.value = voicemails.value.filter(v => v.id !== id)
   }
 

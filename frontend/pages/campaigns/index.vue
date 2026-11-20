@@ -2,11 +2,11 @@
   <div>
     <div class="mb-8 flex items-center justify-between">
       <div>
-        <h1 class="text-3xl font-bold text-gray-900">CampaÃ±as</h1>
-        <p class="text-gray-600 mt-2">GestiÃ³n de campaÃ±as de marcaciÃ³n</p>
+        <h1 class="text-3xl font-bold text-gray-900">Campañas</h1>
+        <p class="text-gray-600 mt-2">Gestión de campañas de marcación</p>
       </div>
       <UButton icon="i-heroicons-plus" size="lg" @click="openCreateModal">
-        Nueva CampaÃ±a
+        Nueva Campaña
       </UButton>
     </div>
 
@@ -17,14 +17,14 @@
     <UCard v-if="loading" class="flex justify-center items-center py-12 mb-6">
       <div class="text-center space-y-2">
         <UIcon name="i-heroicons-arrow-path" class="w-8 h-8 animate-spin mx-auto" />
-        <p class="text-gray-500">Cargando campaÃ±as...</p>
+        <p class="text-gray-500">Cargando campañas...</p>
       </div>
     </UCard>
 
     <!-- Tabs de estado -->
     <UTabs :items="tabs" v-model="activeTab" class="mb-6" />
 
-    <!-- Grid de campaÃ±as -->
+    <!-- Grid de campañas -->
     <div v-if="!loading && filteredCampaigns.length" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <UCard v-for="campaign in filteredCampaigns" :key="campaign.id">
         <template #header>
@@ -62,7 +62,7 @@
 
           <div class="grid grid-cols-2 gap-4 pt-4 border-t border-gray-200">
             <div>
-              <p class="text-sm text-gray-600">Tasa de Ã©xito</p>
+              <p class="text-sm text-gray-600">Tasa de éxito</p>
               <p class="text-2xl font-bold text-green-600">{{ campaign.successRate }}%</p>
             </div>
             <div>
@@ -120,7 +120,7 @@
     </div>
 
     <div v-else-if="!loading" class="text-sm text-gray-500 py-8 text-center">
-      No hay campaÃ±as configuradas
+      No hay campañas configuradas
     </div>
 
     <!-- ============================== -->
@@ -317,6 +317,7 @@ import { watch } from 'vue'
 definePageMeta({ middleware: ['auth'] })
 
 const toast = useToast()
+const { errorMessage: apiErrorText } = useHttp()
 const showCreateModal = ref(false)
 const activeTab = ref(0)
 const activeCampaignTab = ref(0)
@@ -511,7 +512,7 @@ const loadCampaigns = async () => {
   error.value = null
   const { data, error: fetchError } = await apiFetch<any>('/campaigns/')
   if (fetchError.value) {
-    error.value = 'Error al cargar campaÃ±as'
+    error.value = 'Error al cargar campañas'
     campaigns.value = []
   } else {
     const raw = data.value
@@ -589,12 +590,12 @@ const createCampaignAction = async () => {
       headers: authHeaders(),
       body: payload,
     })
-    toast.add({ title: 'CampaÃ±a creada exitosamente', color: 'green' })
+    toast.add({ title: 'Campaña creada exitosamente', color: 'green' })
     showCreateModal.value = false
     await loadCampaigns()
   } catch (err: any) {
-    const detail = err?.data?.name?.[0] ?? err?.data?.detail ?? 'Error al crear campaÃ±a'
-    toast.add({ title: detail, color: 'red' })
+    // Mostrar el motivo real que devuelve el backend (antes solo se veía un error genérico)
+    toast.add({ title: 'No se pudo crear la campaña', description: apiErrorText(err), color: 'red', timeout: 8000 })
   } finally {
     saving.value = false
   }
@@ -610,9 +611,9 @@ const pauseCampaign = async (campaign: any) => {
     await $fetch(`/api/campaigns/${campaign.id}/pause/`, { method: 'POST', headers: authHeaders() })
     campaign.status = 'paused'
     campaign.statusLabel = 'Pausada'
-    toast.add({ title: `CampaÃ±a "${campaign.name}" pausada`, color: 'orange' })
-  } catch {
-    toast.add({ title: 'Error al pausar campaÃ±a', color: 'red' })
+    toast.add({ title: `Campaña "${campaign.name}" pausada`, color: 'orange' })
+  } catch (err: any) {
+    toast.add({ title: 'Error al pausar campaña', description: apiErrorText(err), color: 'red' })
   } finally {
     actionLoading.value = null
   }
@@ -624,9 +625,9 @@ const resumeCampaign = async (campaign: any) => {
     await $fetch(`/api/campaigns/${campaign.id}/start/`, { method: 'POST', headers: authHeaders() })
     campaign.status = 'active'
     campaign.statusLabel = 'Activa'
-    toast.add({ title: `CampaÃ±a "${campaign.name}" reanudada`, color: 'green' })
-  } catch {
-    toast.add({ title: 'Error al reanudar campaÃ±a', color: 'red' })
+    toast.add({ title: `Campaña "${campaign.name}" reanudada`, color: 'green' })
+  } catch (err: any) {
+    toast.add({ title: 'Error al reanudar campaña', description: apiErrorText(err), color: 'red' })
   } finally {
     actionLoading.value = null
   }
@@ -638,9 +639,9 @@ const startCampaign = async (campaign: any) => {
     await $fetch(`/api/campaigns/${campaign.id}/start/`, { method: 'POST', headers: authHeaders() })
     campaign.status = 'active'
     campaign.statusLabel = 'Activa'
-    toast.add({ title: `CampaÃ±a "${campaign.name}" iniciada`, color: 'green' })
-  } catch {
-    toast.add({ title: 'Error al iniciar campaÃ±a', color: 'red' })
+    toast.add({ title: `Campaña "${campaign.name}" iniciada`, color: 'green' })
+  } catch (err: any) {
+    toast.add({ title: 'Error al iniciar campaña', description: apiErrorText(err), color: 'red' })
   } finally {
     actionLoading.value = null
   }

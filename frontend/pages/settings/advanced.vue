@@ -256,7 +256,7 @@ async function saveBreakReason() {
     useToast().add({ title: breakModal.value.editing ? 'Razón actualizada' : 'Razón creada', color: 'green' })
     breakModal.value.open = false
     await loadBreakReasons()
-  } catch { useToast().add({ title: 'Error al guardar', color: 'red' }) }
+  } catch (e: any) { useToast().add({ title: 'Error al guardar', description: apiErrorMessage(e, ''), color: 'red' }) }
   finally { breakModal.value.loading = false }
 }
 
@@ -305,7 +305,7 @@ async function saveGroup() {
     useToast().add({ title: groupModal.value.editing ? 'Grupo actualizado' : 'Grupo creado', color: 'green' })
     groupModal.value.open = false
     await loadGroups()
-  } catch { useToast().add({ title: 'Error al guardar grupo', color: 'red' }) }
+  } catch (e: any) { useToast().add({ title: 'Error al guardar grupo', description: apiErrorMessage(e, ''), color: 'red' }) }
   finally { groupModal.value.loading = false }
 }
 

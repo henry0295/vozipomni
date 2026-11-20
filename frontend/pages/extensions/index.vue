@@ -472,18 +472,18 @@ const saveExtension = async () => {
         method: 'PUT',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la extensión')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la extensión'), { data: saveError.value.data })
     } else {
       const { error: saveError } = await apiFetch('/telephony/extensions/', {
         method: 'POST',
         body: form.value
       })
-      if (saveError.value) throw new Error('Error al guardar la extensión')
+      if (saveError.value) throw Object.assign(new Error('Error al guardar la extensión'), { data: saveError.value.data })
     }
     await loadExtensions()
     isModalOpen.value = false
-  } catch (err) {
-    error.value = 'Error al guardar la extensión'
+  } catch (err: any) {
+    error.value = apiErrorMessage(err, 'Error al guardar la extensión')
     console.error('Error saving extension:', err)
   } finally {
     isSaving.value = false
@@ -494,10 +494,10 @@ const deleteExtension = async (id: number) => {
   if (confirm('¿Estás seguro de que deseas eliminar esta extensión?')) {
     try {
       const { error: delError } = await apiFetch(`/telephony/extensions/${id}/`, { method: 'DELETE' })
-      if (delError.value) throw new Error('Error al eliminar la extensión')
+      if (delError.value) throw Object.assign(new Error('Error al eliminar la extensión'), { data: delError.value.data })
       await loadExtensions()
-    } catch (err) {
-      error.value = 'Error al eliminar la extensión'
+    } catch (err: any) {
+      error.value = apiErrorMessage(err, 'Error al eliminar la extensión')
       console.error('Error deleting extension:', err)
     }
   }
