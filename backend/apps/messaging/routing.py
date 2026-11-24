@@ -155,16 +155,29 @@ def ingest_inbound(channel, identifier: str, *, message_type: str = 'text', body
             fields.append('metadata')
         conv.save(update_fields=fields)
 
-    if not conv.agent_id:
-        auto_assign(conv, config)
-
     push(conv, 'message.new', {'message_id': message.id, 'direction': 'inbound',
                                'preview': (body or '')[:120], 'created': created,
                                'channel_type': channel.channel_type})
 
+    # Bot de autoatención: si el canal tiene un bot activo y nadie atiende la
+    # conversación, el bot responde y no se asigna a un agente todavía.
+    if not conv.agent_id and _bot_handles(conv, message, created):
+        return conv, message, created
+
+    if not conv.agent_id:
+        auto_assign(conv, config)
+
     if auto_replies and config is not None:
         send_auto_replies(conv, config, created)
     return conv, message, created
+
+
+def _bot_handles(conv, message, created) -> bool:
+    try:
+        from apps.chatbot.engine import handle_inbound
+    except ImportError:
+        return False
+    return handle_inbound(conv, message, created)
 
 
 def send_auto_replies(conv: Conversation, config, created: bool):

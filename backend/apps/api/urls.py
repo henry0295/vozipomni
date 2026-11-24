@@ -71,6 +71,7 @@ urlpatterns = [
 
     # Mensajería multicanal (WhatsApp, SMS, Email, Chat Web)
     path('messaging/', include('apps.messaging.urls')),
+    path('chatbot/', include('apps.chatbot.urls')),
 
     # Contact Center - features avanzados
     path('cc/screen-pop/', ScreenPopView.as_view(), name='screen-pop'),

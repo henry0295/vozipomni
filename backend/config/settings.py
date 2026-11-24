@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'apps.api',
     'apps.audit',
     'apps.messaging',
+    'apps.chatbot',
 ]
 
 MIDDLEWARE = [
@@ -325,6 +326,11 @@ CELERY_BEAT_SCHEDULE = {
     'cleanup-old-recordings': {
         'task': 'recordings.cleanup_old_recordings',
         'schedule': crontab(hour=2, minute=0),  # 02:00 cada día
+    },
+    # ── Bot de autoatención: expirar sesiones inactivas ──────────────────────
+    'chatbot-expire-sessions': {
+        'task': 'chatbot.expire_sessions',
+        'schedule': 300.0,  # cada 5 minutos
     },
 }
 

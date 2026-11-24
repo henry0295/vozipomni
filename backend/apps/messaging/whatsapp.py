@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from .models import Channel, Conversation, Message, WhatsAppLine
 from .realtime import push
-from .whatsapp_service import WhatsAppAPIError, client_for_line, extract_message_id
+from .whatsapp_service import WhatsAppAPIError, client_for_line, extract_message_id, normalize_wa_number
 
 logger = logging.getLogger(__name__)
 
@@ -259,6 +259,11 @@ def _send_whatsapp(message: Message, line: WhatsAppLine):
             body_params=meta.get('body_params') or [],
             header_params=meta.get('header_params') or [],
         )
+    if message.message_type == 'interactive' and meta.get('interactive'):
+        # Botones / lista nativos (bot de autoatención)
+        return client.send(line.phone_number_id, {
+            'to': normalize_wa_number(to), 'type': 'interactive', 'interactive': meta['interactive'],
+        })
     if message.message_type in MEDIA_TYPES:
         media_id = meta.get('wa_media_id')
         if not media_id and meta.get('local_path'):
