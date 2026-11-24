@@ -19,6 +19,14 @@
         <UIcon name="i-heroicons-arrow-down-tray" class="h-4 w-4 text-gray-500" />
       </a>
     </template>
+    <!-- Transcripción local de la nota de voz -->
+    <div v-if="kind === 'audio' && transcription" class="mt-1 max-w-[260px] text-xs text-gray-700 bg-gray-50 border rounded px-2 py-1">
+      <span class="text-[10px] uppercase text-gray-400 block">Transcripción</span>
+      {{ transcription }}
+    </div>
+    <p v-else-if="kind === 'audio' && message.metadata?.transcription_status === 'failed'" class="mt-1 text-[11px] text-gray-400">
+      No se pudo transcribir el audio
+    </p>
   </div>
 </template>
 
@@ -32,6 +40,7 @@ const loading = ref(false)
 const error = ref('')
 
 const kind = computed(() => props.message.message_type)
+const transcription = computed(() => props.message.metadata?.transcription || '')
 const filename = computed(() =>
   props.message.metadata?.filename || `adjunto-${props.message.id}${props.message.metadata?.mime_type?.includes('pdf') ? '.pdf' : ''}`)
 

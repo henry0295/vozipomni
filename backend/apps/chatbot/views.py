@@ -8,10 +8,10 @@ from core.permissions import IsAdminOrSupervisor
 
 from .connectors import get_connector
 from .engine import simulate
-from .models import BotFlow, BotFlowVersion, BotSession, Connector
+from .models import AIProvider, BotFlow, BotFlowVersion, BotSession, Connector
 from .schema import NODE_TYPES, validate_definition
 from .serializers import (
-    BotFlowSerializer, BotFlowVersionSerializer, BotSessionSerializer,
+    AIProviderSerializer, BotFlowSerializer, BotFlowVersionSerializer, BotSessionSerializer,
     ConnectorLogSerializer, ConnectorSerializer,
 )
 from .templates import FLOW_TEMPLATES
@@ -26,6 +26,49 @@ class IsAdminForWrites(IsAdminOrSupervisor):
         if request.method in ('GET', 'HEAD', 'OPTIONS'):
             return True
         return getattr(request.user, 'role', None) == 'admin' or request.user.is_superuser
+
+
+def _connector_ids():
+    return set(Connector.objects.filter(is_active=True).values_list('id', flat=True))
+
+
+def _ai_ids():
+    return set(AIProvider.objects.filter(is_active=True).values_list('id', flat=True))
+
+
+class AIProviderViewSet(viewsets.ModelViewSet):
+    queryset = AIProvider.objects.all()
+    serializer_class = AIProviderSerializer
+    permission_classes = [IsAdminForWrites]
+
+    @action(detail=True, methods=['post'])
+    def test(self, request, pk=None):
+        from .ai import AIError, test_provider
+        try:
+            return Response(test_provider(self.get_object()))
+        except AIError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'])
+    def classify(self, request, pk=None):
+        """Prueba un mensaje contra intenciones: {text, intents, fields}."""
+        from .ai import AIError, classify
+        text = str(request.data.get('text') or '')[:2000]
+        intents = request.data.get('intents') or []
+        if not text or not isinstance(intents, list) or not intents:
+            return Response({'error': 'text e intents son requeridos'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            return Response(classify(self.get_object(), text, intents, request.data.get('fields') or [],
+                                     purpose='test'))
+        except AIError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def usage(self, request, pk=None):
+        rows = self.get_object().usage.all()[:100]
+        return Response([{'created_at': r.created_at, 'purpose': r.purpose, 'status': r.status,
+                          'tokens': r.prompt_tokens + r.completion_tokens, 'duration_ms': r.duration_ms,
+                          'result': r.result, 'error': r.error} for r in rows])
 
 
 class ConnectorViewSet(viewsets.ModelViewSet):
@@ -77,7 +120,9 @@ class BotFlowViewSet(viewsets.ModelViewSet):
         connectors = [{'id': c.id, 'name': c.name, 'type': c.connector_type,
                        'actions': ConnectorSerializer(c).data['actions']}
                       for c in Connector.objects.filter(is_active=True)]
-        return Response({'node_types': sorted(NODE_TYPES), 'connectors': connectors,
+        ai_providers = [{'id': p.id, 'name': p.name, 'model': p.model}
+                        for p in AIProvider.objects.filter(is_active=True)]
+        return Response({'node_types': sorted(NODE_TYPES), 'connectors': connectors, 'ai_providers': ai_providers,
                          'templates': [{'key': k, 'name': t['name'], 'description': t['description']}
                                        for k, t in FLOW_TEMPLATES.items()]})
 
@@ -96,16 +141,14 @@ class BotFlowViewSet(viewsets.ModelViewSet):
     def validate(self, request, pk=None):
         flow = self.get_object()
         definition = request.data.get('definition') or flow.draft
-        ids = set(Connector.objects.filter(is_active=True).values_list('id', flat=True))
-        errors = validate_definition(definition, connectors_ids=ids)
+        errors = validate_definition(definition, connectors_ids=_connector_ids(), ai_ids=_ai_ids())
         return Response({'valid': not errors, 'errors': errors})
 
     @action(detail=True, methods=['post'])
     def publish(self, request, pk=None):
         """Valida el borrador y crea una versión inmutable que pasa a ser la publicada."""
         flow = self.get_object()
-        ids = set(Connector.objects.filter(is_active=True).values_list('id', flat=True))
-        errors = validate_definition(flow.draft, connectors_ids=ids)
+        errors = validate_definition(flow.draft, connectors_ids=_connector_ids(), ai_ids=_ai_ids())
         if errors:
             return Response({'valid': False, 'errors': errors}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():

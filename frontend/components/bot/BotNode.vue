@@ -52,6 +52,7 @@ const PALETTES: Record<string, { border: string, head: string, icon: string }> =
   orange: { border: 'border-orange-300', head: 'bg-orange-50', icon: 'text-orange-600' },
   emerald: { border: 'border-emerald-300', head: 'bg-emerald-50', icon: 'text-emerald-600' },
   rose: { border: 'border-rose-300', head: 'bg-rose-50', icon: 'text-rose-600' },
+  fuchsia: { border: 'border-fuchsia-300', head: 'bg-fuchsia-50', icon: 'text-fuchsia-600' },
   gray: { border: 'border-gray-300', head: 'bg-gray-50', icon: 'text-gray-600' },
 }
 const palette = computed(() => PALETTES[meta.value.color] || PALETTES.gray)

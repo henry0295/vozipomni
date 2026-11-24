@@ -557,6 +557,13 @@ function handleEvent(evt: any) {
     const m = messages.value.find(x => x.id === evt.message_id)
     if (m) { m.has_media = true; return }
   }
+  if (evt.event === 'message.transcribed') {
+    const m = messages.value.find(x => x.id === evt.message_id)
+    if (m) {
+      m.metadata = { ...(m.metadata || {}), transcription: evt.text, transcription_status: evt.text ? 'done' : 'failed' }
+      return
+    }
+  }
   // Nuevo mensaje / cambios de estado: recargar con debounce
   if (reloadTimer) clearTimeout(reloadTimer)
   reloadTimer = setTimeout(() => {

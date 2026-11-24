@@ -15,6 +15,7 @@ Salidas (sourceHandle) por tipo de bloque:
   condition                                           → true, false
   business_hours                                      → open, closed
   connector                                           → success, empty, error
+  ai_intent                                           → intent:<id>, unknown, error
   end, handoff                                        → (ninguna)
 """
 import re
@@ -29,6 +30,7 @@ NODE_TYPES = {
     'set_variable': {'next'},
     'connector': {'success', 'empty', 'error'},
     'dynamic_list': {'next', 'empty'},
+    'ai_intent': None,        # salidas dinámicas: intent:<id> + unknown + error
     'handoff': set(),
     'end': set(),
 }
@@ -53,10 +55,13 @@ def outgoing(definition: dict, node_id: str, handle: str):
 
 
 def option_handles(node: dict):
-    return {f"opt:{o.get('id')}" for o in (node.get('data') or {}).get('options', [])}
+    data = node.get('data') or {}
+    if node.get('type') == 'ai_intent':
+        return {f"intent:{i.get('id')}" for i in data.get('intents', [])} | {'unknown', 'error'}
+    return {f"opt:{o.get('id')}" for o in data.get('options', [])}
 
 
-def validate_definition(d: dict, *, connectors_ids=None) -> list:
+def validate_definition(d: dict, *, connectors_ids=None, ai_ids=None) -> list:
     """Devuelve una lista de errores legibles (vacía = válido)."""
     errors = []
     if not isinstance(d, dict):
@@ -127,6 +132,29 @@ def validate_definition(d: dict, *, connectors_ids=None) -> list:
                 errors.append(f'Bloque "{label}": el conector no existe o está inactivo')
             if data.get('output_variable') and not VAR_RE.match(data['output_variable']):
                 errors.append(f'Bloque "{label}": variable de resultado inválida')
+        if ntype == 'ai_intent':
+            if not data.get('provider_id'):
+                errors.append(f'Bloque "{label}": elija el proveedor de IA')
+            elif ai_ids is not None and int(data['provider_id']) not in ai_ids:
+                errors.append(f'Bloque "{label}": el proveedor de IA no existe o está inactivo')
+            intents = data.get('intents') or []
+            if not 1 <= len(intents) <= 20:
+                errors.append(f'Bloque "{label}": defina entre 1 y 20 intenciones')
+            iids = [i.get('id') for i in intents]
+            if len(iids) != len(set(iids)) or any(not VAR_RE.match(str(i or '')) for i in iids):
+                errors.append(f'Bloque "{label}": cada intención necesita un id único (letras, números y _)')
+            for i in intents:
+                if not (i.get('name') or '').strip():
+                    errors.append(f'Bloque "{label}": hay una intención sin nombre')
+            for f in data.get('fields') or []:
+                if not VAR_RE.match(str(f.get('name') or '')):
+                    errors.append(f'Bloque "{label}": nombre de dato a extraer inválido "{f.get("name")}"')
+            if data.get('source') == 'variable' and not data.get('source_variable'):
+                errors.append(f'Bloque "{label}": indique la variable con el texto a analizar')
+            if not VAR_RE.match(data.get('output_variable') or ''):
+                errors.append(f'Bloque "{label}": variable de resultado inválida')
+            if data.get('source', 'wait') == 'wait' and not (data.get('text') or '').strip():
+                errors.append(f'Bloque "{label}": falta la pregunta para el cliente')
         if ntype == 'dynamic_list' and not data.get('source_variable'):
             errors.append(f'Bloque "{label}": indique la variable con la lista')
 
@@ -172,7 +200,7 @@ def _non_waiting_cycle(d, nmap, start):
     while stack:
         cur, depth = stack.pop()
         node = nmap.get(cur)
-        if not node or node.get('type') in WAITING_TYPES or node.get('type') == 'connector':
+        if not node or node.get('type') in WAITING_TYPES or node.get('type') in ('connector', 'ai_intent'):
             continue
         for e in d.get('edges', []):
             if e.get('source') != cur:

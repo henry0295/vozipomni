@@ -131,6 +131,7 @@ export const NAVIGATION: NavItem[] = [
       { label: 'Grupos y pausas', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced', roles: ADMIN_SUP },
       { label: 'Webhooks', icon: 'i-heroicons-link', to: '/webhooks', roles: ADMIN_SUP },
       { label: 'Conectores (GLPI, APIs)', icon: 'i-heroicons-bolt', to: '/connectors', roles: ADMIN_SUP },
+      { label: 'Inteligencia artificial', icon: 'i-heroicons-sparkles', to: '/ai-providers', roles: ADMIN_SUP },
       { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings', roles: ADMIN },
     ],
   },

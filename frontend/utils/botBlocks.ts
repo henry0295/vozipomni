@@ -18,6 +18,7 @@ export const BLOCKS: Record<string, BlockMeta> = {
   set_variable: { label: 'Asignar variable', icon: 'i-heroicons-variable', color: 'gray', help: 'Guarda un valor en una variable' },
   connector: { label: 'Conector', icon: 'i-heroicons-bolt', color: 'emerald', help: 'GLPI, API HTTP u otro sistema' },
   dynamic_list: { label: 'Lista dinámica', icon: 'i-heroicons-queue-list', color: 'emerald', help: 'Menú con los datos de un conector' },
+  ai_intent: { label: 'Entender intención (IA)', icon: 'i-heroicons-sparkles', color: 'fuchsia', help: 'Entiende lo que escribe el cliente y extrae datos' },
   handoff: { label: 'Pasar a asesor', icon: 'i-heroicons-user', color: 'rose', help: 'Asigna la conversación a un agente' },
   end: { label: 'Fin', icon: 'i-heroicons-stop-circle', color: 'gray', help: 'Despide y cierra la conversación' },
 }
@@ -26,6 +27,7 @@ export const PALETTE = [
   { group: 'Mensajes', items: ['message', 'buttons', 'list', 'question'] },
   { group: 'Lógica', items: ['condition', 'business_hours', 'set_variable'] },
   { group: 'Integraciones', items: ['connector', 'dynamic_list'] },
+  { group: 'Inteligencia artificial', items: ['ai_intent'] },
   { group: 'Salida', items: ['handoff', 'end'] },
 ]
 
@@ -56,6 +58,13 @@ const FIXED_OUTPUTS: Record<string, { id: string, label: string }[]> = {
 }
 
 export function blockOutputs(data: any) {
+  if (data.kind === 'ai_intent') {
+    return [
+      ...(data.intents || []).map((i: any) => ({ id: `intent:${i.id}`, label: i.name || i.id })),
+      { id: 'unknown', label: 'No entendí' },
+      { id: 'error', label: 'Error de IA' },
+    ]
+  }
   if (data.kind === 'buttons' || data.kind === 'list') {
     return (data.options || []).map((o: any) => ({ id: `opt:${o.id}`, label: o.label || '(sin texto)' }))
   }
@@ -76,6 +85,15 @@ export function defaultData(kind: string): any {
     case 'set_variable': return { title, variable: 'variable', value: '' }
     case 'connector': return { title, text: '', connector_id: null, action: '', inputs: {}, output_variable: 'resultado', mock_result: {} }
     case 'dynamic_list': return { title, text: 'Elige una opción:', button_label: 'Ver opciones', source_variable: 'resultado', label_field: 'name', description_field: '', variable: 'seleccion' }
+    case 'ai_intent': return {
+      title, source: 'wait', text: 'Cuéntame en pocas palabras, ¿en qué te puedo ayudar?', source_variable: '',
+      provider_id: null, min_confidence: 0.5, output_variable: 'ia',
+      intents: [
+        { id: 'soporte', name: 'Soporte técnico', description: 'Fallas, errores o algo que no funciona', examples: 'no tengo internet\nel teléfono no da tono' },
+        { id: 'asesor', name: 'Hablar con un asesor', description: 'Pide atención humana', examples: 'quiero hablar con alguien' },
+      ],
+      fields: [],
+    }
     case 'handoff': return { title, text: 'Te comunico con un asesor, un momento por favor.', campaign_id: null, note: '' }
     case 'end': return { title, text: '¡Gracias por escribirnos!' }
     default: return { title }
@@ -116,6 +134,10 @@ export function flowVariables(nodes: any[]) {
     const d = n.data || {}
     if (d.variable) vars.add(d.variable)
     if (d.output_variable) vars.add(d.output_variable)
+    if (d.kind === 'ai_intent') {
+      vars.add(`${d.output_variable || 'ia'}.intent`)
+      for (const f of d.fields || []) if (f.name) vars.add(f.name)
+    }
   }
   return [...vars]
 }

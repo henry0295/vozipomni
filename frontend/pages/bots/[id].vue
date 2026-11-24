@@ -108,7 +108,7 @@
 
         <!-- Texto -->
         <UFormGroup
-          v-if="['message','buttons','list','question','dynamic_list','handoff','end','connector'].includes(kind)"
+          v-if="['message','buttons','list','question','dynamic_list','handoff','end','connector'].includes(kind) || (kind === 'ai_intent' && d.source !== 'variable')"
           :label="kind === 'connector' ? 'Mensaje de espera (opcional)' : 'Texto'"
           :hint="`${(d.text || '').length}/1024`"
         >
@@ -202,6 +202,61 @@
           <UFormGroup label="Descripción (opcional)"><UInput v-model="d.description_field" size="sm" placeholder="{{status}}" /></UFormGroup>
           <UFormGroup label="Guardar el elemento elegido en" required><UInput v-model="d.variable" size="sm" /></UFormGroup>
           <UFormGroup label="Texto del botón"><UInput v-model="d.button_label" size="sm" maxlength="20" /></UFormGroup>
+        </template>
+
+        <!-- Entender intención (IA) -->
+        <template v-if="kind === 'ai_intent'">
+          <UAlert
+            v-if="!catalog.ai_providers?.length"
+            color="orange"
+            variant="soft"
+            icon="i-heroicons-exclamation-triangle"
+            description="No hay proveedores de IA activos. Configure uno en Administración › Inteligencia artificial."
+          />
+          <UFormGroup label="Proveedor de IA" required>
+            <USelect v-model="d.provider_id" :options="aiProviderOptions" size="sm" placeholder="Seleccione" />
+          </UFormGroup>
+          <UFormGroup label="Texto a analizar">
+            <USelect
+              v-model="d.source"
+              size="sm"
+              :options="[{ label: 'Preguntar y esperar la respuesta del cliente', value: 'wait' }, { label: 'Una variable existente', value: 'variable' }]"
+            />
+          </UFormGroup>
+          <UFormGroup v-if="d.source === 'variable'" label="Variable con el texto" required>
+            <UInput v-model="d.source_variable" size="sm" placeholder="descripcion" />
+          </UFormGroup>
+          <div>
+            <p class="text-sm font-medium mb-1">Intenciones ({{ d.intents.length }}/20)</p>
+            <div v-for="(it, i) in d.intents" :key="i" class="border rounded p-2 mb-2 space-y-1">
+              <div class="flex gap-1">
+                <UInput :model-value="it.id" size="xs" placeholder="id (ej. soporte)" class="w-28" @update:model-value="renameIntent(it, $event)" />
+                <UInput v-model="it.name" size="xs" placeholder="Nombre" class="flex-1" />
+                <UButton size="xs" color="red" variant="ghost" icon="i-heroicons-x-mark" @click="removeIntent(i)" />
+              </div>
+              <UInput v-model="it.description" size="xs" placeholder="Cuándo aplica" />
+              <UTextarea v-model="it.examples" :rows="2" size="xs" placeholder="Ejemplos (uno por línea)" />
+            </div>
+            <UButton size="xs" variant="soft" icon="i-heroicons-plus" :disabled="d.intents.length >= 20" @click="addIntent">
+              Agregar intención
+            </UButton>
+          </div>
+          <div>
+            <p class="text-sm font-medium mb-1">Datos a extraer (opcional)</p>
+            <div v-for="(f, i) in d.fields" :key="i" class="flex gap-1 mb-1">
+              <UInput v-model="f.name" size="xs" placeholder="ticket_id" class="w-28" />
+              <UInput v-model="f.description" size="xs" placeholder="Número del ticket" class="flex-1" />
+              <UButton size="xs" color="red" variant="ghost" icon="i-heroicons-x-mark" @click="d.fields.splice(i, 1)" />
+            </div>
+            <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="d.fields.push({ name: '', description: '' })">Agregar dato</UButton>
+          </div>
+          <UFormGroup label="Confianza mínima" :hint="`${Math.round((d.min_confidence || 0) * 100)} %`">
+            <URange v-model="d.min_confidence" :min="0" :max="1" :step="0.05" size="sm" />
+          </UFormGroup>
+          <UFormGroup label="Guardar resultado en"><UInput v-model="d.output_variable" size="sm" /></UFormGroup>
+          <p class="text-[11px] text-gray-400">
+            Los datos extraídos quedan como variables (por ejemplo, el campo ticket_id). Si la IA no está segura, sale por «No entendí».
+          </p>
         </template>
 
         <!-- Asesor -->
@@ -333,6 +388,22 @@ const connectorOptions = computed(() => catalog.value.connectors.map((c: any) =>
 const currentConnector = computed(() => catalog.value.connectors.find((c: any) => c.id === Number(d.value.connector_id)))
 const actionOptions = computed(() => (currentConnector.value?.actions || []).map((a: any) => ({ label: a.label, value: a.name })))
 const currentAction = computed(() => currentConnector.value?.actions.find((a: any) => a.name === d.value.action))
+const aiProviderOptions = computed(() => (catalog.value.ai_providers || []).map((p: any) => ({ label: `${p.name} (${p.model})`, value: p.id })))
+function addIntent() {
+  d.value.intents.push({ id: `intencion_${d.value.intents.length + 1}`, name: '', description: '', examples: '' })
+}
+function removeIntent(i: number) {
+  const it = d.value.intents[i]
+  d.value.intents.splice(i, 1)
+  edges.value = edges.value.filter(e => !(e.source === selectedId.value && e.sourceHandle === `intent:${it.id}`))
+}
+// Al cambiar el id de una intención se conserva su conexión
+function renameIntent(it: any, value: string) {
+  const clean = String(value).toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 40)
+  const old = `intent:${it.id}`
+  edges.value = edges.value.map(e => (e.source === selectedId.value && e.sourceHandle === old ? { ...e, sourceHandle: `intent:${clean}` } : e))
+  it.id = clean
+}
 const campaignOptions = computed(() => [{ label: '— La del canal —', value: null }, ...campaigns.value.map(c => ({ label: c.name, value: c.id }))])
 const timeConditionOptions = computed(() => [{ label: '— Horario del canal —', value: null }, ...timeConditions.value.map(t => ({ label: t.name, value: t.id }))])
 

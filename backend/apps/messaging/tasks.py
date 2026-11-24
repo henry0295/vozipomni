@@ -51,6 +51,7 @@ def download_whatsapp_media(self, message_id: int):
 
     from .realtime import push
     push(msg.conversation, 'message.media', {'message_id': msg.id})
+    maybe_transcribe(msg)
 
 
 @shared_task
@@ -153,6 +154,7 @@ def download_remote_media(self, message_id: int):
 
     from .realtime import push
     push(msg.conversation, 'message.media', {'message_id': msg.id})
+    maybe_transcribe(msg)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -218,3 +220,75 @@ def dispatch_scheduled_broadcasts():
             b.save(update_fields=['status', 'last_error'])
             logger.warning(f"[Broadcast {b.id}] No se pudo iniciar: {e}")
     return f"{started} envíos iniciados"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Transcripción local de audios entrantes (servicio "transcriber", faster-whisper)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def transcription_enabled() -> bool:
+    return bool(os.getenv('TRANSCRIBER_URL', '').strip()) and \
+        os.getenv('TRANSCRIBE_INBOUND_AUDIO', 'true').lower() in ('1', 'true', 'yes')
+
+
+def maybe_transcribe(msg):
+    """Encola la transcripción de una nota de voz / audio entrante ya descargado."""
+    if msg.direction != 'inbound' or msg.message_type != 'audio' or not transcription_enabled():
+        return
+    if not (msg.metadata or {}).get('local_path'):
+        return
+    try:
+        transcribe_message.delay(msg.id)
+    except Exception as e:
+        logger.warning(f"[Transcripción] No se pudo encolar el mensaje {msg.id}: {e}")
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=20, name='messaging.transcribe_message')
+def transcribe_message(self, message_id: int):
+    import requests
+    from .models import Message
+    from .realtime import push
+
+    msg = Message.objects.select_related('conversation__channel').filter(id=message_id).first()
+    if not msg:
+        return
+    meta = dict(msg.metadata or {})
+    path = meta.get('local_path')
+    base = os.getenv('TRANSCRIBER_URL', '').rstrip('/')
+    text, error = '', ''
+    if path and base:
+        try:
+            resp = requests.post(f'{base}/transcribe', json={'path': path, 'language': 'es'}, timeout=600)
+            data = resp.json() if resp.content else {}
+            if resp.status_code >= 400:
+                error = data.get('error') or f'HTTP {resp.status_code}'
+            else:
+                text = (data.get('text') or '').strip()
+                meta['transcription_duration'] = data.get('duration')
+        except requests.ConnectionError as e:
+            # El modelo puede estar cargando en el primer uso: reintentar
+            if self.request.retries < self.max_retries:
+                raise self.retry(exc=e)
+            error = 'Servicio de transcripción no disponible'
+        except Exception as e:
+            error = f'{type(e).__name__}: {str(e)[:200]}'
+    else:
+        error = 'Sin archivo o servicio de transcripción'
+
+    meta['transcription'] = text
+    meta['transcription_status'] = 'done' if text else 'failed'
+    if error:
+        meta['transcription_error'] = error[:300]
+        logger.warning(f"[Transcripción] Mensaje {msg.id}: {error}")
+    msg.metadata = meta
+    msg.save(update_fields=['metadata'])
+    push(msg.conversation, 'message.transcribed', {'message_id': msg.id, 'text': text[:300]})
+
+    # Si el bot está esperando este audio, continúa el flujo con el texto
+    try:
+        from apps.chatbot.engine import continue_with_transcript
+        continue_with_transcript(msg, text)
+    except ImportError:
+        pass
+    except Exception:
+        logger.exception(f"[Transcripción] Error continuando el bot del mensaje {msg.id}")

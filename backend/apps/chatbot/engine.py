@@ -129,6 +129,7 @@ class Transport:
     def handoff(self, state, data): ...
     def end(self, state, data): ...
     def connector(self, state, node): ...
+    def ai(self, state, node, text): ...
     def is_open(self, data) -> bool:
         return True
 
@@ -170,6 +171,26 @@ class SimTransport(Transport):
         self.replies.append({'type': 'system', 'text': f"[Conector] {data.get('action')} → {res.status}"
                              + (f": {res.error}" if res.error else '')})
         return res.status, res.data
+
+    def ai(self, state, node, text):
+        """Simulador: IA real (live) o clasificación aproximada por palabras clave."""
+        from .ai import AIError, classify, offline_classify
+        from .models import AIProvider
+        data = node.get('data') or {}
+        intents, fields = data.get('intents') or [], data.get('fields') or []
+        if not self.live:
+            r = offline_classify(text, intents, fields)
+            self.replies.append({'type': 'system', 'text': f"[IA simulada] intención: {r['intent'] or 'ninguna'}"})
+            return 'success', r
+        provider = AIProvider.objects.filter(pk=data.get('provider_id'), is_active=True).first()
+        try:
+            r = classify(provider, text, intents, fields, purpose='simulator')
+        except AIError as e:
+            self.replies.append({'type': 'system', 'text': f'[IA] error: {e}'})
+            return 'error', None
+        self.replies.append({'type': 'system', 'text': f"[IA] intención: {r['intent'] or 'ninguna'} "
+                             f"({int(r['confidence'] * 100)} %) {r['fields'] or ''}"})
+        return 'success', r
 
 
 # ── núcleo ───────────────────────────────────────────────────────────────────
@@ -283,6 +304,15 @@ class Runner:
             status, result = res
             return self.apply_connector_result(node, status, result)
 
+        if ntype == 'ai_intent':
+            if (data.get('source') or 'wait') == 'wait':
+                if text:
+                    self.t.text(text)
+                self.state['waiting'] = True
+                return None
+            source = _dig(self.vars, data.get('source_variable') or '')
+            return self._run_ai(node, '' if source is None else str(source))
+
         if ntype == 'handoff':
             self._handoff(data, text)
             return None
@@ -303,6 +333,39 @@ class Runner:
         self.state['status'] = 'active'
         target = self._out(node, status) or (self._out(node, 'success') if status == 'empty' else None)
         return target
+
+    def _run_ai(self, node, text):
+        """Clasifica `text` con IA. Devuelve el siguiente nodo o None (si es asíncrono)."""
+        self.state['waiting'] = False
+        self.vars['_ai_input'] = (text or '')[:2000]
+        res = self.t.ai(self.state, node, self.vars['_ai_input'])
+        if res is None:
+            self.state['status'] = 'busy'
+            return None
+        status, result = res
+        return self.apply_ai_result(node, status, result)
+
+    def apply_ai_result(self, node, status, result):
+        data = node.get('data') or {}
+        out_var = data.get('output_variable') or 'ia'
+        self.state['status'] = 'active'
+        self.vars.pop('_ai_input', None)
+        if status == 'error':
+            self.vars[out_var] = {'intent': None, 'confidence': 0, 'error': True}
+            return self._out(node, 'error') or self._out(node, 'unknown')
+        r = result or {}
+        fields = r.get('fields') or {}
+        self.vars[out_var] = {'intent': r.get('intent'), 'confidence': r.get('confidence', 0), **fields}
+        # Los datos extraídos también quedan como variables sueltas: {{ticket_id}}
+        for k, v in fields.items():
+            self.vars[k] = v
+        try:
+            min_conf = float(data.get('min_confidence', 0.5))
+        except (TypeError, ValueError):
+            min_conf = 0.5
+        if r.get('intent') and float(r.get('confidence') or 0) >= min_conf:
+            return self._out(node, f"intent:{r['intent']}") or self._out(node, 'unknown')
+        return self._out(node, 'unknown')
 
     def _handoff(self, data, text=''):
         if text:
@@ -330,6 +393,15 @@ class Runner:
             if data.get('variable'):
                 self.vars[data['variable']] = chosen['label']
             return self.run_from(self._out(node, chosen['id']))
+
+        if ntype == 'ai_intent':
+            if not (value or '').strip():
+                return self._retry(node, 'No recibí tu mensaje, ¿puedes escribirlo?')
+            self.state['retries'] = 0
+            nxt = self._run_ai(node, value)
+            if nxt:
+                self.run_from(nxt)
+            return None
 
         if ntype == 'question':
             if not validate_input(data, value or ''):
@@ -375,6 +447,7 @@ class ChannelTransport(Transport):
         self.conv = conversation
         self.session = session
         self.pending_connector = None
+        self.pending_ai = None
 
     def _send(self, body, **kw):
         from apps.messaging.whatsapp import create_outbound
@@ -441,6 +514,11 @@ class ChannelTransport(Transport):
         self.pending_connector = node['id']
         return None
 
+    def ai(self, state, node, text):
+        # Igual que el conector: la IA se llama desde Celery
+        self.pending_ai = node['id']
+        return None
+
 
 def build_whatsapp_interactive(body, options, kind, button_label):
     """Mensaje interactivo nativo de WhatsApp (botones: máx. 3 · lista: máx. 10)."""
@@ -494,6 +572,21 @@ def _persist(session, runner):
         except Exception:
             logger.exception('[Bot] No se pudo encolar el conector: se ejecuta en línea')
             continue_after_connector(session.id, pending)
+    pending_ai = getattr(runner.t, 'pending_ai', None)
+    if pending_ai:
+        runner.t.pending_ai = None
+        from .tasks import run_ai_step
+        try:
+            run_ai_step.delay(session.id, pending_ai)
+        except Exception:
+            logger.exception('[Bot] No se pudo encolar la IA: se ejecuta en línea')
+            continue_after_ai(session.id, pending_ai)
+
+
+def _transcription_enabled():
+    import os
+    return bool(os.getenv('TRANSCRIBER_URL', '').strip()) and \
+        os.getenv('TRANSCRIBE_INBOUND_AUDIO', 'true').lower() in ('1', 'true', 'yes')
 
 
 def _initial_variables(conv):
@@ -551,8 +644,18 @@ def handle_inbound(conv, message, created) -> bool:
 
         if not session.version:
             return False
+        if message.message_type == 'audio' and _transcription_enabled():
+            # Nota de voz: se transcribe localmente y el flujo continúa con el texto
+            # (messaging.transcribe_message llama a continue_with_transcript)
+            variables = dict(session.variables or {})
+            variables['_pending_audio'] = message.id
+            session.variables = variables
+            session.status = 'busy'
+            session.last_activity_at = timezone.now()
+            session.save(update_fields=['variables', 'status', 'last_activity_at'])
+            return True
         if message.message_type not in ('text', 'interactive', 'button'):
-            # Adjuntos, audios, ubicación: el bot no los entiende → asesor
+            # Adjuntos, imágenes, ubicación: el bot no los entiende → asesor
             runner = Runner(session.version.definition, _state_from(session), ChannelTransport(conv, session))
             runner._handoff({}, 'Recibí tu archivo. Te comunico con un asesor.')
             _persist(session, runner)
@@ -603,6 +706,72 @@ def continue_after_connector(session_id, node_id):
         _persist(session, runner)
     except Exception:
         logger.exception(f'[Bot] Error continuando tras conector en conv {conv.id}')
+        session.status = 'error'
+        session.save(update_fields=['status'])
+        auto_assign(conv)
+
+
+def continue_after_ai(session_id, node_id):
+    """Tarea Celery: clasifica con IA el texto pendiente y continúa el flujo."""
+    from apps.messaging.routing import auto_assign
+    from .ai import AIError, classify
+    from .models import AIProvider, BotSession
+
+    session = BotSession.objects.select_related('conversation', 'version', 'conversation__channel').filter(
+        pk=session_id).first()
+    if not session or not session.version or session.status != 'busy':
+        return
+    conv = session.conversation
+    runner = Runner(session.version.definition, _state_from(session), ChannelTransport(conv, session))
+    node = runner.nodes.get(node_id)
+    if not node:
+        return
+    data = node.get('data') or {}
+    provider = AIProvider.objects.filter(pk=data.get('provider_id'), is_active=True).first()
+    try:
+        result = classify(provider, runner.vars.get('_ai_input', ''), data.get('intents') or [],
+                          data.get('fields') or [], conversation_id=conv.id)
+        status = 'success'
+    except AIError as e:
+        logger.warning(f'[Bot] IA no disponible en conv {conv.id}: {e}')
+        status, result = 'error', None
+    try:
+        target = runner.apply_ai_result(node, status, result)
+        if target:
+            runner.run_from(target)
+        elif status == 'error':
+            runner._handoff({}, 'Te comunico con un asesor para ayudarte mejor.')
+        _persist(session, runner)
+    except Exception:
+        logger.exception(f'[Bot] Error continuando tras IA en conv {conv.id}')
+        session.status = 'error'
+        session.save(update_fields=['status'])
+        auto_assign(conv)
+
+
+def continue_with_transcript(message, text):
+    """La transcripción de una nota de voz llegó: el bot la procesa como texto escrito."""
+    from apps.messaging.routing import auto_assign
+    from .models import BotSession
+
+    session = BotSession.objects.select_related('version', 'conversation', 'conversation__channel').filter(
+        conversation_id=message.conversation_id, status='busy').first()
+    if not session or not session.version or (session.variables or {}).get('_pending_audio') != message.id:
+        return
+    conv = session.conversation
+    variables = dict(session.variables or {})
+    variables.pop('_pending_audio', None)
+    session.variables = variables
+    session.status = 'active'
+    runner = Runner(session.version.definition, _state_from(session), ChannelTransport(conv, session))
+    try:
+        if text:
+            runner.receive(text, '')
+        else:
+            runner._handoff({}, 'No pude escuchar bien tu audio. Te comunico con un asesor.')
+        _persist(session, runner)
+    except Exception:
+        logger.exception(f'[Bot] Error procesando la transcripción en conv {conv.id}')
         session.status = 'error'
         session.save(update_fields=['status'])
         auto_assign(conv)

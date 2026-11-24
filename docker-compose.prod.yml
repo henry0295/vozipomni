@@ -44,6 +44,9 @@ x-django-env: &django-env
   VOZIPOMNI_IPV4: ${VOZIPOMNI_IPV4:?VOZIPOMNI_IPV4 requerido en .env}
   VOZIPOMNI_DOMAIN: ${VOZIPOMNI_DOMAIN:-}
   NAT_IPV4: ${NAT_IPV4:-}
+  # Transcripción local de audios entrantes (vacío = desactivada)
+  TRANSCRIBER_URL: ${TRANSCRIBER_URL-http://transcriber:9000}
+  TRANSCRIBE_INBOUND_AUDIO: ${TRANSCRIBE_INBOUND_AUDIO:-true}
   # Retención de grabaciones (el borrado físico está desactivado por defecto)
   RECORDING_ARCHIVE_DAYS: ${RECORDING_ARCHIVE_DAYS:-90}
   RECORDING_DELETE_DAYS: ${RECORDING_DELETE_DAYS:-180}
@@ -253,6 +256,35 @@ services:
         reservations:
           memory: 64M
           cpus: '0.1'
+
+  # Transcripción local de audios (faster-whisper en CPU). No publica puertos:
+  # solo lo usan los workers por la red interna (http://transcriber:9000).
+  transcriber:
+    build:
+      context: ./docker/transcriber
+      dockerfile: Dockerfile
+    container_name: vozipomni_transcriber
+    <<: *restart-policy
+    logging: *default-logging
+    networks:
+      - backend
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      WHISPER_COMPUTE: ${WHISPER_COMPUTE:-int8}
+      WHISPER_THREADS: ${WHISPER_THREADS:-0}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-es}
+      WHISPER_MAX_SECONDS: ${WHISPER_MAX_SECONDS:-600}
+      WHISPER_PRELOAD: ${WHISPER_PRELOAD:-true}  # descarga y carga el modelo al arrancar
+    volumes:
+      - media_volume:/app/media:ro
+      - whisper_models:/models
+    deploy:
+      resources:
+        limits:
+          memory: ${MEM_LIMIT_TRANSCRIBER:-2048M}
+          cpus: '${CPU_LIMIT_TRANSCRIBER:-2.0}'
+        reservations:
+          memory: 128M
 
   celery_worker:
     <<: *django-common
@@ -728,6 +760,7 @@ volumes:
   grafana_data:
     driver: local
   whisper_cache:
+  whisper_models:
     driver: local
 
 # =============================================================================

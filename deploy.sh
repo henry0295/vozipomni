@@ -1826,7 +1826,7 @@ configure_cpu_limits() {
     host_cpus=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
     log_info "CPUs disponibles: $host_cpus — ajustando límites de CPU de los contenedores"
     for pair in CPU_LIMIT_POSTGRES:2.0 CPU_LIMIT_REDIS:1.0 CPU_LIMIT_BACKEND:2.0 \
-                CPU_LIMIT_CELERY:2.0 CPU_LIMIT_ASTERISK:4.0; do
+                CPU_LIMIT_CELERY:2.0 CPU_LIMIT_ASTERISK:4.0 CPU_LIMIT_TRANSCRIBER:2.0; do
         name="${pair%%:*}"
         wanted="${pair#*:}"
         value=$(awk -v w="$wanted" -v h="$host_cpus" 'BEGIN { printf "%.2f", (w > h ? h : w) }')
@@ -1842,7 +1842,7 @@ configure_cpu_limits() {
         [ "$mem_cap" -lt 512 ] && mem_cap=512
         log_info "RAM: ${host_mem_mb} MB — límite máximo por contenedor: ${mem_cap} MB"
         for pair in MEM_LIMIT_POSTGRES:2048 MEM_LIMIT_REDIS:1024 MEM_LIMIT_BACKEND:2048 \
-                    MEM_LIMIT_CELERY:1024 MEM_LIMIT_ASTERISK:4096; do
+                    MEM_LIMIT_CELERY:1024 MEM_LIMIT_ASTERISK:4096 MEM_LIMIT_TRANSCRIBER:2048; do
             name="${pair%%:*}"
             wanted="${pair#*:}"
             value=$(( wanted < mem_cap ? wanted : mem_cap ))
@@ -2404,7 +2404,7 @@ update_production() {
     log_info "Reconstruyendo imágenes Docker (sin cache de código)..."
     $COMPOSE_CMD -f docker-compose.prod.yml build \
         --build-arg BUILDKIT_INLINE_CACHE=1 \
-        backend daphne frontend celery_worker celery_beat websocket_server dialer_engine nginx asterisk kamailio rtpengine 2>&1
+        backend daphne frontend celery_worker celery_beat websocket_server dialer_engine nginx asterisk kamailio rtpengine transcriber 2>&1
     log_success "Imágenes reconstruidas"
 
     # 4. Reiniciar servicios con nuevas imágenes (up -d reemplaza solo los cambiados)

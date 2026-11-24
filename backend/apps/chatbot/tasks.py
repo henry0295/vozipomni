@@ -14,6 +14,13 @@ def run_connector_step(session_id: int, node_id: str):
     continue_after_connector(session_id, node_id)
 
 
+@shared_task(name='chatbot.run_ai_step', ignore_result=True)
+def run_ai_step(session_id: int, node_id: str):
+    """Clasifica con IA el mensaje pendiente de un bloque "Entender intención"."""
+    from .engine import continue_after_ai
+    continue_after_ai(session_id, node_id)
+
+
 @shared_task(name='chatbot.expire_sessions', ignore_result=True)
 def expire_sessions():
     """Marca como expiradas las sesiones inactivas y borra los datos que capturaron."""

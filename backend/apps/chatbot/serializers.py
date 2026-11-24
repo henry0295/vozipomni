@@ -3,7 +3,7 @@ from rest_framework import serializers
 from apps.messaging.models import Channel
 
 from .connectors import actions_for
-from .models import BotFlow, BotFlowVersion, BotSession, Connector, ConnectorLog
+from .models import AIProvider, BotFlow, BotFlowVersion, BotSession, Connector, ConnectorLog
 from .schema import validate_definition
 
 SECRET_MASK = '••••••'
@@ -131,10 +131,11 @@ class BotFlowSerializer(serializers.ModelSerializer):
                         {'channels': f'El canal "{ch.name}" ya tiene activo el bot "{clash.name}"'})
         if attrs.get('draft'):
             ids = set(Connector.objects.filter(is_active=True).values_list('id', flat=True))
+            ai_ids = set(AIProvider.objects.filter(is_active=True).values_list('id', flat=True))
             # En el borrador solo se valida la forma básica; la validación completa es al publicar
             if not isinstance(attrs['draft'], dict):
                 raise serializers.ValidationError({'draft': 'Formato inválido'})
-            attrs['_draft_warnings'] = validate_definition(attrs['draft'], connectors_ids=ids)
+            attrs['_draft_warnings'] = validate_definition(attrs['draft'], connectors_ids=ids, ai_ids=ai_ids)
         return attrs
 
     def create(self, validated):
@@ -155,3 +156,44 @@ class BotSessionSerializer(serializers.ModelSerializer):
         model = BotSession
         fields = ['id', 'conversation', 'contact', 'channel', 'flow', 'version_number', 'current_node',
                   'status', 'path', 'started_at', 'last_activity_at']
+
+
+class AIProviderSerializer(serializers.ModelSerializer):
+    api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    has_api_key = serializers.SerializerMethodField()
+    tokens_this_month = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AIProvider
+        fields = ['id', 'name', 'provider_type', 'base_url', 'model', 'api_key', 'has_api_key', 'api_version',
+                  'temperature', 'timeout_seconds', 'mask_personal_data', 'monthly_token_limit',
+                  'tokens_this_month', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+    def get_has_api_key(self, obj):
+        return bool(obj.api_key)
+
+    def get_tokens_this_month(self, obj):
+        from django.db.models import Sum
+        from django.utils import timezone
+        start = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        agg = obj.usage.filter(created_at__gte=start).aggregate(p=Sum('prompt_tokens'), c=Sum('completion_tokens'))
+        return (agg['p'] or 0) + (agg['c'] or 0)
+
+    def validate(self, attrs):
+        ptype = attrs.get('provider_type', getattr(self.instance, 'provider_type', 'openai_compatible'))
+        base = attrs.get('base_url', getattr(self.instance, 'base_url', ''))
+        if ptype in ('azure_openai', 'openai_compatible') and not base:
+            raise serializers.ValidationError({'base_url': 'Indique la URL del servicio'})
+        if base and not base.lower().startswith(('http://', 'https://')):
+            raise serializers.ValidationError({'base_url': 'Debe empezar por http:// o https://'})
+        t = attrs.get('temperature')
+        if t is not None and not 0 <= t <= 2:
+            raise serializers.ValidationError({'temperature': 'Entre 0 y 2'})
+        return attrs
+
+    def update(self, instance, validated):
+        # api_key vacío = conservar la actual
+        if not validated.get('api_key'):
+            validated.pop('api_key', None)
+        return super().update(instance, validated)

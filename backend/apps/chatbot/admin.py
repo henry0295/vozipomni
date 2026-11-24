@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import BotFlow, BotFlowVersion, BotSession, Connector, ConnectorLog
+from .models import AIProvider, AIUsageLog, BotFlow, BotFlowVersion, BotSession, Connector, ConnectorLog
 
 
 @admin.register(Connector)
@@ -28,3 +28,15 @@ class BotSessionAdmin(admin.ModelAdmin):
     list_display = ('conversation', 'flow', 'status', 'current_node', 'last_activity_at')
     list_filter = ('status', 'flow')
     exclude = ('variables',)
+
+
+@admin.register(AIProvider)
+class AIProviderAdmin(admin.ModelAdmin):
+    list_display = ('name', 'provider_type', 'model', 'mask_personal_data', 'is_active')
+    exclude = ('api_key',)
+
+
+@admin.register(AIUsageLog)
+class AIUsageLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'provider', 'purpose', 'status', 'result', 'prompt_tokens', 'completion_tokens')
+    list_filter = ('status', 'purpose', 'provider')
