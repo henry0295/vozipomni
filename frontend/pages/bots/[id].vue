@@ -108,8 +108,8 @@
 
         <!-- Texto -->
         <UFormGroup
-          v-if="['message','buttons','list','question','dynamic_list','handoff','end','connector'].includes(kind) || (kind === 'ai_intent' && d.source !== 'variable')"
-          :label="kind === 'connector' ? 'Mensaje de espera (opcional)' : 'Texto'"
+          v-if="['message','buttons','list','question','dynamic_list','handoff','end','connector','analyze_file'].includes(kind) || (kind === 'ai_intent' && d.source !== 'variable')"
+          :label="['connector','analyze_file'].includes(kind) ? 'Mensaje de espera (opcional)' : 'Texto'"
           :hint="`${(d.text || '').length}/1024`"
         >
           <UTextarea v-model="d.text" :rows="kind === 'connector' ? 2 : 4" size="sm" />
@@ -143,8 +143,17 @@
         <!-- Pregunta -->
         <template v-if="kind === 'question'">
           <UFormGroup label="Guardar respuesta en" required><UInput v-model="d.variable" size="sm" /></UFormGroup>
-          <UFormGroup label="Validación"><USelect v-model="d.validation" :options="VALIDATIONS" size="sm" /></UFormGroup>
-          <UFormGroup v-if="d.validation === 'regex'" label="Expresión regular"><UInput v-model="d.pattern" size="sm" placeholder="^[0-9]{6,10}$" /></UFormGroup>
+          <UFormGroup label="El cliente responde con">
+            <USelect v-model="d.accept" :options="ACCEPTS" size="sm" />
+          </UFormGroup>
+          <template v-if="d.accept && d.accept !== 'text'">
+            <UCheckbox v-model="d.allow_skip" label="Permitir continuar sin archivo (el cliente escribe «no»)" />
+            <p class="text-[11px] text-gray-400">
+              La variable guarda el archivo recibido. Úsela en «Analizar archivo» o para adjuntarlo con un conector (por ejemplo, GLPI).
+            </p>
+          </template>
+          <UFormGroup v-if="!d.accept || d.accept === 'text'" label="Validación"><USelect v-model="d.validation" :options="VALIDATIONS" size="sm" /></UFormGroup>
+          <UFormGroup v-if="(!d.accept || d.accept === 'text') && d.validation === 'regex'" label="Expresión regular"><UInput v-model="d.pattern" size="sm" placeholder="^[0-9]{6,10}$" /></UFormGroup>
           <UFormGroup label="Mensaje si no es válido"><UInput v-model="d.error_text" size="sm" /></UFormGroup>
           <UFormGroup label="Intentos"><UInput v-model.number="d.max_retries" type="number" min="1" max="10" size="sm" /></UFormGroup>
         </template>
@@ -202,6 +211,64 @@
           <UFormGroup label="Descripción (opcional)"><UInput v-model="d.description_field" size="sm" placeholder="{{status}}" /></UFormGroup>
           <UFormGroup label="Guardar el elemento elegido en" required><UInput v-model="d.variable" size="sm" /></UFormGroup>
           <UFormGroup label="Texto del botón"><UInput v-model="d.button_label" size="sm" maxlength="20" /></UFormGroup>
+        </template>
+
+        <!-- Analizar archivo -->
+        <template v-if="kind === 'analyze_file'">
+          <UFormGroup label="Archivo (variable de la Pregunta que lo pidió)" required>
+            <UInput v-model="d.source_variable" size="sm" placeholder="foto" />
+          </UFormGroup>
+          <UFormGroup label="Qué hacer">
+            <USelect v-model="d.mode" :options="FILE_MODES" size="sm" />
+          </UFormGroup>
+          <UAlert
+            v-if="d.mode === 'vision'"
+            color="orange"
+            variant="soft"
+            icon="i-heroicons-shield-exclamation"
+            description="La imagen se envía al proveedor de IA (no se pueden ocultar datos dentro de una foto). No lo use con documentos de identidad, datos de salud o financieros: para esos use «Extraer datos», que lee la imagen en el servidor y solo envía texto con los datos ocultos."
+          />
+          <p v-else class="text-[11px] text-gray-400">
+            El archivo se lee en el servidor (OCR en español, PDF, Word, Excel o la transcripción del audio).
+            {{ d.mode === 'ocr' ? 'No se usa IA.' : 'A la IA solo se envía el texto, con los datos personales ocultos.' }}
+          </p>
+          <UFormGroup v-if="d.mode !== 'ocr'" label="Proveedor de IA" required>
+            <USelect v-model="d.provider_id" :options="aiProviderOptions" size="sm" placeholder="Seleccione" />
+          </UFormGroup>
+          <UFormGroup v-if="d.mode === 'vision'" label="Instrucción para la IA">
+            <UTextarea v-model="d.instruction" :rows="2" size="sm" placeholder="Indica si el router muestra luces rojas y qué modelo es" />
+          </UFormGroup>
+          <div v-if="d.mode === 'classify'">
+            <p class="text-sm font-medium mb-1">Categorías</p>
+            <div v-for="(c, i) in d.categories" :key="i" class="flex gap-1 mb-1">
+              <UInput :model-value="c.id" size="xs" placeholder="id" class="w-24" @update:model-value="renameCategory(c, $event)" />
+              <UInput v-model="c.name" size="xs" placeholder="Orden médica" class="flex-1" />
+              <UButton size="xs" color="red" variant="ghost" icon="i-heroicons-x-mark" @click="removeCategory(i)" />
+            </div>
+            <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="d.categories.push({ id: `cat_${d.categories.length + 1}`, name: '', description: '' })">Agregar categoría</UButton>
+          </div>
+          <div v-if="d.mode !== 'ocr'">
+            <p class="text-sm font-medium mb-1">Datos a extraer {{ d.mode === 'extract' ? '' : '(opcional)' }}</p>
+            <div v-for="(f, i) in d.fields" :key="i" class="flex gap-1 mb-1">
+              <UInput v-model="f.name" size="xs" placeholder="documento" class="w-28" />
+              <UInput v-model="f.description" size="xs" placeholder="Número de cédula del paciente" class="flex-1" />
+              <UButton size="xs" color="red" variant="ghost" icon="i-heroicons-x-mark" @click="d.fields.splice(i, 1)" />
+            </div>
+            <UButton size="xs" variant="soft" icon="i-heroicons-plus" @click="d.fields.push({ name: '', description: '' })">Agregar dato</UButton>
+          </div>
+          <UFormGroup v-if="d.mode === 'classify'" label="Confianza mínima" :hint="`${Math.round((d.min_confidence || 0) * 100)} %`">
+            <URange v-model="d.min_confidence" :min="0" :max="1" :step="0.05" size="sm" />
+          </UFormGroup>
+          <UFormGroup v-if="d.mode !== 'vision'" label="Mínimo de caracteres leídos" hint="Menos = «No se pudo leer»">
+            <UInput v-model.number="d.min_chars" type="number" min="1" size="sm" />
+          </UFormGroup>
+          <UFormGroup label="Guardar resultado en"><UInput v-model="d.output_variable" size="sm" /></UFormGroup>
+          <p class="text-[11px] text-gray-400">
+            Resultado: texto leído en «{{ d.output_variable }}.text»{{ d.mode === 'vision' ? ', descripción en «' + d.output_variable + '.description»' : '' }}. Los datos extraídos quedan como variables sueltas.
+          </p>
+          <UFormGroup label="Resultado simulado (JSON)" hint="Solo para el simulador">
+            <UTextarea v-model="mockText" :rows="3" size="xs" class="font-mono" @blur="applyMock" />
+          </UFormGroup>
         </template>
 
         <!-- Entender intención (IA) -->
@@ -306,6 +373,11 @@
           </p>
         </div>
         <div class="border-t bg-white p-2 space-y-2">
+          <div v-if="sim.accept" class="flex flex-wrap gap-1">
+            <UButton v-for="f in simFileTypes" :key="f.value" size="xs" color="primary" variant="outline" icon="i-heroicons-paper-clip" @click="sendSimFile(f.value)">
+              {{ f.label }}
+            </UButton>
+          </div>
           <div v-if="sim.options.length" class="flex flex-wrap gap-1">
             <UButton v-for="o in sim.options" :key="o.id" size="xs" variant="soft" @click="sendSim(o.label, o.id)">{{ o.label }}</UButton>
           </div>
@@ -350,7 +422,7 @@ import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
 import BotNode from '~/components/bot/BotNode.vue'
-import { BLOCKS, OPERATORS, PALETTE, VALIDATIONS, defaultData, flowVariables, fromFlow, toFlow, uid } from '~/utils/botBlocks'
+import { ACCEPTS, BLOCKS, FILE_MODES, OPERATORS, PALETTE, VALIDATIONS, defaultData, flowVariables, fromFlow, toFlow, uid } from '~/utils/botBlocks'
 
 definePageMeta({ middleware: ['auth'] })
 
@@ -404,6 +476,17 @@ function renameIntent(it: any, value: string) {
   edges.value = edges.value.map(e => (e.source === selectedId.value && e.sourceHandle === old ? { ...e, sourceHandle: `intent:${clean}` } : e))
   it.id = clean
 }
+function renameCategory(c: any, value: string) {
+  const clean = String(value).toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 40)
+  const old = `cat:${c.id}`
+  edges.value = edges.value.map(e => (e.source === selectedId.value && e.sourceHandle === old ? { ...e, sourceHandle: `cat:${clean}` } : e))
+  c.id = clean
+}
+function removeCategory(i: number) {
+  const c = d.value.categories[i]
+  d.value.categories.splice(i, 1)
+  edges.value = edges.value.filter(e => !(e.source === selectedId.value && e.sourceHandle === `cat:${c.id}`))
+}
 const campaignOptions = computed(() => [{ label: '— La del canal —', value: null }, ...campaigns.value.map(c => ({ label: c.name, value: c.id }))])
 const timeConditionOptions = computed(() => [{ label: '— Horario del canal —', value: null }, ...timeConditions.value.map(t => ({ label: t.name, value: t.id }))])
 
@@ -412,7 +495,9 @@ watch(() => nodes.value.map(n => n.data), markDirty, { deep: true })
 
 // Resultado simulado del conector (editable como JSON)
 const mockText = ref('')
-watch(selectedId, () => { mockText.value = d.value.kind === 'connector' ? JSON.stringify(d.value.mock_result || {}, null, 1) : '' })
+watch(selectedId, () => {
+  mockText.value = ['connector', 'analyze_file'].includes(d.value.kind) ? JSON.stringify(d.value.mock_result || {}, null, 1) : ''
+})
 function applyMock() {
   try { d.value.mock_result = mockText.value.trim() ? JSON.parse(mockText.value) : {} } catch { toast.add({ title: 'JSON inválido', color: 'orange' }) }
 }
@@ -538,7 +623,19 @@ async function restore(n: number) {
 // ── Simulador ──
 const simBox = ref<HTMLElement>()
 const sim = reactive({ inputs: [] as any[], turns: [] as any[], options: [] as any[], variables: {} as any,
-  status: '', text: '', loading: false, live: false })
+  status: '', text: '', loading: false, live: false, accept: null as string | null })
+const FILE_SIM: Record<string, { label: string, value: string }[]> = {
+  image: [{ label: 'Enviar foto', value: 'image' }],
+  document: [{ label: 'Enviar documento', value: 'document' }],
+  image_or_document: [{ label: 'Enviar foto', value: 'image' }, { label: 'Enviar documento', value: 'document' }],
+  audio: [{ label: 'Enviar audio', value: 'audio' }],
+  file: [{ label: 'Enviar foto', value: 'image' }, { label: 'Enviar documento', value: 'document' }, { label: 'Enviar audio', value: 'audio' }],
+}
+const simFileTypes = computed(() => FILE_SIM[sim.accept || ''] || [])
+function sendSimFile(kind: string) {
+  sim.inputs.push({ file: kind })
+  runSim()
+}
 async function runSim() {
   sim.loading = true
   try {
@@ -547,6 +644,7 @@ async function runSim() {
     })
     sim.turns = r.turns
     sim.options = r.options || []
+    sim.accept = r.accept || null
     sim.variables = r.variables || {}
     sim.status = r.status
     await nextTick()

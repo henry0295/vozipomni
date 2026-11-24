@@ -78,7 +78,7 @@ def glpi_support(params):
     b.node('crear_ticket', 'connector', 5, 0, title='Crear ticket en GLPI',
            text='Un momento, estoy creando tu ticket…', connector_id=cid, action='create_ticket',
            inputs={'title': 'WhatsApp — {{categoria}}',
-                   'description': '{{descripcion}}\n\nCliente: {{contact.name}} ({{contact.phone}})\nCanal: WhatsApp',
+                   'description': '{{descripcion}}\n\n{{leido.text}}\n\nCliente: {{contact.name}} ({{contact.phone}})\nCanal: WhatsApp',
                    'requester_id': '{{solicitante.id}}', 'urgency': '{{urgencia}}'},
            output_variable='ticket')
     b.node('creado', 'buttons', 6, 0, title='Ticket creado',
@@ -126,10 +126,36 @@ def glpi_support(params):
     b.link('menu', 'horario', 'opt:asesor')
     for opt in ('internet', 'telefonia', 'facturacion', 'otro'):
         b.link('categoria', 'descripcion', f'opt:{opt}')
-    b.link('descripcion', 'urgencia')
+    # Adjunto opcional: foto o documento, leído localmente (OCR) y adjuntado al ticket
+    b.node('pregunta_adjunto', 'buttons', 3, 1, title='¿Adjunta foto?',
+           text='¿Quieres enviar una foto o captura del problema?',
+           options=[{'id': 'si', 'label': 'Sí, enviar foto'}, {'id': 'no', 'label': 'No'}])
+    b.node('pedir_foto', 'question', 4, 1, title='Recibir foto', accept='image_or_document', allow_skip=True,
+           text='Envía la foto, captura de pantalla o documento (o escribe "no" para continuar sin adjunto).',
+           variable='foto', error_text='Envía una imagen o un documento, o escribe "no".', max_retries=2)
+    b.node('leer_foto', 'analyze_file', 5, 1, title='Leer el adjunto (OCR local)', mode='ocr',
+           source_variable='foto', output_variable='leido', min_chars=5)
+    b.node('tiene_foto', 'condition', 6, 1, title='¿Envió adjunto?',
+           rules=[{'variable': 'foto', 'operator': 'not_empty', 'value': ''}], match='all')
+    b.node('adjuntar', 'connector', 7, 1, title='Adjuntar al ticket', connector_id=cid, action='attach_document',
+           inputs={'ticket_id': '{{ticket.id}}', 'file': '{{foto}}'}, output_variable='documento')
+
+    b.link('descripcion', 'pregunta_adjunto')
+    b.link('pregunta_adjunto', 'pedir_foto', 'opt:si')
+    b.link('pregunta_adjunto', 'urgencia', 'opt:no')
+    b.link('pedir_foto', 'leer_foto')
+    b.link('pedir_foto', 'urgencia', 'invalid')
+    b.link('leer_foto', 'urgencia', 'success')
+    b.link('leer_foto', 'urgencia', 'unreadable')
+    b.link('leer_foto', 'urgencia', 'error')
     for opt in ('baja', 'media', 'alta'):
         b.link('urgencia', 'crear_ticket', f'opt:{opt}')
-    b.link('crear_ticket', 'creado', 'success')
+    b.link('crear_ticket', 'tiene_foto', 'success')
+    b.link('tiene_foto', 'adjuntar', 'true')
+    b.link('tiene_foto', 'creado', 'false')
+    b.link('adjuntar', 'creado', 'success')
+    b.link('adjuntar', 'creado', 'empty')
+    b.link('adjuntar', 'creado', 'error')
     b.link('crear_ticket', 'error', 'error')
     b.link('creado', 'horario', 'opt:si')
     b.link('creado', 'gracias', 'opt:no')

@@ -130,6 +130,7 @@ class Transport:
     def end(self, state, data): ...
     def connector(self, state, node): ...
     def ai(self, state, node, text): ...
+    def analyze_file(self, state, node, info): ...
     def is_open(self, data) -> bool:
         return True
 
@@ -171,6 +172,16 @@ class SimTransport(Transport):
         self.replies.append({'type': 'system', 'text': f"[Conector] {data.get('action')} → {res.status}"
                              + (f": {res.error}" if res.error else '')})
         return res.status, res.data
+
+    def analyze_file(self, state, node, info):
+        """Simulador: los archivos son simulados; devuelve el resultado simulado del bloque."""
+        data = node.get('data') or {}
+        mock = data.get('mock_result') or {'text': 'Texto leído del archivo (simulado)'}
+        self.replies.append({'type': 'system', 'text': f"[Archivo] {data.get('mode') or 'ocr'} → éxito (simulado)"})
+        if (data.get('mode') == 'classify') and not mock.get('category'):
+            cats = data.get('categories') or []
+            mock = {**mock, 'category': cats[0]['id'] if cats else None, 'confidence': 0.9}
+        return 'success', mock
 
     def ai(self, state, node, text):
         """Simulador: IA real (live) o clasificación aproximada por palabras clave."""
@@ -281,6 +292,19 @@ class Runner:
             self.state['waiting'] = True
             return None
 
+        if ntype == 'analyze_file':
+            info = _dig(self.vars, data.get('source_variable') or '')
+            if not isinstance(info, dict) or not (info.get('message_id') or info.get('simulated')):
+                return self._out(node, 'unreadable')
+            if text:
+                self.t.text(text)
+            res = self.t.analyze_file(self.state, node, info)
+            if res is None:
+                self.state['status'] = 'busy'
+                return None
+            status, result = res
+            return self.apply_file_result(node, status, result)
+
         if ntype == 'condition':
             rules = data.get('rules') or []
             results = [eval_rule(r, self.vars) for r in rules]
@@ -367,6 +391,37 @@ class Runner:
             return self._out(node, f"intent:{r['intent']}") or self._out(node, 'unknown')
         return self._out(node, 'unknown')
 
+    def apply_file_result(self, node, status, result):
+        data = node.get('data') or {}
+        out_var = data.get('output_variable') or 'archivo_leido'
+        self.state['status'] = 'active'
+        r = dict(result or {})
+        fields = r.pop('_fields', None) or {}
+        self.vars[out_var] = r
+        for k, v in fields.items():
+            self.vars[k] = v
+        if status == 'error':
+            return self._out(node, 'error') or self._out(node, 'unreadable')
+        if status == 'unreadable':
+            return self._out(node, 'unreadable')
+        if (data.get('mode') or 'ocr') == 'classify':
+            try:
+                min_conf = float(data.get('min_confidence', 0.5))
+            except (TypeError, ValueError):
+                min_conf = 0.5
+            if r.get('category') and float(r.get('confidence') or 0) >= min_conf:
+                return self._out(node, f"cat:{r['category']}") or self._out(node, 'unknown')
+            return self._out(node, 'unknown')
+        return self._out(node, 'success')
+
+    def receive_file(self, info: dict):
+        """El cliente envió un archivo mientras el bot espera una Pregunta que acepta archivos."""
+        node = self.nodes.get(self.state.get('current'))
+        data = (node or {}).get('data') or {}
+        self.state['retries'] = 0
+        self.vars[data.get('variable') or 'archivo'] = info
+        return self.run_from(self._out(node, 'next'))
+
     def _handoff(self, data, text=''):
         if text:
             self.t.text(text)
@@ -402,6 +457,15 @@ class Runner:
             if nxt:
                 self.run_from(nxt)
             return None
+
+        if ntype == 'question' and (data.get('accept') or 'text') != 'text':
+            # Se esperaba un archivo y llegó texto
+            if data.get('allow_skip') and _norm(value) in ('no', 'omitir', 'ninguno', 'ninguna', 'saltar'):
+                self.state['retries'] = 0
+                self.vars[data.get('variable') or 'archivo'] = None
+                return self.run_from(self._out(node, 'next'))
+            return self._retry(node, data.get('error_text') or 'Por favor envía el archivo (foto o documento).',
+                               handle='invalid')
 
         if ntype == 'question':
             if not validate_input(data, value or ''):
@@ -448,6 +512,7 @@ class ChannelTransport(Transport):
         self.session = session
         self.pending_connector = None
         self.pending_ai = None
+        self.pending_file = None
 
     def _send(self, body, **kw):
         from apps.messaging.whatsapp import create_outbound
@@ -519,6 +584,10 @@ class ChannelTransport(Transport):
         self.pending_ai = node['id']
         return None
 
+    def analyze_file(self, state, node, info):
+        self.pending_file = node['id']
+        return None
+
 
 def build_whatsapp_interactive(body, options, kind, button_label):
     """Mensaje interactivo nativo de WhatsApp (botones: máx. 3 · lista: máx. 10)."""
@@ -581,6 +650,16 @@ def _persist(session, runner):
         except Exception:
             logger.exception('[Bot] No se pudo encolar la IA: se ejecuta en línea')
             continue_after_ai(session.id, pending_ai)
+    pending_file = getattr(runner.t, 'pending_file', None)
+    if pending_file:
+        runner.t.pending_file = None
+        from .tasks import run_file_step
+        try:
+            run_file_step.delay(session.id, pending_file)
+        except Exception:
+            logger.exception('[Bot] No se pudo encolar la lectura del archivo')
+            session.status = 'active'
+            session.save(update_fields=['status'])
 
 
 def _transcription_enabled():
@@ -644,6 +723,17 @@ def handle_inbound(conv, message, created) -> bool:
 
         if not session.version:
             return False
+        # ¿El bot está esperando un archivo (Pregunta que acepta archivos)?
+        from .media import MEDIA_TYPES, accepts, file_info
+        if message.message_type in MEDIA_TYPES and session.waiting:
+            current = node_map(session.version.definition).get(session.current_node) or {}
+            cdata = current.get('data') or {}
+            if current.get('type') == 'question' and accepts(cdata.get('accept'), message.message_type):
+                runner = Runner(session.version.definition, _state_from(session), ChannelTransport(conv, session))
+                runner.receive_file(file_info(message))
+                _persist(session, runner)
+                return True
+
         if message.message_type == 'audio' and _transcription_enabled():
             # Nota de voz: se transcribe localmente y el flujo continúa con el texto
             # (messaging.transcribe_message llama a continue_with_transcript)
@@ -749,6 +839,57 @@ def continue_after_ai(session_id, node_id):
         auto_assign(conv)
 
 
+def continue_after_file(session_id, node_id):
+    """Tarea Celery: lee/analiza el archivo del bloque «Analizar archivo» y continúa. Lanza NotReady."""
+    from apps.messaging.routing import auto_assign
+    from .media import analyze
+    from .models import BotSession
+
+    session = BotSession.objects.select_related('conversation', 'version', 'conversation__channel').filter(
+        pk=session_id).first()
+    if not session or not session.version or session.status != 'busy':
+        return
+    conv = session.conversation
+    runner = Runner(session.version.definition, _state_from(session), ChannelTransport(conv, session))
+    node = runner.nodes.get(node_id)
+    if not node:
+        return
+    data = node.get('data') or {}
+    info = _dig(runner.vars, data.get('source_variable') or '')
+    status, result = analyze(data, info, conversation_id=conv.id)   # NotReady → la tarea reintenta
+    try:
+        target = runner.apply_file_result(node, status, result)
+        if target:
+            runner.run_from(target)
+        elif status in ('error', 'unreadable'):
+            runner._handoff({}, 'No pude leer el archivo. Te comunico con un asesor.')
+        _persist(session, runner)
+    except Exception:
+        logger.exception(f'[Bot] Error continuando tras analizar archivo en conv {conv.id}')
+        session.status = 'error'
+        session.save(update_fields=['status'])
+        auto_assign(conv)
+
+
+def fail_file_step(session_id, node_id):
+    """El archivo nunca se descargó: continuar por «No se pudo leer»."""
+    from .models import BotSession
+    session = BotSession.objects.select_related('conversation', 'version', 'conversation__channel').filter(
+        pk=session_id, status='busy').first()
+    if not session or not session.version:
+        return
+    runner = Runner(session.version.definition, _state_from(session), ChannelTransport(session.conversation, session))
+    node = runner.nodes.get(node_id)
+    if not node:
+        return
+    target = runner.apply_file_result(node, 'unreadable', {'error': 'El archivo no se pudo descargar'})
+    if target:
+        runner.run_from(target)
+    else:
+        runner._handoff({}, 'No pude abrir el archivo. Te comunico con un asesor.')
+    _persist(session, runner)
+
+
 def continue_with_transcript(message, text):
     """La transcripción de una nota de voz llegó: el bot la procesa como texto escrito."""
     from apps.messaging.routing import auto_assign
@@ -790,11 +931,26 @@ def simulate(definition, inputs, variables=None, live=False):
         if runner.state.get('status') in ('handed_off', 'completed'):
             break
         t.replies = []
+        if isinstance(item, dict) and item.get('file'):
+            # Archivo simulado (foto, documento, audio) para Preguntas que aceptan archivos
+            from .media import accepts
+            current = runner.nodes.get(runner.state.get('current')) or {}
+            kind = str(item['file'])
+            if current.get('type') == 'question' and runner.state.get('waiting') and \
+                    accepts((current.get('data') or {}).get('accept'), kind):
+                runner.receive_file({'type': kind, 'filename': f'simulado.{kind}', 'simulated': True})
+            else:
+                t.replies.append({'type': 'system', 'text': 'El bot no esperaba un archivo: pasaría a un asesor'})
+            turns.append({'input': f'📎 {kind} (simulado)', 'replies': t.replies})
+            continue
         value = item.get('text', '') if isinstance(item, dict) else str(item)
         reply_id = item.get('reply_id', '') if isinstance(item, dict) else ''
         runner.receive(value, reply_id)
         turns.append({'input': value, 'replies': t.replies})
     public = {k: v for k, v in runner.state['variables'].items() if not k.startswith('_')}
+    current = runner.nodes.get(runner.state.get('current')) or {}
+    accept = (current.get('data') or {}).get('accept') if current.get('type') == 'question' else None
     return {'turns': turns, 'status': runner.state.get('status'), 'current': runner.state.get('current'),
             'waiting': runner.state.get('waiting'), 'variables': public,
+            'accept': accept if runner.state.get('waiting') and accept not in (None, 'text') else None,
             'options': runner.state.get('options') if runner.state.get('waiting') else []}

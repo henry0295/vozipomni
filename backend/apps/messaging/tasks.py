@@ -52,6 +52,7 @@ def download_whatsapp_media(self, message_id: int):
     from .realtime import push
     push(msg.conversation, 'message.media', {'message_id': msg.id})
     maybe_transcribe(msg)
+    maybe_extract(msg)
 
 
 @shared_task
@@ -155,6 +156,7 @@ def download_remote_media(self, message_id: int):
     from .realtime import push
     push(msg.conversation, 'message.media', {'message_id': msg.id})
     maybe_transcribe(msg)
+    maybe_extract(msg)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -292,3 +294,74 @@ def transcribe_message(self, message_id: int):
         pass
     except Exception:
         logger.exception(f"[Transcripción] Error continuando el bot del mensaje {msg.id}")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Lectura local de imágenes y documentos entrantes (OCR / PDF / Office)
+# ══════════════════════════════════════════════════════════════════════════════
+
+READABLE_TYPES = ('image', 'document')
+
+
+def reading_enabled() -> bool:
+    return bool(os.getenv('TRANSCRIBER_URL', '').strip()) and \
+        os.getenv('READ_INBOUND_DOCUMENTS', 'true').lower() in ('1', 'true', 'yes')
+
+
+def maybe_extract(msg):
+    if msg.direction != 'inbound' or msg.message_type not in READABLE_TYPES or not reading_enabled():
+        return
+    if not (msg.metadata or {}).get('local_path'):
+        return
+    try:
+        extract_message_text.delay(msg.id)
+    except Exception as e:
+        logger.warning(f"[Lectura] No se pudo encolar el mensaje {msg.id}: {e}")
+
+
+def read_file_text(msg) -> dict:
+    """Texto de un adjunto (usa el ya leído si existe). Lanza RuntimeError si no se pudo."""
+    import requests
+    meta = msg.metadata or {}
+    if msg.message_type == 'audio':
+        if meta.get('transcription'):
+            return {'text': meta['transcription'], 'method': 'transcription'}
+        url, payload = 'transcribe', {'path': meta.get('local_path'), 'language': 'es'}
+    else:
+        if meta.get('extracted_status') == 'done':
+            return {'text': meta.get('extracted_text', ''), 'method': meta.get('extracted_method', '')}
+        url, payload = 'extract', {'path': meta.get('local_path'), 'mime': meta.get('mime_type', '')}
+    base = os.getenv('TRANSCRIBER_URL', '').rstrip('/')
+    if not base or not payload.get('path'):
+        raise RuntimeError('Archivo no disponible o lectura desactivada')
+    resp = requests.post(f'{base}/{url}', json=payload, timeout=600)
+    data = resp.json() if resp.content else {}
+    if resp.status_code >= 400:
+        raise RuntimeError(data.get('error') or f'HTTP {resp.status_code}')
+    return {'text': (data.get('text') or '').strip(), 'method': data.get('method', url)}
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=20, name='messaging.extract_message_text')
+def extract_message_text(self, message_id: int):
+    import requests
+    from .models import Message
+    from .realtime import push
+
+    msg = Message.objects.select_related('conversation__channel').filter(id=message_id).first()
+    if not msg:
+        return
+    meta = dict(msg.metadata or {})
+    try:
+        result = read_file_text(msg)
+        meta.update({'extracted_text': result['text'][:20000], 'extracted_method': result['method'],
+                     'extracted_status': 'done'})
+    except requests.ConnectionError as e:
+        if self.request.retries < self.max_retries:
+            raise self.retry(exc=e)
+        meta.update({'extracted_status': 'failed', 'extracted_error': 'Servicio de lectura no disponible'})
+    except Exception as e:
+        meta.update({'extracted_status': 'failed', 'extracted_error': str(e)[:300]})
+        logger.warning(f"[Lectura] Mensaje {msg.id}: {e}")
+    msg.metadata = meta
+    msg.save(update_fields=['metadata'])
+    push(msg.conversation, 'message.extracted', {'message_id': msg.id,
+                                                 'text': (meta.get('extracted_text') or '')[:500]})

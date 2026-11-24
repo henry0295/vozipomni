@@ -557,6 +557,13 @@ function handleEvent(evt: any) {
     const m = messages.value.find(x => x.id === evt.message_id)
     if (m) { m.has_media = true; return }
   }
+  if (evt.event === 'message.extracted') {
+    const m = messages.value.find(x => x.id === evt.message_id)
+    if (m) {
+      m.metadata = { ...(m.metadata || {}), extracted_text: evt.text, extracted_status: evt.text ? 'done' : 'failed' }
+      return
+    }
+  }
   if (evt.event === 'message.transcribed') {
     const m = messages.value.find(x => x.id === evt.message_id)
     if (m) {

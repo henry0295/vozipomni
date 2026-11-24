@@ -21,6 +21,20 @@ def run_ai_step(session_id: int, node_id: str):
     continue_after_ai(session_id, node_id)
 
 
+@shared_task(bind=True, name='chatbot.run_file_step', ignore_result=True, max_retries=12)
+def run_file_step(self, session_id: int, node_id: str):
+    """Lee o analiza el archivo de un bloque «Analizar archivo». Espera a que termine la descarga."""
+    from .engine import continue_after_file, fail_file_step
+    from .media import NotReady
+    try:
+        continue_after_file(session_id, node_id)
+    except NotReady:
+        if self.request.retries >= self.max_retries:
+            fail_file_step(session_id, node_id)
+            return
+        raise self.retry(countdown=5)
+
+
 @shared_task(name='chatbot.expire_sessions', ignore_result=True)
 def expire_sessions():
     """Marca como expiradas las sesiones inactivas y borra los datos que capturaron."""

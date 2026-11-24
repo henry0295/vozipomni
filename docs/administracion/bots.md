@@ -99,3 +99,32 @@ La IA solo decide por qué salida sigue el flujo: no responde al cliente ni ejec
 **Privacidad:** con «Ocultar datos personales» activo, antes de enviar el texto se reemplazan documentos, teléfonos, emails y tarjetas por marcadores (`[DOC_1]`). Los valores que la IA extraiga con esos marcadores se restauran en el servidor, así que el dato real no sale. Para datos de salud se recomienda un modelo local o Azure con residencia de datos. Cada uso queda registrado (intención, tokens y tiempo, sin el texto del cliente), y se puede fijar un límite mensual de tokens.
 
 **Simulador:** sin «Conectores reales», el bloque de IA usa una clasificación aproximada por palabras clave (no consume tokens). Con la opción marcada (solo administrador) llama al proveedor real.
+
+## Fotos y documentos: lectura local y bloque «Analizar archivo»
+
+Sin GPU, el servicio `transcriber` también lee los archivos **en el propio servidor**:
+
+| Archivo | Cómo se lee |
+|---|---|
+| PDF con texto, Word, Excel | Extracción directa del texto |
+| Foto, captura o PDF escaneado | OCR en español (Tesseract), hasta 5 páginas |
+| Nota de voz | Transcripción (Whisper) |
+
+El texto leído de cada imagen o documento entrante aparece en la bandeja ("Texto leído del archivo"). Para desactivarlo: `READ_INBOUND_DOCUMENTS=false`.
+
+**Pedir un archivo en el bot:** en el bloque **Pregunta**, elija en "El cliente responde con" la opción imagen, documento, imagen o documento, audio o cualquier archivo. El archivo queda en la variable de la pregunta. Con "Permitir continuar sin archivo", el cliente puede escribir «no». Si escribe otra cosa, el bot vuelve a pedir el archivo y al agotar los intentos sale por "No envió archivo".
+
+**Bloque «Analizar archivo»:**
+
+| Modo | Qué hace | ¿Sale algo del servidor? |
+|---|---|---|
+| Leer texto (OCR local) | Texto en `{{archivo_leido.text}}` | No |
+| Extraer datos | OCR local + IA de texto para obtener campos (documento, fecha, número de orden…) | Solo texto, con los datos personales ocultos |
+| Clasificar documento | OCR local + IA de texto: cédula, factura, orden médica… (una salida por categoría) | Solo texto, con los datos personales ocultos |
+| Describir imagen (visión) | IA con visión para fotos sin texto (un router, un daño) | **Sí, la imagen.** Solo para casos no sensibles |
+
+Salidas: **Leído / No se pudo leer / Error** (en clasificar, una por categoría más "Otro"). El bloque espera a que termine la descarga del archivo.
+
+Confirme siempre con el cliente los datos leídos de una foto antes de usarlos en una acción (por ejemplo, "Leí la cédula {{documento}}, ¿es correcta?"), porque las fotos borrosas pueden leerse mal.
+
+**GLPI:** la acción **Adjuntar archivo al ticket** sube el archivo de una variable (`{{foto}}`) al ticket. La plantilla "Soporte con GLPI" ya pregunta si el cliente quiere enviar una foto, agrega el texto leído a la descripción y adjunta el archivo al ticket.

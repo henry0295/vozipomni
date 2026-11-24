@@ -19,6 +19,11 @@
         <UIcon name="i-heroicons-arrow-down-tray" class="h-4 w-4 text-gray-500" />
       </a>
     </template>
+    <!-- Texto leído localmente de la imagen o el documento (OCR / PDF) -->
+    <details v-if="message.direction === 'inbound' && ['image', 'document'].includes(kind) && extracted" class="mt-1 max-w-[260px] text-xs">
+      <summary class="cursor-pointer text-gray-500">Texto leído del archivo</summary>
+      <p class="whitespace-pre-line text-gray-700 bg-gray-50 border rounded px-2 py-1 max-h-48 overflow-y-auto">{{ extracted }}</p>
+    </details>
     <!-- Transcripción local de la nota de voz -->
     <div v-if="kind === 'audio' && transcription" class="mt-1 max-w-[260px] text-xs text-gray-700 bg-gray-50 border rounded px-2 py-1">
       <span class="text-[10px] uppercase text-gray-400 block">Transcripción</span>
@@ -41,6 +46,7 @@ const error = ref('')
 
 const kind = computed(() => props.message.message_type)
 const transcription = computed(() => props.message.metadata?.transcription || '')
+const extracted = computed(() => props.message.metadata?.extracted_text || '')
 const filename = computed(() =>
   props.message.metadata?.filename || `adjunto-${props.message.id}${props.message.metadata?.mime_type?.includes('pdf') ? '.pdf' : ''}`)
 

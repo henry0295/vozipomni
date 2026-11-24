@@ -1,14 +1,19 @@
-# Transcripción local de audios (faster-whisper en CPU). No envía audio a terceros.
+# Lectura local de archivos en CPU: transcripción de audio (faster-whisper),
+# OCR en español (Tesseract) y texto de PDF/Word/Excel. No envía nada a terceros.
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/models
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        tesseract-ocr tesseract-ocr-spa tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt && useradd -m -u 1000 transcriber && mkdir -p /models && chown 1000:1000 /models
-COPY server.py .
+COPY server.py extract.py ./
 
 USER transcriber
 EXPOSE 9000

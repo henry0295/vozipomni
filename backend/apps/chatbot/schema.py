@@ -31,11 +31,14 @@ NODE_TYPES = {
     'connector': {'success', 'empty', 'error'},
     'dynamic_list': {'next', 'empty'},
     'ai_intent': None,        # salidas dinámicas: intent:<id> + unknown + error
+    'analyze_file': None,     # success|unreadable|error  (classify: cat:<id> + unknown)
     'handoff': set(),
     'end': set(),
 }
 WAITING_TYPES = {'buttons', 'list', 'question', 'dynamic_list'}
 VALIDATIONS = {'text', 'number', 'email', 'phone', 'date', 'document', 'regex'}
+ACCEPT_TYPES = {'text', 'image', 'document', 'image_or_document', 'audio', 'file'}
+FILE_MODES = {'ocr', 'extract', 'classify', 'vision'}
 OPERATORS = {'equals', 'not_equals', 'contains', 'empty', 'not_empty', 'gt', 'lt'}
 VAR_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]{0,40}$')
 MAX_NODES = 200
@@ -58,6 +61,10 @@ def option_handles(node: dict):
     data = node.get('data') or {}
     if node.get('type') == 'ai_intent':
         return {f"intent:{i.get('id')}" for i in data.get('intents', [])} | {'unknown', 'error'}
+    if node.get('type') == 'analyze_file':
+        if data.get('mode') == 'classify':
+            return {f"cat:{c.get('id')}" for c in data.get('categories', [])} | {'unknown', 'unreadable', 'error'}
+        return {'success', 'unreadable', 'error'}
     return {f"opt:{o.get('id')}" for o in data.get('options', [])}
 
 
@@ -155,6 +162,31 @@ def validate_definition(d: dict, *, connectors_ids=None, ai_ids=None) -> list:
                 errors.append(f'Bloque "{label}": variable de resultado inválida')
             if data.get('source', 'wait') == 'wait' and not (data.get('text') or '').strip():
                 errors.append(f'Bloque "{label}": falta la pregunta para el cliente')
+        if ntype == 'question' and (data.get('accept') or 'text') not in ACCEPT_TYPES:
+            errors.append(f'Bloque "{label}": tipo de respuesta desconocido')
+        if ntype == 'analyze_file':
+            mode = data.get('mode') or 'ocr'
+            if mode not in FILE_MODES:
+                errors.append(f'Bloque "{label}": modo de análisis desconocido')
+            if not VAR_RE.match(data.get('source_variable') or ''):
+                errors.append(f'Bloque "{label}": indique la variable del archivo (la de la Pregunta que lo pidió)')
+            if mode in ('extract', 'classify', 'vision'):
+                if not data.get('provider_id'):
+                    errors.append(f'Bloque "{label}": elija el proveedor de IA')
+                elif ai_ids is not None and int(data['provider_id']) not in ai_ids:
+                    errors.append(f'Bloque "{label}": el proveedor de IA no existe o está inactivo')
+            if mode == 'extract' and not data.get('fields'):
+                errors.append(f'Bloque "{label}": indique qué datos extraer')
+            if mode == 'classify':
+                cats = data.get('categories') or []
+                cids = [c.get('id') for c in cats]
+                if not cats or len(cids) != len(set(cids)) or any(not VAR_RE.match(str(c or '')) for c in cids):
+                    errors.append(f'Bloque "{label}": defina categorías con id único')
+            for f in data.get('fields') or []:
+                if not VAR_RE.match(str(f.get('name') or '')):
+                    errors.append(f'Bloque "{label}": nombre de dato a extraer inválido "{f.get("name")}"')
+            if not VAR_RE.match(data.get('output_variable') or ''):
+                errors.append(f'Bloque "{label}": variable de resultado inválida')
         if ntype == 'dynamic_list' and not data.get('source_variable'):
             errors.append(f'Bloque "{label}": indique la variable con la lista')
 
@@ -200,7 +232,7 @@ def _non_waiting_cycle(d, nmap, start):
     while stack:
         cur, depth = stack.pop()
         node = nmap.get(cur)
-        if not node or node.get('type') in WAITING_TYPES or node.get('type') in ('connector', 'ai_intent'):
+        if not node or node.get('type') in WAITING_TYPES or node.get('type') in ('connector', 'ai_intent', 'analyze_file'):
             continue
         for e in d.get('edges', []):
             if e.get('source') != cur:

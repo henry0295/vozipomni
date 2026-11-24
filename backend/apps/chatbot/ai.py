@@ -192,6 +192,69 @@ def classify(p, text, intents, fields=None, *, purpose='intent', conversation_id
         raise AIError(f'{type(e).__name__}: {str(e)[:200]}')
 
 
+VISION_PROMPT = """Eres el asistente de atención al cliente de una empresa en Colombia.
+Analiza la imagen que envió un cliente y responde SOLO un objeto JSON:
+{{"description": "<qué muestra la imagen, máximo 2 frases en español>", "fields": {{...}}}}
+{instruction}
+{fields_block}No inventes datos: si un campo no se ve en la imagen, déjalo en null."""
+
+
+def vision(p, image_path, instruction='', fields=None, *, conversation_id=None):
+    """
+    Describe una imagen con un modelo con visión (GPT-4o-mini, Gemini Flash, llava…).
+    La imagen sale del servidor: úsese solo cuando el bot lo permita explícitamente.
+    """
+    import base64
+    import io
+    from PIL import Image, ImageOps
+
+    if not p or not p.is_active:
+        raise AIError('Proveedor de IA inactivo')
+    _check_budget(p)
+    t0 = time.monotonic()
+    with Image.open(image_path) as img:
+        img = ImageOps.exif_transpose(img).convert('RGB')
+        img.thumbnail((1280, 1280))
+        buf = io.BytesIO()
+        img.save(buf, format='JPEG', quality=85)
+    data_url = 'data:image/jpeg;base64,' + base64.b64encode(buf.getvalue()).decode()
+    fields_block = ''
+    if fields:
+        fields_block = 'Campos a extraer (en "fields"):\n' + '\n'.join(
+            f'- {f["name"]}: {f.get("description", "")}' for f in fields) + '\n'
+    system = VISION_PROMPT.format(instruction=(instruction or '').strip()[:500], fields_block=fields_block)
+    url, headers = _endpoint(p)
+    body = {'messages': [
+        {'role': 'system', 'content': system},
+        {'role': 'user', 'content': [{'type': 'text', 'text': 'Imagen del cliente:'},
+                                     {'type': 'image_url', 'image_url': {'url': data_url}}]},
+    ], 'temperature': p.temperature, 'response_format': {'type': 'json_object'}}
+    if p.provider_type != 'azure_openai':
+        body['model'] = p.model
+    usage = {}
+    try:
+        resp = requests.post(url, json=body, headers={'Content-Type': 'application/json', **headers},
+                             timeout=max(10, min((p.timeout_seconds or 30) * 2, 180)))
+        if resp.status_code >= 400:
+            raise AIError(f'HTTP {resp.status_code}: {resp.text[:300]}')
+        data = resp.json()
+        usage = data.get('usage') or {}
+        content = ((data.get('choices') or [{}])[0].get('message') or {}).get('content') or ''
+        match = re.search(r'\{.*\}', content, re.S)
+        out = json.loads(match.group(0)) if match else {'description': content.strip()[:500]}
+        names = {f['name'] for f in fields or []}
+        result = {'description': str(out.get('description') or '')[:1000],
+                  'fields': {k: v for k, v in (out.get('fields') or {}).items() if k in names and v not in (None, '')}}
+        _log(p, 'vision', 'success', usage, t0, result='imagen', conversation_id=conversation_id)
+        return result
+    except AIError as e:
+        _log(p, 'vision', 'error', usage, t0, error=str(e), conversation_id=conversation_id)
+        raise
+    except Exception as e:
+        _log(p, 'vision', 'error', usage, t0, error=f'{type(e).__name__}: {e}', conversation_id=conversation_id)
+        raise AIError(f'{type(e).__name__}: {str(e)[:200]}')
+
+
 def test_provider(p):
     t0 = time.monotonic()
     try:

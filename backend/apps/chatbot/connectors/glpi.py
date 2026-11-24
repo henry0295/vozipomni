@@ -59,6 +59,10 @@ class GlpiConnector(BaseConnector):
                        [{'name': 'ticket_id', 'label': 'Número de ticket', 'required': True},
                         {'name': 'content', 'label': 'Texto', 'required': True}],
                        'id del seguimiento'),
+            ActionSpec('attach_document', 'Adjuntar archivo al ticket',
+                       [{'name': 'ticket_id', 'label': 'Número de ticket', 'required': True},
+                        {'name': 'file', 'label': 'Variable del archivo (ej. {{foto}})', 'required': True}],
+                       'id del documento creado en GLPI'),
             ActionSpec('list_categories', 'Categorías ITIL',
                        [], 'lista de categorías (id, nombre)', returns_list=True),
         ]
@@ -214,6 +218,32 @@ class GlpiConnector(BaseConnector):
             'itemtype': 'Ticket', 'items_id': int(tid), 'content': content.replace('\n', '<br>'),
         }}) or {}
         return ConnectorResult('success', {'id': res.get('id'), 'ticket_id': int(tid)})
+
+    def _a_attach_document(self, token, p):
+        import json
+        import mimetypes
+        import os
+        from apps.chatbot.media import local_path
+
+        tid = ''.join(ch for ch in str(p.get('ticket_id') or '') if ch.isdigit())
+        path, filename = local_path(p.get('file'))
+        if not tid:
+            raise ConnectorError('Falta el número de ticket')
+        if not path or not os.path.isfile(path):
+            return ConnectorResult('empty', None)  # el cliente no envió archivo o no se descargó
+        safe = ''.join(ch for ch in filename if ch.isalnum() or ch in '._-')[:120] or 'adjunto'
+        manifest = {'input': {'name': f'WhatsApp — {safe}', '_filename': [safe],
+                              'itemtype': 'Ticket', 'items_id': int(tid)}}
+        headers = self._headers(token)
+        headers.pop('Content-Type', None)  # multipart lo define requests
+        with open(path, 'rb') as fh:
+            r = requests.post(f'{self.base_url}/Document', headers=headers, timeout=max(self.timeout, 60),
+                              verify=self.verify, data={'uploadManifest': json.dumps(manifest)},
+                              files={'filename[0]': (safe, fh, mimetypes.guess_type(safe)[0] or 'application/octet-stream')})
+        if r.status_code >= 400:
+            raise ConnectorError(f'GLPI rechazó el archivo (HTTP {r.status_code}): {r.text[:200]}')
+        doc = r.json() if r.content else {}
+        return ConnectorResult('success', {'id': doc.get('id'), 'ticket_id': int(tid)})
 
     def _a_list_categories(self, token, p):
         rows = self._call(token, 'GET', 'ITILCategory', params={'range': '0-99', 'is_helpdeskvisible': 1}) or []

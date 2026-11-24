@@ -18,6 +18,7 @@ export const BLOCKS: Record<string, BlockMeta> = {
   set_variable: { label: 'Asignar variable', icon: 'i-heroicons-variable', color: 'gray', help: 'Guarda un valor en una variable' },
   connector: { label: 'Conector', icon: 'i-heroicons-bolt', color: 'emerald', help: 'GLPI, API HTTP u otro sistema' },
   dynamic_list: { label: 'Lista dinámica', icon: 'i-heroicons-queue-list', color: 'emerald', help: 'Menú con los datos de un conector' },
+  analyze_file: { label: 'Analizar archivo', icon: 'i-heroicons-document-magnifying-glass', color: 'fuchsia', help: 'Lee fotos, documentos y audios (OCR local) y extrae datos' },
   ai_intent: { label: 'Entender intención (IA)', icon: 'i-heroicons-sparkles', color: 'fuchsia', help: 'Entiende lo que escribe el cliente y extrae datos' },
   handoff: { label: 'Pasar a asesor', icon: 'i-heroicons-user', color: 'rose', help: 'Asigna la conversación a un agente' },
   end: { label: 'Fin', icon: 'i-heroicons-stop-circle', color: 'gray', help: 'Despide y cierra la conversación' },
@@ -27,7 +28,7 @@ export const PALETTE = [
   { group: 'Mensajes', items: ['message', 'buttons', 'list', 'question'] },
   { group: 'Lógica', items: ['condition', 'business_hours', 'set_variable'] },
   { group: 'Integraciones', items: ['connector', 'dynamic_list'] },
-  { group: 'Inteligencia artificial', items: ['ai_intent'] },
+  { group: 'Inteligencia artificial', items: ['ai_intent', 'analyze_file'] },
   { group: 'Salida', items: ['handoff', 'end'] },
 ]
 
@@ -36,6 +37,22 @@ export const VALIDATIONS = [
   { label: 'Email', value: 'email' }, { label: 'Teléfono', value: 'phone' },
   { label: 'Documento', value: 'document' }, { label: 'Fecha (dd/mm/aaaa)', value: 'date' },
   { label: 'Expresión regular', value: 'regex' },
+]
+
+export const ACCEPTS = [
+  { label: 'Texto', value: 'text' },
+  { label: 'Imagen (foto, captura)', value: 'image' },
+  { label: 'Documento (PDF, Word…)', value: 'document' },
+  { label: 'Imagen o documento', value: 'image_or_document' },
+  { label: 'Nota de voz / audio', value: 'audio' },
+  { label: 'Cualquier archivo', value: 'file' },
+]
+
+export const FILE_MODES = [
+  { label: 'Leer texto (OCR local)', value: 'ocr' },
+  { label: 'Extraer datos (OCR local + IA de texto)', value: 'extract' },
+  { label: 'Clasificar documento (OCR local + IA de texto)', value: 'classify' },
+  { label: 'Describir imagen con IA de visión (nube)', value: 'vision' },
 ]
 
 export const OPERATORS = [
@@ -58,6 +75,20 @@ const FIXED_OUTPUTS: Record<string, { id: string, label: string }[]> = {
 }
 
 export function blockOutputs(data: any) {
+  if (data.kind === 'analyze_file') {
+    if (data.mode === 'classify') {
+      return [
+        ...(data.categories || []).map((c: any) => ({ id: `cat:${c.id}`, label: c.name || c.id })),
+        { id: 'unknown', label: 'Otro / no seguro' },
+        { id: 'unreadable', label: 'No se pudo leer' },
+        { id: 'error', label: 'Error' },
+      ]
+    }
+    return [{ id: 'success', label: 'Leído' }, { id: 'unreadable', label: 'No se pudo leer' }, { id: 'error', label: 'Error' }]
+  }
+  if (data.kind === 'question' && data.accept && data.accept !== 'text') {
+    return [{ id: 'next', label: 'Archivo recibido' }, { id: 'invalid', label: 'No envió archivo' }]
+  }
   if (data.kind === 'ai_intent') {
     return [
       ...(data.intents || []).map((i: any) => ({ id: `intent:${i.id}`, label: i.name || i.id })),
@@ -85,6 +116,10 @@ export function defaultData(kind: string): any {
     case 'set_variable': return { title, variable: 'variable', value: '' }
     case 'connector': return { title, text: '', connector_id: null, action: '', inputs: {}, output_variable: 'resultado', mock_result: {} }
     case 'dynamic_list': return { title, text: 'Elige una opción:', button_label: 'Ver opciones', source_variable: 'resultado', label_field: 'name', description_field: '', variable: 'seleccion' }
+    case 'analyze_file': return {
+      title, mode: 'ocr', source_variable: 'archivo', output_variable: 'archivo_leido', provider_id: null,
+      text: '', fields: [], categories: [], instruction: '', min_chars: 10, min_confidence: 0.5, mock_result: {},
+    }
     case 'ai_intent': return {
       title, source: 'wait', text: 'Cuéntame en pocas palabras, ¿en qué te puedo ayudar?', source_variable: '',
       provider_id: null, min_confidence: 0.5, output_variable: 'ia',
@@ -134,6 +169,10 @@ export function flowVariables(nodes: any[]) {
     const d = n.data || {}
     if (d.variable) vars.add(d.variable)
     if (d.output_variable) vars.add(d.output_variable)
+    if (d.kind === 'analyze_file') {
+      vars.add(`${d.output_variable || 'archivo_leido'}.text`)
+      for (const f of d.fields || []) if (f.name) vars.add(f.name)
+    }
     if (d.kind === 'ai_intent') {
       vars.add(`${d.output_variable || 'ia'}.intent`)
       for (const f of d.fields || []) if (f.name) vars.add(f.name)

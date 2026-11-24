@@ -31,6 +31,7 @@ MAX_UPLOAD = 25 * 1024 * 1024
 
 _model = None
 _lock = asyncio.Lock()
+_ocr_lock = asyncio.Semaphore(2)  # OCR liviano: hasta 2 archivos a la vez
 
 
 def _load():
@@ -53,6 +54,30 @@ def _transcribe(path, language):
     text = ' '.join(s.text.strip() for s in segments).strip()
     return {'text': text, 'language': info.language, 'duration': round(info.duration or 0, 1),
             'elapsed': round(time.monotonic() - t0, 1)}
+
+
+async def extract(request):
+    """POST /extract {"path": "...", "mime": "image/jpeg"} → {"text", "method", "pages", "elapsed"}"""
+    from extract import extract_text
+    try:
+        body = await request.json()
+        path = os.path.realpath(body.get('path') or '')
+        if not path.startswith(ALLOWED_DIR + os.sep) or not os.path.isfile(path):
+            return web.json_response({'error': 'Ruta no permitida o inexistente'}, status=400)
+        if os.path.getsize(path) > MAX_UPLOAD:
+            return web.json_response({'error': 'Archivo demasiado grande'}, status=413)
+        t0 = time.monotonic()
+        async with _ocr_lock:
+            result = await asyncio.get_running_loop().run_in_executor(
+                None, extract_text, path, body.get('mime') or '')
+        result['elapsed'] = round(time.monotonic() - t0, 1)
+        log.info(f"Leído {result['method']} ({len(result['text'])} caracteres) en {result['elapsed']} s")
+        return web.json_response(result)
+    except ValueError as e:
+        return web.json_response({'error': str(e)}, status=422)
+    except Exception as e:
+        log.exception('Error leyendo archivo')
+        return web.json_response({'error': f'{type(e).__name__}: {e}'}, status=500)
 
 
 async def health(request):
@@ -106,6 +131,7 @@ def main():
     app = web.Application(client_max_size=MAX_UPLOAD + 1024 * 1024)
     app.router.add_get('/health', health)
     app.router.add_post('/transcribe', transcribe)
+    app.router.add_post('/extract', extract)
     web.run_app(app, host='0.0.0.0', port=int(os.getenv('PORT', '9000')), access_log=None)
 
 
