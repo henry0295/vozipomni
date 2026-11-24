@@ -3,7 +3,10 @@ from rest_framework import serializers
 from apps.messaging.models import Channel
 
 from .connectors import actions_for
-from .models import AIProvider, BotFlow, BotFlowVersion, BotSession, Connector, ConnectorLog
+from .models import (
+    AIProvider, BotFlow, BotFlowVersion, BotSession, Connector, ConnectorLog,
+    KnowledgeArticle, KnowledgeBase, KnowledgeQuery,
+)
 from .schema import validate_definition
 
 SECRET_MASK = '••••••'
@@ -197,3 +200,47 @@ class AIProviderSerializer(serializers.ModelSerializer):
         if not validated.get('api_key'):
             validated.pop('api_key', None)
         return super().update(instance, validated)
+
+class KnowledgeBaseSerializer(serializers.ModelSerializer):
+    articles_count = serializers.SerializerMethodField()
+    unanswered_30d = serializers.SerializerMethodField()
+
+    class Meta:
+        model = KnowledgeBase
+        fields = ['id', 'name', 'description', 'glpi_connector', 'last_synced_at', 'is_active',
+                  'articles_count', 'unanswered_30d', 'created_at', 'updated_at']
+        read_only_fields = ['last_synced_at', 'created_at', 'updated_at']
+
+    def get_articles_count(self, obj):
+        return obj.articles.count()
+
+    def get_unanswered_30d(self, obj):
+        from datetime import timedelta
+        from django.utils import timezone
+        return obj.queries.filter(found=False, created_at__gte=timezone.now() - timedelta(days=30)).count()
+
+    def validate_glpi_connector(self, v):
+        if v and v.connector_type != 'glpi':
+            raise serializers.ValidationError('El conector debe ser de tipo GLPI')
+        return v
+
+
+class KnowledgeArticleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KnowledgeArticle
+        fields = ['id', 'knowledge_base', 'title', 'body', 'category', 'keywords', 'source', 'external_id',
+                  'file_name', 'is_published', 'created_at', 'updated_at']
+        read_only_fields = ['source', 'external_id', 'file_name', 'created_at', 'updated_at']
+
+    def validate_body(self, v):
+        if len((v or '').strip()) < 10:
+            raise serializers.ValidationError('Escriba el contenido del artículo')
+        if len(v) > 200000:
+            raise serializers.ValidationError('Máximo 200.000 caracteres')
+        return v
+
+
+class KnowledgeQuerySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KnowledgeQuery
+        fields = ['id', 'knowledge_base', 'question', 'found', 'article_ids', 'source', 'created_at']

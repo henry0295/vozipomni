@@ -18,6 +18,7 @@ export const BLOCKS: Record<string, BlockMeta> = {
   set_variable: { label: 'Asignar variable', icon: 'i-heroicons-variable', color: 'gray', help: 'Guarda un valor en una variable' },
   connector: { label: 'Conector', icon: 'i-heroicons-bolt', color: 'emerald', help: 'GLPI, API HTTP u otro sistema' },
   dynamic_list: { label: 'Lista dinámica', icon: 'i-heroicons-queue-list', color: 'emerald', help: 'Menú con los datos de un conector' },
+  kb_answer: { label: 'Responder con base de conocimiento', icon: 'i-heroicons-book-open', color: 'fuchsia', help: 'Responde preguntas frecuentes con los artículos de la empresa' },
   analyze_file: { label: 'Analizar archivo', icon: 'i-heroicons-document-magnifying-glass', color: 'fuchsia', help: 'Lee fotos, documentos y audios (OCR local) y extrae datos' },
   ai_intent: { label: 'Entender intención (IA)', icon: 'i-heroicons-sparkles', color: 'fuchsia', help: 'Entiende lo que escribe el cliente y extrae datos' },
   handoff: { label: 'Pasar a asesor', icon: 'i-heroicons-user', color: 'rose', help: 'Asigna la conversación a un agente' },
@@ -28,7 +29,7 @@ export const PALETTE = [
   { group: 'Mensajes', items: ['message', 'buttons', 'list', 'question'] },
   { group: 'Lógica', items: ['condition', 'business_hours', 'set_variable'] },
   { group: 'Integraciones', items: ['connector', 'dynamic_list'] },
-  { group: 'Inteligencia artificial', items: ['ai_intent', 'analyze_file'] },
+  { group: 'Inteligencia artificial', items: ['ai_intent', 'kb_answer', 'analyze_file'] },
   { group: 'Salida', items: ['handoff', 'end'] },
 ]
 
@@ -70,6 +71,7 @@ const FIXED_OUTPUTS: Record<string, { id: string, label: string }[]> = {
   set_variable: [{ id: 'next', label: 'Siguiente' }],
   connector: [{ id: 'success', label: 'Éxito' }, { id: 'empty', label: 'Sin resultados' }, { id: 'error', label: 'Error' }],
   dynamic_list: [{ id: 'next', label: 'Elemento elegido' }, { id: 'empty', label: 'Lista vacía' }],
+  kb_answer: [{ id: 'answered', label: 'Respondida' }, { id: 'not_found', label: 'Sin respuesta' }, { id: 'error', label: 'Error' }],
   handoff: [],
   end: [],
 }
@@ -116,6 +118,11 @@ export function defaultData(kind: string): any {
     case 'set_variable': return { title, variable: 'variable', value: '' }
     case 'connector': return { title, text: '', connector_id: null, action: '', inputs: {}, output_variable: 'resultado', mock_result: {} }
     case 'dynamic_list': return { title, text: 'Elige una opción:', button_label: 'Ver opciones', source_variable: 'resultado', label_field: 'name', description_field: '', variable: 'seleccion' }
+    case 'kb_answer': return {
+      title, source: 'wait', text: '¿Cuál es tu pregunta? Escríbela con tus palabras.', source_variable: '',
+      kb_ids: [], provider_id: null, output_variable: 'kb', send_answer: true, max_chars: 700,
+      tone: 'amable y breve', company: '', instructions: '',
+    }
     case 'analyze_file': return {
       title, mode: 'ocr', source_variable: 'archivo', output_variable: 'archivo_leido', provider_id: null,
       text: '', fields: [], categories: [], instruction: '', min_chars: 10, min_confidence: 0.5, mock_result: {},
@@ -169,6 +176,10 @@ export function flowVariables(nodes: any[]) {
     const d = n.data || {}
     if (d.variable) vars.add(d.variable)
     if (d.output_variable) vars.add(d.output_variable)
+    if (d.kind === 'kb_answer') {
+      vars.add(`${d.output_variable || 'kb'}.answer`)
+      vars.add(`${d.output_variable || 'kb'}.question`)
+    }
     if (d.kind === 'analyze_file') {
       vars.add(`${d.output_variable || 'archivo_leido'}.text`)
       for (const f of d.fields || []) if (f.name) vars.add(f.name)

@@ -11,6 +11,8 @@ con sistemas externos (GLPI, APIs HTTP).
 import json
 
 from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 from django.utils import timezone
 
@@ -197,4 +199,80 @@ class AIUsageLog(models.Model):
 
     class Meta:
         db_table = 'chatbot_ai_usage'
+        ordering = ['-created_at']
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Base de conocimiento (búsqueda de texto completo de PostgreSQL en español)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class KnowledgeBase(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    description = models.TextField(blank=True, default='')
+    # Sincronización opcional con la base de conocimiento de GLPI
+    glpi_connector = models.ForeignKey(Connector, null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name='knowledge_bases')
+    last_synced_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'kb_bases'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class KnowledgeArticle(models.Model):
+    SOURCE_CHOICES = [('manual', 'Escrito a mano'), ('file', 'Documento cargado'), ('glpi', 'GLPI')]
+
+    knowledge_base = models.ForeignKey(KnowledgeBase, on_delete=models.CASCADE, related_name='articles')
+    title = models.CharField(max_length=250)
+    body = models.TextField()
+    category = models.CharField(max_length=100, blank=True, default='')
+    keywords = models.CharField(max_length=500, blank=True, default='', help_text='Separadas por coma')
+    source = models.CharField(max_length=10, choices=SOURCE_CHOICES, default='manual')
+    external_id = models.CharField(max_length=100, blank=True, default='')   # id en GLPI
+    file_name = models.CharField(max_length=255, blank=True, default='')
+    is_published = models.BooleanField(default=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'kb_articles'
+        ordering = ['title']
+
+    def __str__(self):
+        return self.title
+
+
+class KnowledgeChunk(models.Model):
+    """Fragmento indexado de un artículo (la búsqueda trabaja sobre fragmentos)."""
+    article = models.ForeignKey(KnowledgeArticle, on_delete=models.CASCADE, related_name='chunks')
+    order = models.PositiveIntegerField(default=0)
+    text = models.TextField()
+    search_vector = SearchVectorField(null=True)
+
+    class Meta:
+        db_table = 'kb_chunks'
+        ordering = ['article', 'order']
+        indexes = [GinIndex(fields=['search_vector'], name='kb_chunks_search_idx')]
+
+
+class KnowledgeQuery(models.Model):
+    """Pregunta hecha a la base (bot o asesor). El texto se guarda con los datos personales ocultos."""
+    knowledge_base = models.ForeignKey(KnowledgeBase, null=True, blank=True, on_delete=models.SET_NULL,
+                                       related_name='queries')
+    question = models.TextField()
+    found = models.BooleanField(default=False)
+    article_ids = models.JSONField(default=list, blank=True)
+    source = models.CharField(max_length=20, default='bot')   # bot | agent | simulator
+    conversation_id = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        db_table = 'kb_queries'
         ordering = ['-created_at']

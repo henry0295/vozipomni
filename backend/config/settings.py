@@ -332,6 +332,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'chatbot.expire_sessions',
         'schedule': 300.0,  # cada 5 minutos
     },
+    'chatbot-sync-glpi-knowledge': {
+        'task': 'chatbot.sync_glpi_knowledge',
+        'schedule': crontab(hour=1, minute=30),  # 01:30 cada día
+    },
 }
 
 # Channels (WebSocket)

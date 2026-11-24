@@ -57,6 +57,7 @@ export const NAVIGATION: NavItem[] = [
       { label: 'Envíos masivos', icon: 'i-heroicons-megaphone', to: '/messaging/broadcasts', roles: ADMIN_SUP },
       { label: 'Respuestas y etiquetas', icon: 'i-heroicons-bolt', to: '/messaging/settings', roles: ADMIN_SUP },
       { label: 'Bots de autoatención', icon: 'i-heroicons-cpu-chip', to: '/bots', roles: ADMIN_SUP },
+      { label: 'Base de conocimiento', icon: 'i-heroicons-book-open', to: '/knowledge', roles: ADMIN_SUP },
     ],
   },
 

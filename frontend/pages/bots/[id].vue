@@ -108,7 +108,7 @@
 
         <!-- Texto -->
         <UFormGroup
-          v-if="['message','buttons','list','question','dynamic_list','handoff','end','connector','analyze_file'].includes(kind) || (kind === 'ai_intent' && d.source !== 'variable')"
+          v-if="['message','buttons','list','question','dynamic_list','handoff','end','connector','analyze_file'].includes(kind) || (['ai_intent','kb_answer'].includes(kind) && d.source !== 'variable')"
           :label="['connector','analyze_file'].includes(kind) ? 'Mensaje de espera (opcional)' : 'Texto'"
           :hint="`${(d.text || '').length}/1024`"
         >
@@ -211,6 +211,38 @@
           <UFormGroup label="Descripción (opcional)"><UInput v-model="d.description_field" size="sm" placeholder="{{status}}" /></UFormGroup>
           <UFormGroup label="Guardar el elemento elegido en" required><UInput v-model="d.variable" size="sm" /></UFormGroup>
           <UFormGroup label="Texto del botón"><UInput v-model="d.button_label" size="sm" maxlength="20" /></UFormGroup>
+        </template>
+
+        <!-- Responder con base de conocimiento -->
+        <template v-if="kind === 'kb_answer'">
+          <UFormGroup label="Pregunta del cliente">
+            <USelect
+              v-model="d.source"
+              size="sm"
+              :options="[{ label: 'Invitar a preguntar y esperar', value: 'wait' }, { label: 'Una variable existente', value: 'variable' }]"
+            />
+          </UFormGroup>
+          <UFormGroup v-if="d.source === 'variable'" label="Variable con la pregunta" required>
+            <UInput v-model="d.source_variable" size="sm" placeholder="ia_texto" />
+          </UFormGroup>
+          <UFormGroup label="Bases de conocimiento" hint="Vacío: todas">
+            <USelectMenu v-model="d.kb_ids" :options="kbOptions" multiple value-attribute="value" option-attribute="label" size="sm" placeholder="Todas" />
+          </UFormGroup>
+          <UFormGroup label="Redactar con IA (opcional)" hint="Sin IA: envía el fragmento más relevante">
+            <USelect v-model="d.provider_id" :options="[{ label: '— Sin IA —', value: null }, ...aiProviderOptions]" size="sm" />
+          </UFormGroup>
+          <template v-if="d.provider_id">
+            <UFormGroup label="Nombre de la empresa"><UInput v-model="d.company" size="sm" placeholder="Vozip Colombia" /></UFormGroup>
+            <UFormGroup label="Tono"><UInput v-model="d.tone" size="sm" /></UFormGroup>
+            <UFormGroup label="Instrucciones adicionales"><UTextarea v-model="d.instructions" :rows="2" size="sm" placeholder="No prometas tiempos de solución. Usa tuteo." /></UFormGroup>
+          </template>
+          <UFormGroup label="Largo máximo de la respuesta"><UInput v-model.number="d.max_chars" type="number" min="100" max="1000" size="sm" /></UFormGroup>
+          <UCheckbox v-model="d.send_answer" label="Enviar la respuesta al cliente automáticamente" />
+          <UFormGroup label="Guardar resultado en"><UInput v-model="d.output_variable" size="sm" /></UFormGroup>
+          <p class="text-[11px] text-gray-400">
+            La IA solo usa el contenido de los artículos. Si no encuentra la respuesta, sale por «Sin respuesta» (normalmente, pasar a un asesor).
+            Conecte «Respondida» a unos botones «¿Te sirvió?» para seguir ayudando.
+          </p>
         </template>
 
         <!-- Analizar archivo -->
@@ -476,6 +508,7 @@ function renameIntent(it: any, value: string) {
   edges.value = edges.value.map(e => (e.source === selectedId.value && e.sourceHandle === old ? { ...e, sourceHandle: `intent:${clean}` } : e))
   it.id = clean
 }
+const kbOptions = computed(() => (catalog.value.knowledge_bases || []).map((k: any) => ({ label: k.name, value: k.id })))
 function renameCategory(c: any, value: string) {
   const clean = String(value).toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 40)
   const old = `cat:${c.id}`

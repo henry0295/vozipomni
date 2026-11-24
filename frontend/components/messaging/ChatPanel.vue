@@ -114,6 +114,8 @@
             <UDropdown :items="quickReplyItems" :popper="{ placement: 'top-start' }">
               <UButton icon="i-heroicons-bolt" color="gray" variant="ghost" title="Respuestas rápidas" aria-label="Respuestas rápidas" />
             </UDropdown>
+            <UButton icon="i-heroicons-book-open" color="gray" variant="ghost" title="Base de conocimiento" aria-label="Base de conocimiento"
+                     @click="kb.open = true" />
             <UButton icon="i-heroicons-paper-clip" color="gray" variant="ghost" title="Adjuntar archivo" aria-label="Adjuntar archivo"
                      :disabled="!composerEnabled || conv.channel_type === 'instagram'" @click="fileInput?.click()" />
             <input ref="fileInput" type="file" class="hidden" :accept="acceptTypes" @change="onFilePicked" />
@@ -161,6 +163,38 @@
         </div>
       </div>
     </div>
+
+    <!-- Base de conocimiento: búsqueda y respuesta sugerida -->
+    <USlideover v-model="kb.open">
+      <div class="p-4 flex flex-col h-full gap-3 overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h3 class="font-semibold">Base de conocimiento</h3>
+          <UButton color="gray" variant="ghost" icon="i-heroicons-x-mark" @click="kb.open = false" />
+        </div>
+        <UButton icon="i-heroicons-sparkles" :loading="kb.suggesting" block @click="suggestReply">
+          Sugerir respuesta a lo que pregunta el cliente
+        </UButton>
+        <div v-if="kb.suggestion" class="border rounded-lg p-3 bg-primary-50 text-sm space-y-2">
+          <template v-if="kb.suggestion.status === 'answered'">
+            <p class="whitespace-pre-line">{{ kb.suggestion.answer }}</p>
+            <p v-if="kb.suggestion.sources?.length" class="text-[11px] text-gray-500">
+              Fuentes: {{ kb.suggestion.sources.map((s: any) => s.title).join(', ') }}
+              <span v-if="!kb.suggestion.used_ai"> · texto del artículo (sin IA)</span>
+            </p>
+            <UButton size="xs" icon="i-heroicons-arrow-down-on-square" @click="insertText(kb.suggestion.answer)">Usar en la respuesta</UButton>
+          </template>
+          <p v-else class="text-gray-600">No encontré esa información en la base de conocimiento.</p>
+        </div>
+        <UDivider label="o busque" />
+        <UInput v-model="kb.q" icon="i-heroicons-magnifying-glass" placeholder="Buscar artículos…" @keydown.enter="searchKb" />
+        <p v-if="kb.searched && !kb.hits.length" class="text-sm text-gray-500">Sin resultados.</p>
+        <div v-for="h in kb.hits" :key="h.chunk_id" class="border rounded p-2 text-sm">
+          <p class="font-medium">{{ h.title }}</p>
+          <p class="text-xs text-gray-600 whitespace-pre-line mt-1">{{ h.text }}</p>
+          <UButton size="2xs" variant="soft" class="mt-1" @click="insertText(h.text)">Usar</UButton>
+        </div>
+      </div>
+    </USlideover>
 
     <!-- Plantillas -->
     <UModal v-model="tplModal">
@@ -239,6 +273,31 @@ const sending = ref(false)
 const acting = ref('')
 const retrying = ref<number | null>(null)
 const draft = ref('')
+
+// Base de conocimiento para el asesor
+const kb = reactive({ open: false, q: '', hits: [] as any[], searched: false, suggesting: false, suggestion: null as any })
+async function searchKb() {
+  if (kb.q.trim().length < 3) return
+  try {
+    kb.hits = await http.get('/chatbot/knowledge/search/', { q: kb.q })
+    kb.searched = true
+  } catch (e: any) {
+    toast.add({ title: 'No se pudo buscar', description: http.errorMessage(e), color: 'red' })
+  }
+}
+async function suggestReply() {
+  kb.suggesting = true
+  kb.suggestion = null
+  try {
+    kb.suggestion = await http.post('/chatbot/knowledge/suggest/', { conversation_id: props.conversationId })
+  } catch (e: any) {
+    toast.add({ title: 'No se pudo sugerir', description: http.errorMessage(e), color: 'red' })
+  } finally { kb.suggesting = false }
+}
+function insertText(text: string) {
+  draft.value = draft.value.trim() ? `${draft.value.trim()}\n${text}` : text
+  kb.open = false
+}
 const showInfo = ref(false)
 const scroller = ref<HTMLElement>()
 const fileInput = ref<HTMLInputElement>()

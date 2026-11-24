@@ -32,6 +32,7 @@ NODE_TYPES = {
     'dynamic_list': {'next', 'empty'},
     'ai_intent': None,        # salidas dinámicas: intent:<id> + unknown + error
     'analyze_file': None,     # success|unreadable|error  (classify: cat:<id> + unknown)
+    'kb_answer': {'answered', 'not_found', 'error'},
     'handoff': set(),
     'end': set(),
 }
@@ -162,6 +163,17 @@ def validate_definition(d: dict, *, connectors_ids=None, ai_ids=None) -> list:
                 errors.append(f'Bloque "{label}": variable de resultado inválida')
             if data.get('source', 'wait') == 'wait' and not (data.get('text') or '').strip():
                 errors.append(f'Bloque "{label}": falta la pregunta para el cliente')
+        if ntype == 'kb_answer':
+            if data.get('provider_id') and ai_ids is not None and int(data['provider_id']) not in ai_ids:
+                errors.append(f'Bloque "{label}": el proveedor de IA no existe o está inactivo')
+            if not isinstance(data.get('kb_ids') or [], list):
+                errors.append(f'Bloque "{label}": bases de conocimiento inválidas')
+            if data.get('source') == 'variable' and not data.get('source_variable'):
+                errors.append(f'Bloque "{label}": indique la variable con la pregunta')
+            if (data.get('source') or 'wait') == 'wait' and not (data.get('text') or '').strip():
+                errors.append(f'Bloque "{label}": falta el texto que invita a preguntar')
+            if not VAR_RE.match(data.get('output_variable') or ''):
+                errors.append(f'Bloque "{label}": variable de resultado inválida')
         if ntype == 'question' and (data.get('accept') or 'text') not in ACCEPT_TYPES:
             errors.append(f'Bloque "{label}": tipo de respuesta desconocido')
         if ntype == 'analyze_file':
@@ -232,7 +244,7 @@ def _non_waiting_cycle(d, nmap, start):
     while stack:
         cur, depth = stack.pop()
         node = nmap.get(cur)
-        if not node or node.get('type') in WAITING_TYPES or node.get('type') in ('connector', 'ai_intent', 'analyze_file'):
+        if not node or node.get('type') in WAITING_TYPES or node.get('type') in ('connector', 'ai_intent', 'analyze_file', 'kb_answer'):
             continue
         for e in d.get('edges', []):
             if e.get('source') != cur:

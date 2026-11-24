@@ -21,6 +21,25 @@ def run_ai_step(session_id: int, node_id: str):
     continue_after_ai(session_id, node_id)
 
 
+@shared_task(name='chatbot.run_kb_step', ignore_result=True)
+def run_kb_step(session_id: int, node_id: str):
+    """Responde con la base de conocimiento en un bloque «Responder con base de conocimiento»."""
+    from .engine import continue_after_kb
+    continue_after_kb(session_id, node_id)
+
+
+@shared_task(name='chatbot.sync_glpi_knowledge', ignore_result=True)
+def sync_glpi_knowledge():
+    """Sincroniza cada noche las bases de conocimiento vinculadas a GLPI."""
+    from .knowledge import sync_glpi
+    from .models import KnowledgeBase
+    for kb in KnowledgeBase.objects.filter(is_active=True, glpi_connector__isnull=False):
+        try:
+            logger.info(f'[KB] Sincronización GLPI de "{kb.name}": {sync_glpi(kb)}')
+        except Exception as e:
+            logger.warning(f'[KB] Falló la sincronización GLPI de "{kb.name}": {e}')
+
+
 @shared_task(bind=True, name='chatbot.run_file_step', ignore_result=True, max_retries=12)
 def run_file_step(self, session_id: int, node_id: str):
     """Lee o analiza el archivo de un bloque «Analizar archivo». Espera a que termine la descarga."""

@@ -8,10 +8,10 @@ from core.permissions import IsAdminOrSupervisor
 
 from .connectors import get_connector
 from .engine import simulate
-from .models import AIProvider, BotFlow, BotFlowVersion, BotSession, Connector
+from .models import AIProvider, BotFlow, BotFlowVersion, BotSession, Connector, KnowledgeArticle, KnowledgeBase, KnowledgeQuery
 from .schema import NODE_TYPES, validate_definition
 from .serializers import (
-    AIProviderSerializer, BotFlowSerializer, BotFlowVersionSerializer, BotSessionSerializer,
+    AIProviderSerializer, BotFlowSerializer, KnowledgeArticleSerializer, KnowledgeBaseSerializer, KnowledgeQuerySerializer, BotFlowVersionSerializer, BotSessionSerializer,
     ConnectorLogSerializer, ConnectorSerializer,
 )
 from .templates import FLOW_TEMPLATES
@@ -122,7 +122,9 @@ class BotFlowViewSet(viewsets.ModelViewSet):
                       for c in Connector.objects.filter(is_active=True)]
         ai_providers = [{'id': p.id, 'name': p.name, 'model': p.model}
                         for p in AIProvider.objects.filter(is_active=True)]
+        kbs = [{'id': k.id, 'name': k.name} for k in KnowledgeBase.objects.filter(is_active=True)]
         return Response({'node_types': sorted(NODE_TYPES), 'connectors': connectors, 'ai_providers': ai_providers,
+                         'knowledge_bases': kbs,
                          'templates': [{'key': k, 'name': t['name'], 'description': t['description']}
                                        for k, t in FLOW_TEMPLATES.items()]})
 
@@ -212,3 +214,134 @@ class BotFlowViewSet(viewsets.ModelViewSet):
         dropoff = Counter(sessions.filter(status__in=['timeout']).values_list('current_node', flat=True))
         return Response({'by_status': by_status, 'dropoff_nodes': dropoff.most_common(10),
                          'total': sum(by_status.values())})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Base de conocimiento
+# ══════════════════════════════════════════════════════════════════════════════
+
+KB_UPLOAD_EXT = ('.pdf', '.docx', '.xlsx', '.txt', '.md', '.csv')
+KB_UPLOAD_MAX = 20 * 1024 * 1024
+
+
+class KnowledgeBaseViewSet(viewsets.ModelViewSet):
+    queryset = KnowledgeBase.objects.all()
+    serializer_class = KnowledgeBaseSerializer
+    permission_classes = [IsAdminOrSupervisor]
+
+    @action(detail=True, methods=['post'], url_path='upload')
+    def upload(self, request, pk=None):
+        """Carga un documento (PDF, Word, Excel, TXT) como artículo. Se lee en el servidor."""
+        import os
+        import uuid
+        from django.conf import settings
+        from .knowledge import import_file
+
+        kb = self.get_object()
+        f = request.FILES.get('file')
+        if not f:
+            return Response({'error': 'Falta el archivo'}, status=status.HTTP_400_BAD_REQUEST)
+        name = os.path.basename(f.name)
+        if not name.lower().endswith(KB_UPLOAD_EXT):
+            return Response({'error': 'Formatos permitidos: PDF, Word (.docx), Excel (.xlsx), TXT, MD, CSV'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if f.size > KB_UPLOAD_MAX:
+            return Response({'error': 'Máximo 20 MB'}, status=status.HTTP_400_BAD_REQUEST)
+        directory = os.path.join(str(settings.MEDIA_ROOT), 'knowledge')
+        os.makedirs(directory, exist_ok=True)
+        safe = ''.join(ch for ch in name if ch.isalnum() or ch in '._-')[:120] or 'documento'
+        path = os.path.join(directory, f'{uuid.uuid4().hex[:12]}_{safe}')
+        with open(path, 'wb') as out:
+            for chunk in f.chunks():
+                out.write(chunk)
+        try:
+            article = import_file(kb, path, name, request.user)
+        except Exception as e:
+            return Response({'error': str(e)[:300]}, status=status.HTTP_400_BAD_REQUEST)
+        finally:
+            try:
+                os.remove(path)  # el texto ya quedó en el artículo
+            except OSError:
+                pass
+        return Response(KnowledgeArticleSerializer(article).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='sync-glpi')
+    def sync_glpi(self, request, pk=None):
+        from .knowledge import sync_glpi
+        try:
+            return Response(sync_glpi(self.get_object()))
+        except Exception as e:
+            return Response({'error': str(e)[:300]}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['get'])
+    def unanswered(self, request, pk=None):
+        """Preguntas que la base no supo responder (para completar artículos)."""
+        qs = self.get_object().queries.filter(found=False)[:200]
+        return Response(KnowledgeQuerySerializer(qs, many=True).data)
+
+
+class KnowledgeArticleViewSet(viewsets.ModelViewSet):
+    serializer_class = KnowledgeArticleSerializer
+    permission_classes = [IsAdminOrSupervisor]
+
+    def get_queryset(self):
+        qs = KnowledgeArticle.objects.all()
+        kb = self.request.query_params.get('knowledge_base')
+        if kb:
+            qs = qs.filter(knowledge_base_id=kb)
+        q = (self.request.query_params.get('search') or '').strip()
+        if q:
+            from django.db.models import Q
+            qs = qs.filter(Q(title__icontains=q) | Q(body__icontains=q) | Q(keywords__icontains=q))
+        return qs
+
+    def perform_create(self, serializer):
+        from .knowledge import index_article
+        index_article(serializer.save(created_by=self.request.user))
+
+    def perform_update(self, serializer):
+        from .knowledge import index_article
+        index_article(serializer.save())
+
+
+class KnowledgeAssistView(viewsets.ViewSet):
+    """
+    Para asesores (cualquier rol excepto analista sin conversación):
+      GET  /chatbot/knowledge/search/?q=…&kb=1,2     → fragmentos relevantes
+      POST /chatbot/knowledge/suggest/ {conversation_id}  → respuesta sugerida a partir de la conversación
+    """
+    from rest_framework.permissions import IsAuthenticated
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def search(self, request):
+        from .knowledge import search
+        q = (request.query_params.get('q') or '').strip()[:500]
+        kb_ids = [int(x) for x in (request.query_params.get('kb') or '').split(',') if x.isdigit()] or None
+        if len(q) < 3:
+            return Response([])
+        hits = search(q, kb_ids, limit=8)
+        return Response(hits)
+
+    @action(detail=False, methods=['post'])
+    def suggest(self, request):
+        from apps.messaging.models import Conversation
+        from .knowledge import answer
+
+        conv = Conversation.objects.filter(pk=request.data.get('conversation_id')).select_related('agent__user').first()
+        if not conv:
+            return Response({'error': 'Conversación no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        role = getattr(request.user, 'role', None)
+        if role == 'agent' and (not conv.agent_id or conv.agent.user_id != request.user.id):
+            return Response({'error': 'La conversación no es suya'}, status=status.HTTP_403_FORBIDDEN)
+        last = list(conv.messages.filter(direction='inbound').exclude(body='').order_by('-sent_at')
+                    .values_list('body', flat=True)[:3])
+        question = (request.data.get('question') or ' '.join(reversed(last))).strip()[:1500]
+        if not question:
+            return Response({'error': 'No hay mensajes del cliente para analizar'}, status=status.HTTP_400_BAD_REQUEST)
+        provider = AIProvider.objects.filter(pk=request.data.get('provider_id'), is_active=True).first() \
+            if request.data.get('provider_id') else AIProvider.objects.filter(is_active=True).order_by('id').first()
+        kb_ids = [int(x) for x in request.data.get('kb_ids') or [] if str(x).isdigit()] or None
+        status_, result = answer(question, kb_ids, provider, source='agent', conversation_id=conv.id,
+                                 tone='cordial y profesional, para que un asesor lo envíe al cliente')
+        return Response({'status': status_, 'question': question, 'used_ai': bool(provider), **result})

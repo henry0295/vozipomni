@@ -131,6 +131,7 @@ class Transport:
     def connector(self, state, node): ...
     def ai(self, state, node, text): ...
     def analyze_file(self, state, node, info): ...
+    def kb(self, state, node, question): ...
     def is_open(self, data) -> bool:
         return True
 
@@ -172,6 +173,20 @@ class SimTransport(Transport):
         self.replies.append({'type': 'system', 'text': f"[Conector] {data.get('action')} → {res.status}"
                              + (f": {res.error}" if res.error else '')})
         return res.status, res.data
+
+    def kb(self, state, node, question):
+        """Simulador: busca de verdad en la base. Sin «reales», responde con el fragmento (sin IA)."""
+        from .knowledge import answer
+        from .models import AIProvider
+        data = node.get('data') or {}
+        provider = None
+        if self.live and data.get('provider_id'):
+            provider = AIProvider.objects.filter(pk=data['provider_id'], is_active=True).first()
+        status, result = answer(question, data.get('kb_ids') or None, provider, **_kb_options(data), source='simulator')
+        srcs = ', '.join(s['title'] for s in result.get('sources') or [])
+        self.replies.append({'type': 'system', 'text': f"[Base de conocimiento] {status}"
+                             + (f' · fuentes: {srcs}' if srcs else '') + ('' if provider else ' (sin IA)')})
+        return status, result
 
     def analyze_file(self, state, node, info):
         """Simulador: los archivos son simulados; devuelve el resultado simulado del bloque."""
@@ -328,6 +343,15 @@ class Runner:
             status, result = res
             return self.apply_connector_result(node, status, result)
 
+        if ntype == 'kb_answer':
+            if (data.get('source') or 'wait') == 'wait':
+                if text:
+                    self.t.text(text)
+                self.state['waiting'] = True
+                return None
+            source = _dig(self.vars, data.get('source_variable') or '')
+            return self._run_kb(node, '' if source is None else str(source))
+
         if ntype == 'ai_intent':
             if (data.get('source') or 'wait') == 'wait':
                 if text:
@@ -391,6 +415,33 @@ class Runner:
             return self._out(node, f"intent:{r['intent']}") or self._out(node, 'unknown')
         return self._out(node, 'unknown')
 
+    def _run_kb(self, node, question):
+        self.state['waiting'] = False
+        self.vars['_kb_question'] = (question or '')[:1500]
+        res = self.t.kb(self.state, node, self.vars['_kb_question'])
+        if res is None:
+            self.state['status'] = 'busy'
+            return None
+        status, result = res
+        return self.apply_kb_result(node, status, result)
+
+    def apply_kb_result(self, node, status, result):
+        data = node.get('data') or {}
+        self.state['status'] = 'active'
+        question = self.vars.pop('_kb_question', '')
+        r = result or {}
+        self.vars[data.get('output_variable') or 'kb'] = {
+            'answer': r.get('answer', ''), 'question': question,
+            'sources': ', '.join(s['title'] for s in r.get('sources') or []),
+        }
+        if status == 'answered':
+            if data.get('send_answer', True) and r.get('answer'):
+                self.t.text(r['answer'])
+            return self._out(node, 'answered')
+        if status == 'error':
+            return self._out(node, 'error') or self._out(node, 'not_found')
+        return self._out(node, 'not_found')
+
     def apply_file_result(self, node, status, result):
         data = node.get('data') or {}
         out_var = data.get('output_variable') or 'archivo_leido'
@@ -448,6 +499,15 @@ class Runner:
             if data.get('variable'):
                 self.vars[data['variable']] = chosen['label']
             return self.run_from(self._out(node, chosen['id']))
+
+        if ntype == 'kb_answer':
+            if not (value or '').strip():
+                return self._retry(node, 'No recibí tu pregunta, ¿puedes escribirla?')
+            self.state['retries'] = 0
+            nxt = self._run_kb(node, value)
+            if nxt:
+                self.run_from(nxt)
+            return None
 
         if ntype == 'ai_intent':
             if not (value or '').strip():
@@ -513,6 +573,7 @@ class ChannelTransport(Transport):
         self.pending_connector = None
         self.pending_ai = None
         self.pending_file = None
+        self.pending_kb = None
 
     def _send(self, body, **kw):
         from apps.messaging.whatsapp import create_outbound
@@ -588,6 +649,10 @@ class ChannelTransport(Transport):
         self.pending_file = node['id']
         return None
 
+    def kb(self, state, node, question):
+        self.pending_kb = node['id']
+        return None
+
 
 def build_whatsapp_interactive(body, options, kind, button_label):
     """Mensaje interactivo nativo de WhatsApp (botones: máx. 3 · lista: máx. 10)."""
@@ -650,6 +715,15 @@ def _persist(session, runner):
         except Exception:
             logger.exception('[Bot] No se pudo encolar la IA: se ejecuta en línea')
             continue_after_ai(session.id, pending_ai)
+    pending_kb = getattr(runner.t, 'pending_kb', None)
+    if pending_kb:
+        runner.t.pending_kb = None
+        from .tasks import run_kb_step
+        try:
+            run_kb_step.delay(session.id, pending_kb)
+        except Exception:
+            logger.exception('[Bot] No se pudo encolar la consulta: se ejecuta en línea')
+            continue_after_kb(session.id, pending_kb)
     pending_file = getattr(runner.t, 'pending_file', None)
     if pending_file:
         runner.t.pending_file = None
@@ -834,6 +908,50 @@ def continue_after_ai(session_id, node_id):
         _persist(session, runner)
     except Exception:
         logger.exception(f'[Bot] Error continuando tras IA en conv {conv.id}')
+        session.status = 'error'
+        session.save(update_fields=['status'])
+        auto_assign(conv)
+
+
+def _kb_options(data):
+    try:
+        max_chars = max(100, min(int(data.get('max_chars') or 700), 1000))
+    except (TypeError, ValueError):
+        max_chars = 700
+    return {'max_chars': max_chars, 'tone': (data.get('tone') or 'amable y breve')[:100],
+            'instructions': data.get('instructions') or '', 'company': (data.get('company') or 'la empresa')[:100],
+            'min_rank': float(data.get('min_rank') or 0.01)}
+
+
+def continue_after_kb(session_id, node_id):
+    """Tarea Celery: busca en la base de conocimiento, redacta la respuesta y continúa."""
+    from apps.messaging.routing import auto_assign
+    from .knowledge import answer
+    from .models import AIProvider, BotSession
+
+    session = BotSession.objects.select_related('conversation', 'version', 'conversation__channel').filter(
+        pk=session_id).first()
+    if not session or not session.version or session.status != 'busy':
+        return
+    conv = session.conversation
+    runner = Runner(session.version.definition, _state_from(session), ChannelTransport(conv, session))
+    node = runner.nodes.get(node_id)
+    if not node:
+        return
+    data = node.get('data') or {}
+    provider = AIProvider.objects.filter(pk=data.get('provider_id'), is_active=True).first() \
+        if data.get('provider_id') else None
+    status, result = answer(runner.vars.get('_kb_question', ''), data.get('kb_ids') or None, provider,
+                            **_kb_options(data), source='bot', conversation_id=conv.id)
+    try:
+        target = runner.apply_kb_result(node, status, result)
+        if target:
+            runner.run_from(target)
+        elif status != 'answered':
+            runner._handoff({}, 'No encontré esa información. Te comunico con un asesor.')
+        _persist(session, runner)
+    except Exception:
+        logger.exception(f'[Bot] Error continuando tras la base de conocimiento en conv {conv.id}')
         session.status = 'error'
         session.save(update_fields=['status'])
         auto_assign(conv)

@@ -251,6 +251,26 @@ class GlpiConnector(BaseConnector):
                  for r in rows if isinstance(r, dict)]
         return ConnectorResult('empty' if is_empty(items) else 'success', items)
 
+    def knowledge_items(self):
+        """Artículos públicos de la base de conocimiento de GLPI (para sincronizar con VozipCX)."""
+        token = self._init_session()
+        try:
+            out, start, page = [], 0, 200
+            while start < 5000:
+                rows = self._call(token, 'GET', 'KnowbaseItem',
+                                  params={'range': f'{start}-{start + page - 1}', 'expand_dropdowns': 'true'}) or []
+                if not isinstance(rows, list) or not rows:
+                    break
+                for r in rows:
+                    out.append({'id': r.get('id'), 'name': r.get('name'), 'answer': r.get('answer'),
+                                'category': r.get('knowbaseitemcategories_id')})
+                if len(rows) < page:
+                    break
+                start += page
+            return out
+        finally:
+            self._kill(token)
+
     def test(self):
         token = self._init_session()
         try:

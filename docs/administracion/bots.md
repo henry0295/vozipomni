@@ -128,3 +128,22 @@ Salidas: **Leído / No se pudo leer / Error** (en clasificar, una por categoría
 Confirme siempre con el cliente los datos leídos de una foto antes de usarlos en una acción (por ejemplo, "Leí la cédula {{documento}}, ¿es correcta?"), porque las fotos borrosas pueden leerse mal.
 
 **GLPI:** la acción **Adjuntar archivo al ticket** sube el archivo de una variable (`{{foto}}`) al ticket. La plantilla "Soporte con GLPI" ya pregunta si el cliente quiere enviar una foto, agrega el texto leído a la descripción y adjunta el archivo al ticket.
+
+## Base de conocimiento
+
+**Omnicanal › Base de conocimiento** (administrador y supervisor). Cada base agrupa artículos. Hay tres formas de cargarlos:
+
+- **Escribirlos.** Use como título la pregunta tal como la haría un cliente, y agregue palabras clave con los sinónimos que usan los clientes.
+- **Cargar un documento** (PDF, Word, Excel, TXT): se lee en el servidor y se convierte en un artículo.
+- **Sincronizar con GLPI:** al vincular la base a un conector GLPI, se importan los artículos de su base de conocimiento cada noche (01:30) o con el botón *Sincronizar*.
+
+La búsqueda es la de texto completo de PostgreSQL en español (reconoce variantes como "configurar", "configuración" o "configuro"). No necesita GPU ni servicios externos. En **Probar búsqueda** se ve qué fragmentos encontraría una pregunta. En **Preguntas sin respuesta** quedan las preguntas que no se pudieron responder (con los datos personales ocultos), para escribir artículos nuevos.
+
+**Bloque «Responder con base de conocimiento»** (designer, grupo Inteligencia artificial):
+
+- Invita a preguntar, o usa una variable, y busca en las bases elegidas.
+- **Sin IA:** envía el fragmento más relevante, sin costo.
+- **Con IA:** redacta una respuesta usando *solo* los fragmentos encontrados, con el tono e instrucciones del bloque. Si los artículos no tienen la respuesta, sale por **Sin respuesta**, sin inventar nada. A la IA se envía la pregunta con los datos personales ocultos y el contenido de los artículos.
+- Salidas: **Respondida · Sin respuesta · Error**. Se recomienda conectar *Respondida* a botones "¿Te sirvió? Sí / No, hablar con un asesor".
+
+**Para el asesor:** en la bandeja, el botón 📖 abre la base de conocimiento. **Sugerir respuesta** lee los últimos mensajes del cliente y propone una respuesta con sus fuentes, que el asesor puede revisar e insertar. Si no hay proveedor de IA, se muestra el texto del artículo.
