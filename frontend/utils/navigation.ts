@@ -56,6 +56,7 @@ export const NAVIGATION: NavItem[] = [
       { label: 'Métricas de chat', icon: 'i-heroicons-chart-bar-square', to: '/messaging/metrics', roles: ADMIN_SUP_ANALYST },
       { label: 'Envíos masivos', icon: 'i-heroicons-megaphone', to: '/messaging/broadcasts', roles: ADMIN_SUP },
       { label: 'Respuestas y etiquetas', icon: 'i-heroicons-bolt', to: '/messaging/settings', roles: ADMIN_SUP },
+      { label: 'Bots de autoatención', icon: 'i-heroicons-cpu-chip', to: '/bots', roles: ADMIN_SUP },
     ],
   },
 
@@ -129,6 +130,7 @@ export const NAVIGATION: NavItem[] = [
       { label: 'Email, chat web y redes', icon: 'i-heroicons-globe-alt', to: '/settings/channels', roles: ADMIN },
       { label: 'Grupos y pausas', icon: 'i-heroicons-adjustments-horizontal', to: '/settings/advanced', roles: ADMIN_SUP },
       { label: 'Webhooks', icon: 'i-heroicons-link', to: '/webhooks', roles: ADMIN_SUP },
+      { label: 'Conectores (GLPI, APIs)', icon: 'i-heroicons-bolt', to: '/connectors', roles: ADMIN_SUP },
       { label: 'Configuración', icon: 'i-heroicons-cog-6-tooth', to: '/settings', roles: ADMIN },
     ],
   },

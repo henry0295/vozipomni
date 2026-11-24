@@ -27,6 +27,7 @@ Plataforma de Contact Center omnicanal basada en Django REST Framework, Nuxt 3, 
 - **Telefonía**: troncales SIP (PJSIP), extensiones, rutas entrantes/salientes, IVR, colas ACD, buzón de voz, condiciones horarias y música en espera.
 - **Grabaciones** y evaluación de calidad.
 - **Omnicanal**: WhatsApp Cloud API, email, chat web y Messenger/Instagram.
+- **Bots de autoatención** con editor visual (designer) y conectores a sistemas externos como GLPI o cualquier API REST ([guía](docs/administracion/bots.md)).
 - **Reportes** en PDF, Excel, CSV y JSON, con programación automática.
 - **Roles**: administrador, supervisor, agente y analista.
 - **API REST** documentada con Swagger (`/api/docs/`) y eventos en tiempo real por WebSocket.
